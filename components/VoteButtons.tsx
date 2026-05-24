@@ -1,16 +1,17 @@
-// PHASE 1 STEP 1
+// PHASE 1 STEP 4
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { theme } from "../constants/theme";
 
 export function VoteButtons() {
   return (
     <View style={styles.row}>
-      <TouchableOpacity style={[styles.button, styles.primary]} activeOpacity={0.7}>
+      <TouchableOpacity style={[styles.button, styles.primary]} activeOpacity={0.8}>
         <Text style={styles.label}>True</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.danger, styles.buttonSpacing]} activeOpacity={0.7}>
+      <TouchableOpacity style={[styles.button, styles.danger, styles.buttonSpacing]} activeOpacity={0.8}>
         <Text style={styles.label}>Fake</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.warning, styles.buttonSpacing]} activeOpacity={0.7}>
+      <TouchableOpacity style={[styles.button, styles.warning, styles.buttonSpacing]} activeOpacity={0.8}>
         <Text style={styles.label}>Not Sure</Text>
       </TouchableOpacity>
     </View>
@@ -24,24 +25,25 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.lg,
     alignItems: "center",
   },
   buttonSpacing: {
-    marginLeft: 8,
+    marginLeft: theme.spacing.sm,
   },
   label: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+    color: theme.colors.background,
+    fontWeight: "700",
+    fontSize: theme.typography.body.fontSize,
   },
   primary: {
-    backgroundColor: "#2563EB",
+    backgroundColor: theme.colors.primary,
   },
   danger: {
-    backgroundColor: "#EF4444",
+    backgroundColor: theme.colors.danger,
   },
   warning: {
-    backgroundColor: "#F59E0B",
+    backgroundColor: theme.colors.warning,
   },
 });

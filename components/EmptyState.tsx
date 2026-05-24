@@ -1,5 +1,6 @@
-// PHASE 1 STEP 1
+// PHASE 1 STEP 4
 import { View, Text, StyleSheet } from "react-native";
+import { theme } from "../constants/theme";
 
 interface EmptyStateProps {
   message: string;
@@ -15,12 +16,12 @@ export function EmptyState({ message }: EmptyStateProps) {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
+    padding: theme.spacing.lg,
     alignItems: "center",
   },
   message: {
-    fontSize: 16,
-    color: "#6B7280",
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.subtext,
     textAlign: "center",
   },
 });

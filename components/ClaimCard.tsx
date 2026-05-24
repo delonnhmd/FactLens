@@ -1,7 +1,8 @@
-// PHASE 1 STEP 3
+// PHASE 1 STEP 4
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import type { Claim } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
+import { theme } from "../constants/theme";
 
 interface ClaimCardProps {
   claim: Claim;
@@ -10,25 +11,34 @@ interface ClaimCardProps {
 
 export function ClaimCard({ claim, onPress }: ClaimCardProps) {
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.95}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>{claim.title}</Text>
+        <View style={styles.titleWrapper}>
+          <Text style={styles.title}>{claim.title}</Text>
+        </View>
         <StatusBadge status={claim.status} />
       </View>
+
       <Text style={styles.description}>{claim.description}</Text>
-      <Text style={styles.meta}>Source: {claim.sourceUrl}</Text>
+
+      <Text style={styles.source}>📍 {claim.sourceUrl}</Text>
+
+      <View style={styles.divider} />
+
       <View style={styles.voteRow}>
         <View style={styles.voteItem}>
-          <Text style={styles.voteLabel}>True</Text>
           <Text style={styles.voteValue}>{claim.votesTrue}</Text>
+          <Text style={styles.voteLabel}>True</Text>
         </View>
+        <View style={styles.dividerVertical} />
         <View style={styles.voteItem}>
-          <Text style={styles.voteLabel}>Fake</Text>
           <Text style={styles.voteValue}>{claim.votesFake}</Text>
+          <Text style={styles.voteLabel}>Fake</Text>
         </View>
+        <View style={styles.dividerVertical} />
         <View style={styles.voteItem}>
-          <Text style={styles.voteLabel}>Not Sure</Text>
           <Text style={styles.voteValue}>{claim.votesUnsure}</Text>
+          <Text style={styles.voteLabel}>Not Sure</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -37,55 +47,68 @@ export function ClaimCard({ claim, onPress }: ClaimCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 20,
-    shadowColor: "#000000",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-    marginBottom: 16,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.light,
+    borderWidth: 1,
+    borderColor: theme.colors.lightBorder,
   },
   headerRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: theme.spacing.md,
+  },
+  titleWrapper: {
+    flex: 1,
+    marginRight: theme.spacing.md,
   },
   title: {
-    flex: 1,
-    fontSize: 18,
+    fontSize: theme.typography.title.fontSize,
     fontWeight: "700",
-    color: "#111827",
-    marginRight: 12,
+    color: theme.colors.text,
+    lineHeight: 28,
   },
   description: {
-    fontSize: 14,
-    color: "#374151",
-    marginBottom: 12,
-    lineHeight: 20,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+    lineHeight: 24,
   },
-  meta: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 16,
+  source: {
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
+    marginBottom: theme.spacing.md,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: theme.colors.lightBorder,
+    marginVertical: theme.spacing.md,
   },
   voteRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "space-around",
+    alignItems: "center",
   },
   voteItem: {
     alignItems: "center",
     flex: 1,
   },
-  voteLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
   voteValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: theme.colors.primary,
+  },
+  voteLabel: {
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
+    marginTop: theme.spacing.xs,
+  },
+  dividerVertical: {
+    width: 1,
+    height: 24,
+    backgroundColor: theme.colors.lightBorder,
   },
 });

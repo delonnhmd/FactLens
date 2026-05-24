@@ -1,7 +1,8 @@
-// PHASE 1 STEP 2
+// PHASE 1 STEP 4
 import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { Header } from "../../components/Header";
 import { mockClaims } from "../../constants/mockData";
+import { theme } from "../../constants/theme";
 
 export default function ProfileScreen() {
   const user = {
@@ -41,30 +42,29 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.card,
   },
   content: {
-    padding: 20,
+    padding: theme.spacing.lg,
   },
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: "#000000",
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.xl,
+    ...theme.shadows.light,
+    borderWidth: 1,
+    borderColor: theme.colors.lightBorder,
   },
   username: {
-    fontSize: 24,
+    fontSize: theme.typography.largeTitle.fontSize,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 6,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
   },
   note: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginBottom: 20,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.subtext,
+    marginBottom: theme.spacing.lg,
   },
   statsRow: {
     flexDirection: "row",
@@ -75,13 +75,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "700",
-    color: "#111827",
+    color: theme.colors.primary,
   },
   statLabel: {
-    marginTop: 4,
-    fontSize: 12,
-    color: "#6B7280",
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
   },
 });

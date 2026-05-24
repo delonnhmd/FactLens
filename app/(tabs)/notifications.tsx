@@ -1,7 +1,8 @@
-// PHASE 1 STEP 2
+// PHASE 1 STEP 4
 import { StyleSheet, SafeAreaView } from "react-native";
 import { Header } from "../../components/Header";
 import { EmptyState } from "../../components/EmptyState";
+import { theme } from "../../constants/theme";
 
 export default function NotificationsScreen() {
   return (
@@ -15,6 +16,6 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.card,
   },
 });

@@ -1,7 +1,8 @@
-// PHASE 1 STEP 2
+// PHASE 1 STEP 4
 import { useState } from "react";
 import { View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { Header } from "../../components/Header";
+import { theme } from "../../constants/theme";
 
 export default function CreateScreen() {
   const [title, setTitle] = useState("");
@@ -19,7 +20,7 @@ export default function CreateScreen() {
             onChangeText={setTitle}
             placeholder="Enter a concise claim title"
             style={styles.input}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.muted}
           />
         </View>
         <View style={styles.fieldGroup}>
@@ -29,7 +30,7 @@ export default function CreateScreen() {
             onChangeText={setDescription}
             placeholder="Describe the claim in a few sentences"
             style={[styles.input, styles.textArea]}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.muted}
             multiline
           />
         </View>
@@ -40,7 +41,7 @@ export default function CreateScreen() {
             onChangeText={setSourceUrl}
             placeholder="Add a source link"
             style={styles.input}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.colors.muted}
             keyboardType="url"
           />
         </View>
@@ -55,44 +56,44 @@ export default function CreateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.card,
   },
   content: {
-    padding: 20,
+    padding: theme.spacing.lg,
   },
   fieldGroup: {
-    marginBottom: 18,
+    marginBottom: theme.spacing.lg,
   },
   label: {
-    marginBottom: 8,
-    fontSize: 14,
-    color: "#374151",
+    marginBottom: theme.spacing.sm,
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.text,
     fontWeight: "600",
   },
   input: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#111827",
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: theme.colors.border,
   },
   textArea: {
     minHeight: 120,
     textAlignVertical: "top",
   },
   button: {
-    marginTop: 8,
-    backgroundColor: "#2563EB",
-    borderRadius: 16,
-    paddingVertical: 16,
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    paddingVertical: theme.spacing.lg,
     alignItems: "center",
   },
   buttonText: {
-    color: "#FFFFFF",
+    color: theme.colors.background,
     fontWeight: "700",
-    fontSize: 16,
+    fontSize: theme.typography.body.fontSize,
   },
 });

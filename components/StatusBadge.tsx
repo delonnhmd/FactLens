@@ -1,28 +1,28 @@
-// PHASE 1 STEP 2
+// PHASE 1 STEP 4
 import { View, Text, StyleSheet } from "react-native";
 import type { ClaimStatus } from "../types/claim";
-import { colors } from "../constants/colors";
+import { theme } from "../constants/theme";
 
 const statusConfig: Record<ClaimStatus, { label: string; backgroundColor: string; color: string }> = {
   pending: {
     label: "Pending",
     backgroundColor: "#E0E7FF",
-    color: colors.primary,
+    color: theme.colors.primary,
   },
   true: {
     label: "True",
     backgroundColor: "#DCFCE7",
-    color: colors.success,
+    color: theme.colors.success,
   },
   fake: {
     label: "Fake",
     backgroundColor: "#FEE2E2",
-    color: colors.danger,
+    color: theme.colors.danger,
   },
   unsure: {
     label: "Not Sure",
     backgroundColor: "#FEF3C7",
-    color: colors.warning,
+    color: theme.colors.warning,
   },
 };
 
@@ -34,7 +34,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   const config = statusConfig[status];
 
   return (
-    <View style={[styles.badge, { backgroundColor: config.backgroundColor }]}> 
+    <View style={[styles.badge, { backgroundColor: config.backgroundColor }]}>
       <Text style={[styles.text, { color: config.color }]}>{config.label}</Text>
     </View>
   );
@@ -42,12 +42,16 @@ export function StatusBadge({ status }: StatusBadgeProps) {
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderRadius: theme.radius.xl,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
   },
   text: {
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+});
+
     fontWeight: "700",
   },
 });

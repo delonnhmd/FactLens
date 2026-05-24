@@ -1,9 +1,10 @@
-// PHASE 1 STEP 3
+// PHASE 1 STEP 4
 import { ScrollView, StyleSheet, SafeAreaView } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
 import { mockClaims } from "../../constants/mockData";
+import { theme } from "../../constants/theme";
 
 export default function TrendingScreen() {
   const router = useRouter();
@@ -22,15 +23,18 @@ export default function TrendingScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.card,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
+});
+
 });

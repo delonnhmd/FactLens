@@ -1,10 +1,11 @@
-// PHASE 1 STEP 3
+// PHASE 1 STEP 4
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { mockClaims } from "../../constants/mockData";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
+import { theme } from "../../constants/theme";
 
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -17,7 +18,7 @@ export default function ClaimDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Claim Details</Text>
           <View style={{ width: 24 }} />
@@ -33,7 +34,7 @@ export default function ClaimDetailScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Claim Details</Text>
         <View style={{ width: 24 }} />
@@ -56,6 +57,127 @@ export default function ClaimDetailScreen() {
           <Text style={styles.label}>Source</Text>
           <Text style={styles.sourceUrl}>{claim.sourceUrl}</Text>
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Posted</Text>
+          <Text style={styles.date}>{new Date(claim.createdAt).toLocaleDateString()}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Vote Results</Text>
+          <View style={styles.voteRowDetailed}>
+            <View style={styles.voteItemDetailed}>
+              <Text style={styles.voteLabelDetailed}>True</Text>
+              <Text style={styles.voteValueDetailed}>{claim.votesTrue}</Text>
+              <View style={[styles.voteBar, { backgroundColor: theme.colors.success, width: "100%" }]} />
+            </View>
+            <View style={styles.voteItemDetailed}>
+              <Text style={styles.voteLabelDetailed}>Fake</Text>
+              <Text style={styles.voteValueDetailed}>{claim.votesFake}</Text>
+              <View style={[styles.voteBar, { backgroundColor: theme.colors.danger, width: "100%" }]} />
+            </View>
+            <View style={styles.voteItemDetailed}>
+              <Text style={styles.voteLabelDetailed}>Not Sure</Text>
+              <Text style={styles.voteValueDetailed}>{claim.votesUnsure}</Text>
+              <View style={[styles.voteBar, { backgroundColor: theme.colors.warning, width: "100%" }]} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Evidence</Text>
+          <Text style={styles.placeholder}>Evidence section coming soon</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Comments</Text>
+          <Text style={styles.placeholder}>Comments section coming soon</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Cast Your Vote</Text>
+          <VoteButtons />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.card,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  headerTitle: {
+    fontSize: theme.typography.title.fontSize,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
+  },
+  card: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.light,
+    borderWidth: 1,
+    borderColor: theme.colors.lightBorder,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.sm,
+  },
+  title: {
+    flex: 1,
+    fontSize: theme.typography.largeTitle.fontSize,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginRight: theme.spacing.md,
+  },
+  authorText: {
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
+  },
+  label: {
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  description: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text,
+    lineHeight: 24,
+  },
+  sourceUrl: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.primary,
+  },
+  date: {
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.subtext,
+  },
+  voteRowDetailed: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  voteItemDetailed: {\n    alignItems: \"center\",\n    flex: 1,\n  },\n  voteLabelDetailed: {\n    fontSize: theme.typography.small.fontSize,\n    color: theme.colors.subtext,\n    marginBottom: theme.spacing.sm,\n  },\n  voteValueDetailed: {\n    fontSize: 20,\n    fontWeight: \"700\",\n    color: theme.colors.text,\n    marginBottom: theme.spacing.sm,\n  },\n  voteBar: {\n    height: 6,\n    borderRadius: 3,\n    marginTop: theme.spacing.sm,\n  },\n  placeholder: {\n    fontSize: theme.typography.body.fontSize,\n    color: theme.colors.muted,\n    fontStyle: \"italic\",\n  },\n  errorContainer: {\n    flex: 1,\n    justifyContent: \"center\",\n    alignItems: \"center\",\n    padding: theme.spacing.lg,\n  },\n  errorText: {\n    fontSize: theme.typography.body.fontSize,\n    color: theme.colors.text,\n  },\n});\n
 
         <View style={styles.card}>
           <Text style={styles.label}>Posted</Text>
