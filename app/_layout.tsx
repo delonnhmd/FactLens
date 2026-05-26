@@ -1,4 +1,6 @@
 // PHASE 1 STEP 1
+import { Ionicons } from "@expo/vector-icons";
+import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View, StyleSheet } from "react-native";
@@ -6,7 +8,14 @@ import { AuthProvider } from "../context/AuthContext";
 import { ClaimsProvider } from "../context/ClaimsContext";
 
 export default function Layout() {
-  // PHASE 2 STEP 9
+  const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <AuthProvider>
       <ClaimsProvider>
