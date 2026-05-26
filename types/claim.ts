@@ -75,5 +75,10 @@ export interface Claim {
   reports: Report[];
   reportCount: number;
   isFlagged: boolean;
+  // PHASE 2 STEP 9
+  authorId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  authorVerified: boolean;
   author: User;
 }

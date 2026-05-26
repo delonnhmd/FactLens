@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { mockClaims } from "../constants/mockData";
+import { mockUser } from "../constants/mockUser";
 import { generateClaimShareUrl, generateClaimSlug, isYouTubeUrl } from "../services/claimLinks";
 import { applyCurrentClaimStatus, canUserVote, getExpiresAt } from "../services/claimVoting";
 import type { Claim, EvidenceType, ReportReason, VoteOption } from "../types/claim";
@@ -32,12 +33,6 @@ interface ClaimsContextValue {
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
-
-const localAuthor = {
-  id: "local-user",
-  username: "factlens_user",
-  avatar: "",
-};
 
 function createLocalClaimId(): string {
   return `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -135,7 +130,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       reports: [],
       reportCount: 0,
       isFlagged: false,
-      author: localAuthor,
+      // PHASE 2 STEP 9
+      authorId: mockUser.id,
+      authorUsername: mockUser.username,
+      authorDisplayName: mockUser.displayName,
+      authorVerified: mockUser.verified,
+      author: mockUser,
     };
 
     setClaims((currentClaimsState) => [newClaim, ...currentClaimsState]);

@@ -18,6 +18,29 @@ const aiCheckLabels = {
   NEEDS_MORE_EVIDENCE: "Needs More Evidence",
 };
 
+// PHASE 2 STEP 9
+function getRelativeTime(createdAt: string): string {
+  const diffMs = Date.now() - new Date(createdAt).getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / (60 * 1000)));
+
+  if (diffMinutes < 1) {
+    return "Just now";
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
@@ -56,6 +79,14 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
             <Text style={styles.title}>{claim.title}</Text>
           </View>
           <StatusBadge status={claim.status} />
+        </View>
+
+        <View style={styles.authorRow}>
+          <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
+          {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
+          <Text style={styles.authorMeta}>
+            @{claim.authorUsername} - {getRelativeTime(claim.createdAt)}
+          </Text>
         </View>
 
         <Text style={styles.description}>{claim.description}</Text>
@@ -196,6 +227,33 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.colors.text,
     lineHeight: theme.typography.title.lineHeight,
+  },
+  authorRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  authorName: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  authorMeta: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+  },
+  verifiedBadge: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   description: {
     fontSize: theme.typography.body.fontSize,

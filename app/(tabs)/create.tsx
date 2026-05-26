@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Alert, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
+import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { PROHIBITED_CONTENT } from "../../constants/contentRules";
-import { mockUser } from "../../constants/mockUser";
 import { containsProhibitedContent, isValidHttpUrl, isValidVideoUrl } from "../../services/urlValidation";
 import { theme } from "../../constants/theme";
 
@@ -15,6 +15,8 @@ type FormErrors = Partial<Record<FieldName | "general", string>>;
 
 export default function CreateScreen() {
   const router = useRouter();
+  // PHASE 2 STEP 9
+  const { currentUser, isAuthenticated, isVerified, loginPlaceholder } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -52,8 +54,13 @@ export default function CreateScreen() {
     const trimmedSourceUrl = sourceUrl.trim();
     const trimmedVideoUrl = videoUrl.trim();
 
-    if (!mockUser.verified) {
-      nextErrors.general = "Account required to post.";
+    if (!isAuthenticated) {
+      nextErrors.general = "You need an account to post.";
+      return nextErrors;
+    }
+
+    if (!isVerified) {
+      nextErrors.general = "Verify your account before posting.";
       return nextErrors;
     }
 
@@ -112,13 +119,40 @@ export default function CreateScreen() {
     router.replace({ pathname: "/", params: { claimPosted: "1" } });
   };
 
+  if (!isAuthenticated || !isVerified) {
+    const gateTitle = isAuthenticated ? "Verify your account before posting." : "You need an account to post.";
+    const buttonLabel = isAuthenticated ? "Verify Account" : "Create Account";
+    const buttonAction = isAuthenticated
+      ? () => Alert.alert("Account verification will be added later.")
+      : loginPlaceholder;
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header title="Create Claim" subtitle="Draft a new news claim" />
+        <View style={styles.content}>
+          <View style={styles.gateCard}>
+            <Text style={styles.gateTitle}>{gateTitle}</Text>
+            <Text style={styles.gateText}>
+              Account-required posting is a local placeholder until real authentication is added.
+            </Text>
+            <TouchableOpacity style={styles.button} onPress={buttonAction} activeOpacity={0.8}>
+              <Text style={styles.buttonText}>{buttonLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Create Claim" subtitle="Draft a new news claim" />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.noticePanel}>
           <Text style={styles.noticeTitle}>Account required to post.</Text>
-          <Text style={styles.noticeText}>Posting as @{mockUser.username} - Verified demo account</Text>
+          <Text style={styles.noticeText}>
+            Posting as {currentUser.displayName} (@{currentUser.username}) - Verified demo account
+          </Text>
         </View>
         <View style={styles.warningPanel}>
           <Text style={styles.warningText}>Nude, porn, and sexually explicit content are not allowed.</Text>
@@ -211,6 +245,26 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: theme.spacing.lg,
+  },
+  gateCard: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    padding: theme.spacing.lg,
+    ...theme.shadows.light,
+  },
+  gateTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
+  },
+  gateText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.body.fontSize,
+    lineHeight: theme.typography.body.lineHeight,
+    marginBottom: theme.spacing.md,
   },
   fieldGroup: {
     marginBottom: theme.spacing.lg,

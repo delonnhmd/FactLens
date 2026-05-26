@@ -8,6 +8,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { SourceQualityBadge } from "../../components/SourceQualityBadge";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
+import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { reportReasons } from "../../constants/reportReasons";
 import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
@@ -55,6 +56,8 @@ const aiCheckLabels = {
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  // PHASE 2 STEP 9
+  const { currentUser } = useAuth();
   // PHASE 2 STEP 3
   const { getClaimById, voteOnClaim, addEvidence, reportClaim } = useClaims();
   // PHASE 2 STEP 4
@@ -157,6 +160,7 @@ export default function ClaimDetailScreen() {
   const votingOpen = isVotingOpen(claim);
   const userCanVote = canUserVote(claim);
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  const isOwner = currentUser.id === claim.authorId;
   // PHASE 2 STEP 5
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
   const voteStats = [
@@ -182,13 +186,43 @@ export default function ClaimDetailScreen() {
             <StatusBadge status={claim.status} />
           </View>
           {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for Review</Text> : null}
-          <Text style={styles.authorText}>by @{claim.author.username}</Text>
           <View style={styles.aiPanel}>
             <Text style={styles.aiTitle}>AI Check: {aiCheckLabels[claim.aiCheck.status]}</Text>
             <Text style={styles.aiText}>
               {claim.aiCheck.reason ?? "AI pre-check is pending. No real AI API is connected yet."}
             </Text>
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Author</Text>
+          <View style={styles.authorHeaderRow}>
+            <View style={styles.authorInfo}>
+              <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
+              <Text style={styles.authorText}>@{claim.authorUsername}</Text>
+            </View>
+            {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
+          </View>
+          <Text style={styles.authorText}>Reputation score: {claim.author.reputationScore}</Text>
+
+          {isOwner ? (
+            <View style={styles.ownerActionRow}>
+              <TouchableOpacity
+                style={styles.ownerButton}
+                activeOpacity={0.8}
+                onPress={() => Alert.alert("Edit claim will be added later.")}
+              >
+                <Text style={styles.ownerButtonText}>Edit Claim</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.ownerButton, styles.deleteButton]}
+                activeOpacity={0.8}
+                onPress={() => Alert.alert("Delete claim will be added later.")}
+              >
+                <Text style={styles.deleteButtonText}>Delete Claim</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -511,6 +545,61 @@ const styles = StyleSheet.create({
   authorText: {
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
+  },
+  authorHeaderRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  authorInfo: {
+    flex: 1,
+  },
+  authorName: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.xs,
+  },
+  verifiedBadge: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  ownerActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  ownerButton: {
+    alignItems: "center",
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexGrow: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  deleteButton: {
+    borderColor: theme.colors.danger,
+  },
+  ownerButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  deleteButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   aiPanel: {
     backgroundColor: theme.colors.card,
