@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "FactLens",
+    "slug": "factlens",
+    "version": "1.0.0",
+    "scheme": "factlens",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-font"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

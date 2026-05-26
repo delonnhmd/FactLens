@@ -36,5 +36,3 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xl,
   },
 });
-
-});

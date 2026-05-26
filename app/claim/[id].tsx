@@ -1,5 +1,6 @@
 // PHASE 1 STEP 4
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from "react-native";
+import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { mockClaims } from "../../constants/mockData";
@@ -11,7 +12,7 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  const claim = mockClaims.find((c) => c.id === id);
+  const claim = mockClaims.find((item) => item.id === id);
 
   if (!claim) {
     return (
@@ -21,7 +22,7 @@ export default function ClaimDetailScreen() {
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Claim Details</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Claim not found</Text>
@@ -30,6 +31,13 @@ export default function ClaimDetailScreen() {
     );
   }
 
+  const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  const voteStats = [
+    { label: "True", value: claim.votesTrue, color: theme.colors.success },
+    { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
+    { label: "Not Sure", value: claim.votesUnsure, color: theme.colors.warning },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -37,8 +45,9 @@ export default function ClaimDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Claim Details</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerSpacer} />
       </View>
+
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.titleRow}>
@@ -66,21 +75,20 @@ export default function ClaimDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Vote Results</Text>
           <View style={styles.voteRowDetailed}>
-            <View style={styles.voteItemDetailed}>
-              <Text style={styles.voteLabelDetailed}>True</Text>
-              <Text style={styles.voteValueDetailed}>{claim.votesTrue}</Text>
-              <View style={[styles.voteBar, { backgroundColor: theme.colors.success, width: "100%" }]} />
-            </View>
-            <View style={styles.voteItemDetailed}>
-              <Text style={styles.voteLabelDetailed}>Fake</Text>
-              <Text style={styles.voteValueDetailed}>{claim.votesFake}</Text>
-              <View style={[styles.voteBar, { backgroundColor: theme.colors.danger, width: "100%" }]} />
-            </View>
-            <View style={styles.voteItemDetailed}>
-              <Text style={styles.voteLabelDetailed}>Not Sure</Text>
-              <Text style={styles.voteValueDetailed}>{claim.votesUnsure}</Text>
-              <View style={[styles.voteBar, { backgroundColor: theme.colors.warning, width: "100%" }]} />
-            </View>
+            {voteStats.map((stat) => {
+              const width: DimensionValue =
+                totalVotes > 0 ? `${Math.max((stat.value / totalVotes) * 100, 8)}%` : "8%";
+
+              return (
+                <View key={stat.label} style={styles.voteItemDetailed}>
+                  <Text style={styles.voteLabelDetailed}>{stat.label}</Text>
+                  <Text style={styles.voteValueDetailed}>{stat.value}</Text>
+                  <View style={styles.voteBarTrack}>
+                    <View style={[styles.voteBar, { backgroundColor: stat.color, width }]} />
+                  </View>
+                </View>
+              );
+            })}
           </View>
         </View>
 
@@ -123,6 +131,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.colors.text,
   },
+  headerSpacer: {
+    width: 24,
+  },
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
@@ -145,9 +156,10 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: theme.typography.largeTitle.fontSize,
+    fontSize: theme.typography.title.fontSize,
     fontWeight: "700",
     color: theme.colors.text,
+    lineHeight: theme.typography.title.lineHeight,
     marginRight: theme.spacing.md,
   },
   authorText: {
@@ -163,7 +175,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.text,
-    lineHeight: 24,
+    lineHeight: theme.typography.body.lineHeight,
   },
   sourceUrl: {
     fontSize: theme.typography.body.fontSize,
@@ -174,164 +186,43 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
   },
   voteRowDetailed: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  voteItemDetailed: {\n    alignItems: \"center\",\n    flex: 1,\n  },\n  voteLabelDetailed: {\n    fontSize: theme.typography.small.fontSize,\n    color: theme.colors.subtext,\n    marginBottom: theme.spacing.sm,\n  },\n  voteValueDetailed: {\n    fontSize: 20,\n    fontWeight: \"700\",\n    color: theme.colors.text,\n    marginBottom: theme.spacing.sm,\n  },\n  voteBar: {\n    height: 6,\n    borderRadius: 3,\n    marginTop: theme.spacing.sm,\n  },\n  placeholder: {\n    fontSize: theme.typography.body.fontSize,\n    color: theme.colors.muted,\n    fontStyle: \"italic\",\n  },\n  errorContainer: {\n    flex: 1,\n    justifyContent: \"center\",\n    alignItems: \"center\",\n    padding: theme.spacing.lg,\n  },\n  errorText: {\n    fontSize: theme.typography.body.fontSize,\n    color: theme.colors.text,\n  },\n});\n
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Posted</Text>
-          <Text style={styles.date}>{new Date(claim.createdAt).toLocaleDateString()}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Vote Results</Text>
-          <View style={styles.voteRowDetailed}>
-            <View style={styles.voteItemDetailed}>
-              <Text style={styles.voteLabelDetailed}>True</Text>
-              <Text style={styles.voteValueDetailed}>{claim.votesTrue}</Text>
-              <View style={[styles.voteBar, { backgroundColor: "#22C55E", width: "100%" }]} />
-            </View>
-            <View style={styles.voteItemDetailed}>
-              <Text style={styles.voteLabelDetailed}>Fake</Text>
-              <Text style={styles.voteValueDetailed}>{claim.votesFake}</Text>
-              <View style={[styles.voteBar, { backgroundColor: "#EF4444", width: "100%" }]} />
-            </View>
-            <View style={styles.voteItemDetailed}>
-              <Text style={styles.voteLabelDetailed}>Not Sure</Text>
-              <Text style={styles.voteValueDetailed}>{claim.votesUnsure}</Text>
-              <View style={[styles.voteBar, { backgroundColor: "#F59E0B", width: "100%" }]} />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Evidence</Text>
-          <Text style={styles.placeholder}>Evidence section coming soon</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Comments</Text>
-          <Text style={styles.placeholder}>Comments section coming soon</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Cast Your Vote</Text>
-          <VoteButtons />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F9FAFB",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#000000",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  title: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginRight: 12,
-  },
-  authorText: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#374151",
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 16,
-    color: "#374151",
-    lineHeight: 24,
-  },
-  sourceUrl: {
-    fontSize: 14,
-    color: "#2563EB",
-  },
-  date: {
-    fontSize: 14,
-    color: "#6B7280",
-  },
-  voteRowDetailed: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    gap: theme.spacing.md,
   },
   voteItemDetailed: {
-    alignItems: "center",
-    flex: 1,
+    gap: theme.spacing.xs,
   },
   voteLabelDetailed: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginBottom: 6,
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
   },
   voteValueDetailed: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
+    color: theme.colors.text,
+  },
+  voteBarTrack: {
+    height: 6,
+    overflow: "hidden",
+    borderRadius: 3,
+    backgroundColor: theme.colors.lightBorder,
   },
   voteBar: {
     height: 6,
     borderRadius: 3,
-    marginTop: 4,
   },
   placeholder: {
-    fontSize: 14,
-    color: "#9CA3AF",
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.muted,
     fontStyle: "italic",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    padding: theme.spacing.lg,
   },
   errorText: {
-    fontSize: 16,
-    color: "#374151",
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text,
   },
 });

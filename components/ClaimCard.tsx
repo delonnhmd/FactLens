@@ -21,7 +21,7 @@ export function ClaimCard({ claim, onPress }: ClaimCardProps) {
 
       <Text style={styles.description}>{claim.description}</Text>
 
-      <Text style={styles.source}>📍 {claim.sourceUrl}</Text>
+      <Text style={styles.source}>Source: {claim.sourceUrl}</Text>
 
       <View style={styles.divider} />
 
@@ -69,13 +69,13 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.title.fontSize,
     fontWeight: "700",
     color: theme.colors.text,
-    lineHeight: 28,
+    lineHeight: theme.typography.title.lineHeight,
   },
   description: {
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
-    lineHeight: 24,
+    lineHeight: theme.typography.body.lineHeight,
   },
   source: {
     fontSize: theme.typography.small.fontSize,
