@@ -40,11 +40,28 @@ export interface Report {
   createdAt: string;
 }
 
+// PHASE 2 STEP 8
+export interface ClaimMedia {
+  imageUrl?: string | null;
+  videoUrl?: string | null;
+  youtubeUrl?: string | null;
+}
+
+export interface AiCheck {
+  status: "PENDING" | "LIKELY_TRUE" | "LIKELY_FAKE" | "NEEDS_MORE_EVIDENCE";
+  confidence: number | null;
+  reason: string | null;
+}
+
 export interface Claim {
   id: string;
+  slug: string;
+  shareUrl: string;
   title: string;
   description: string;
   sourceUrl: string;
+  media: ClaimMedia;
+  aiCheck: AiCheck;
   // PHASE 2 STEP 2
   category?: string;
   votesTrue: number;

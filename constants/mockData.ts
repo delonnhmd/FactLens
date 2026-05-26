@@ -1,5 +1,6 @@
 // PHASE 1 STEP 2
 import type { Claim } from "../types/claim";
+import { generateClaimShareUrl, generateClaimSlug } from "../services/claimLinks";
 import { getExpiresAt } from "../services/claimVoting";
 
 // PHASE 2 STEP 1
@@ -13,9 +14,22 @@ const evidenceClosedCreatedAt = hoursAgo(30);
 export const mockClaims: Claim[] = [
   {
     id: "claim-01",
+    // PHASE 2 STEP 8
+    slug: generateClaimSlug("New study shows coffee boosts memory retention"),
+    shareUrl: generateClaimShareUrl("claim-01"),
     title: "New study shows coffee boosts memory retention",
     description: "A recent survey indicates that daily coffee drinkers performed better on memory tasks.",
     sourceUrl: "https://example.com/coffee-memory",
+    media: {
+      imageUrl: null,
+      videoUrl: null,
+      youtubeUrl: null,
+    },
+    aiCheck: {
+      status: "PENDING",
+      confidence: null,
+      reason: null,
+    },
     votesTrue: 128,
     votesFake: 26,
     votesUnsure: 14,
@@ -45,9 +59,21 @@ export const mockClaims: Claim[] = [
   },
   {
     id: "claim-02",
+    slug: generateClaimSlug("City council approves new green transit program"),
+    shareUrl: generateClaimShareUrl("claim-02"),
     title: "City council approves new green transit program",
     description: "Officials say the program will improve sustainability and reduce commute emissions.",
     sourceUrl: "https://example.com/green-transit",
+    media: {
+      imageUrl: null,
+      videoUrl: null,
+      youtubeUrl: null,
+    },
+    aiCheck: {
+      status: "PENDING",
+      confidence: null,
+      reason: null,
+    },
     votesTrue: 94,
     votesFake: 11,
     votesUnsure: 32,
@@ -82,9 +108,21 @@ export const mockClaims: Claim[] = [
   },
   {
     id: "claim-03",
+    slug: generateClaimSlug("Tech startup claims wearable can detect stress instantly"),
+    shareUrl: generateClaimShareUrl("claim-03"),
     title: "Tech startup claims wearable can detect stress instantly",
     description: "The startup says the device monitors physiological signals to spot stress in real time.",
     sourceUrl: "https://example.com/stress-wearable",
+    media: {
+      imageUrl: null,
+      videoUrl: null,
+      youtubeUrl: null,
+    },
+    aiCheck: {
+      status: "PENDING",
+      confidence: null,
+      reason: null,
+    },
     votesTrue: 65,
     votesFake: 40,
     votesUnsure: 55,

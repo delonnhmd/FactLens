@@ -1,21 +1,19 @@
-// PHASE 1 STEP 4
+// PHASE 2 STEP 8
 import { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, SafeAreaView, Text, TextInput, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Header } from "../../components/Header";
+import { SafeAreaView, ScrollView, StyleSheet, TextInput } from "react-native";
+import { useRouter } from "expo-router";
 import { ClaimCard } from "../../components/ClaimCard";
+import { EmptyState } from "../../components/EmptyState";
+import { Header } from "../../components/Header";
 import { useClaims } from "../../context/ClaimsContext";
 import { theme } from "../../constants/theme";
 
-export default function HomeScreen() {
+export default function SearchScreen() {
   const router = useRouter();
-  const { claimPosted } = useLocalSearchParams<{ claimPosted?: string }>();
-  // PHASE 2 STEP 6
   const { claims, voteOnClaim, reportClaim } = useClaims();
-  // PHASE 2 STEP 8
   const [query, setQuery] = useState("");
 
-  const filteredClaims = useMemo(() => {
+  const matchingClaims = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
@@ -36,14 +34,10 @@ export default function HomeScreen() {
     });
   }, [claims, query]);
 
-  const handleClaimPress = (claimId: string) => {
-    router.push(`/claim/${claimId}`);
-  };
-
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="FactLens" subtitle="Verify news with community evidence" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Header title="Search" subtitle="Find claims, sources, and topics" />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -53,20 +47,19 @@ export default function HomeScreen() {
           autoCapitalize="none"
           autoCorrect={false}
         />
-        {claimPosted === "1" ? (
-          <View style={styles.successBanner}>
-            <Text style={styles.successText}>Claim posted. Voting closes in 24 hours.</Text>
-          </View>
-        ) : null}
-        {filteredClaims.map((claim) => (
-          <ClaimCard
-            key={claim.id}
-            claim={claim}
-            onPress={() => handleClaimPress(claim.id)}
-            onVote={voteOnClaim}
-            onReport={reportClaim}
-          />
-        ))}
+        {matchingClaims.length > 0 ? (
+          matchingClaims.map((claim) => (
+            <ClaimCard
+              key={claim.id}
+              claim={claim}
+              onPress={() => router.push(`/claim/${claim.id}`)}
+              onVote={voteOnClaim}
+              onReport={reportClaim}
+            />
+          ))
+        ) : (
+          <EmptyState message="No matching claims yet." />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -81,20 +74,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
-  },
-  successBanner: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    marginBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-  },
-  successText: {
-    color: theme.colors.success,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
   },
   searchInput: {
     backgroundColor: theme.colors.background,

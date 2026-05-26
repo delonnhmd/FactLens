@@ -1,15 +1,16 @@
 // PHASE 1 STEP 1
 import { Tabs } from "expo-router";
 import type { ComponentProps } from "react";
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../constants/colors";
 
-const routeIcons: Record<string, ComponentProps<typeof Ionicons>["name"]> = {
-  Home: "home",
-  Create: "add-circle",
-  Trending: "trending-up",
-  Notifications: "notifications-outline",
-  Profile: "person-outline",
+// PHASE 2 STEP 8
+const tabIcons: Record<string, ComponentProps<typeof Ionicons>["name"]> = {
+  index: "home-outline",
+  search: "search-outline",
+  create: "add-circle-outline",
+  trending: "flame-outline",
+  profile: "person-outline",
 };
 
 export default function TabsLayout() {
@@ -21,24 +22,17 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: "#6B7280",
         tabBarStyle: { backgroundColor: "#FFFFFF", borderTopColor: "#E5E7EB" },
         tabBarIcon: ({ color, size }) => {
-          const iconName = routeIcons[route.name] || "circle";
-
-          if (route.name === "Trending") {
-            return <MaterialCommunityIcons name="trending-up" size={size} color={color} />;
-          }
-          if (route.name === "Notifications") {
-            return <Ionicons name="notifications-outline" size={size} color={color} />;
-          }
-          if (route.name === "Profile") {
-            return <MaterialCommunityIcons name="account-circle-outline" size={size} color={color} />;
-          }
-          if (route.name === "Create") {
-            return <FontAwesome5 name="plus-circle" size={size} color={color} />;
-          }
-
-          return <Ionicons name={iconName as any} size={size} color={color} />;
+          const iconName = tabIcons[route.name] || "ellipse-outline";
+          return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
-    />
+    >
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="search" options={{ title: "Search" }} />
+      <Tabs.Screen name="create" options={{ title: "Create" }} />
+      <Tabs.Screen name="trending" options={{ title: "Trending" }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="notifications" options={{ href: null }} />
+    </Tabs>
   );
 }

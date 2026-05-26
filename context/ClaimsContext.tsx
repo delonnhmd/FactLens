@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { mockClaims } from "../constants/mockData";
+import { generateClaimShareUrl, generateClaimSlug, isYouTubeUrl } from "../services/claimLinks";
 import { applyCurrentClaimStatus, canUserVote, getExpiresAt } from "../services/claimVoting";
 import type { Claim, EvidenceType, ReportReason, VoteOption } from "../types/claim";
 
@@ -9,6 +10,7 @@ export interface CreateClaimInput {
   title: string;
   description: string;
   sourceUrl: string;
+  videoUrl?: string;
   category?: string;
 }
 
@@ -101,11 +103,26 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   const createClaim = useCallback((input: CreateClaimInput) => {
     const createdAt = new Date().toISOString();
+    const id = createLocalClaimId();
+    const trimmedVideoUrl = input.videoUrl?.trim() || "";
     const newClaim: Claim = {
-      id: createLocalClaimId(),
+      // PHASE 2 STEP 8
+      id,
+      slug: generateClaimSlug(input.title),
+      shareUrl: generateClaimShareUrl(id),
       title: input.title.trim(),
       description: input.description.trim(),
       sourceUrl: input.sourceUrl.trim(),
+      media: {
+        imageUrl: null,
+        videoUrl: trimmedVideoUrl && !isYouTubeUrl(trimmedVideoUrl) ? trimmedVideoUrl : null,
+        youtubeUrl: trimmedVideoUrl && isYouTubeUrl(trimmedVideoUrl) ? trimmedVideoUrl : null,
+      },
+      aiCheck: {
+        status: "PENDING",
+        confidence: null,
+        reason: null,
+      },
       category: input.category?.trim() || undefined,
       votesTrue: 0,
       votesFake: 0,

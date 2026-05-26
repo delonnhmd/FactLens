@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 import { useState } from "react";
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
+import { Alert, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -42,6 +42,14 @@ const evidenceTypeConfig: Record<EvidenceType, { label: string; backgroundColor:
     backgroundColor: "#FEF3C7",
     color: theme.colors.warning,
   },
+};
+
+// PHASE 2 STEP 8
+const aiCheckLabels = {
+  PENDING: "Pending",
+  LIKELY_TRUE: "Likely True",
+  LIKELY_FAKE: "Likely Fake",
+  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
 };
 
 export default function ClaimDetailScreen() {
@@ -175,6 +183,12 @@ export default function ClaimDetailScreen() {
           </View>
           {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for Review</Text> : null}
           <Text style={styles.authorText}>by @{claim.author.username}</Text>
+          <View style={styles.aiPanel}>
+            <Text style={styles.aiTitle}>AI Check: {aiCheckLabels[claim.aiCheck.status]}</Text>
+            <Text style={styles.aiText}>
+              {claim.aiCheck.reason ?? "AI pre-check is pending. No real AI API is connected yet."}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -192,6 +206,36 @@ export default function ClaimDetailScreen() {
             <SourceQualityBadge quality={mainSourceQuality} showScore />
             <Text style={styles.sourceQualityReason}>{mainSourceQuality.reason}</Text>
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Share Link</Text>
+          <Text style={styles.sourceUrl} selectable>
+            {claim.shareUrl}
+          </Text>
+          <TouchableOpacity
+            style={styles.copyButton}
+            activeOpacity={0.8}
+            onPress={() => Alert.alert("Share link copied.")}
+          >
+            <Text style={styles.copyButtonText}>Copy Share Link</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Media</Text>
+          {claim.media.youtubeUrl || claim.media.videoUrl || claim.media.imageUrl ? (
+            <View style={styles.mediaList}>
+              {claim.media.youtubeUrl ? (
+                <Text style={styles.mediaText}>YouTube: {claim.media.youtubeUrl}</Text>
+              ) : null}
+              {claim.media.videoUrl ? <Text style={styles.mediaText}>Video: {claim.media.videoUrl}</Text> : null}
+              {claim.media.imageUrl ? <Text style={styles.mediaText}>Image: {claim.media.imageUrl}</Text> : null}
+            </View>
+          ) : (
+            <Text style={styles.placeholder}>No image or video attached yet.</Text>
+          )}
+          <Text style={styles.mediaNote}>Real image upload and media processing will be added in the backend phase.</Text>
         </View>
 
         <View style={styles.card}>
@@ -468,6 +512,25 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
   },
+  aiPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  aiTitle: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.xs,
+  },
+  aiText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    lineHeight: theme.typography.small.lineHeight,
+  },
   flaggedBadge: {
     alignSelf: "flex-start",
     backgroundColor: "#FEE2E2",
@@ -527,6 +590,31 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     lineHeight: theme.typography.small.lineHeight,
+  },
+  copyButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  copyButtonText: {
+    color: theme.colors.background,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  mediaList: {
+    gap: theme.spacing.sm,
+  },
+  mediaText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+  },
+  mediaNote: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    lineHeight: theme.typography.small.lineHeight,
+    marginTop: theme.spacing.md,
   },
   sectionHeaderRow: {
     alignItems: "center",

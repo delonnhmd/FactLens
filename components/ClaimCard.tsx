@@ -10,6 +10,14 @@ import { theme } from "../constants/theme";
 import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
 import { getSourceQuality } from "../services/sourceQuality";
 
+// PHASE 2 STEP 8
+const aiCheckLabels = {
+  PENDING: "Pending",
+  LIKELY_TRUE: "Likely True",
+  LIKELY_FAKE: "Likely Fake",
+  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+};
+
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
@@ -60,6 +68,7 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
           <Text style={styles.qualityLabel}>Source Quality:</Text>
           <SourceQualityBadge quality={sourceQuality} />
         </View>
+        <Text style={styles.aiCheck}>AI Check: {aiCheckLabels[claim.aiCheck.status]}</Text>
         <Text style={styles.evidenceCount}>{evidenceLabel}</Text>
         {claim.reportCount > 0 || claim.isFlagged ? (
           <View style={styles.reportMetaRow}>
@@ -324,6 +333,12 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "700",
+  },
+  aiCheck: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
   },
   category: {
     alignSelf: "flex-start",
