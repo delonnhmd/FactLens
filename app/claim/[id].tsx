@@ -3,16 +3,20 @@ import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } fr
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { mockClaims } from "../../constants/mockData";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
+import { useClaims } from "../../hooks/useClaims";
+import { calculateCommunityResult, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { theme } from "../../constants/theme";
 
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  // PHASE 2 STEP 1
+  const { getClaimById, castVote } = useClaims();
 
-  const claim = mockClaims.find((item) => item.id === id);
+  const claimId = Array.isArray(id) ? id[0] : id;
+  const claim = claimId ? getClaimById(claimId) : undefined;
 
   if (!claim) {
     return (
@@ -32,6 +36,9 @@ export default function ClaimDetailScreen() {
   }
 
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  const votingOpen = isVotingOpen(claim);
+  const userCanVote = canUserVote(claim);
+  const communityResult = votingOpen ? undefined : calculateCommunityResult(claim);
   const voteStats = [
     { label: "True", value: claim.votesTrue, color: theme.colors.success },
     { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
@@ -64,16 +71,44 @@ export default function ClaimDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Source</Text>
-          <Text style={styles.sourceUrl}>{claim.sourceUrl}</Text>
+          <Text style={styles.sourceUrl} selectable>
+            {claim.sourceUrl}
+          </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Posted</Text>
-          <Text style={styles.date}>{new Date(claim.createdAt).toLocaleDateString()}</Text>
+          <Text style={styles.label}>24-hour voting window</Text>
+          <View style={styles.windowPanel}>
+            <View>
+              <Text style={styles.windowCaption}>{votingOpen ? "Time remaining" : "Voting closed"}</Text>
+              <Text style={[styles.windowValue, !votingOpen && styles.closedValue]}>
+                {votingOpen ? getTimeRemaining(claim.expiresAt) : "Voting closed"}
+              </Text>
+            </View>
+            <StatusBadge status={votingOpen ? "OPEN" : "VOTING_CLOSED"} />
+          </View>
+          <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
+          <Text style={styles.date}>Closes {new Date(claim.expiresAt).toLocaleString()}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Vote Results</Text>
+          <Text style={styles.label}>Cast Your Vote</Text>
+          <VoteButtons
+            disabled={!userCanVote}
+            userVote={claim.userVote}
+            onVote={(vote) => castVote(claim.id, vote)}
+          />
+          <Text style={styles.voteHint}>
+            {claim.userVote
+              ? "Your vote is recorded."
+              : votingOpen
+                ? "Choose one option before the window closes."
+                : "Voting is closed for this claim."}
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Vote Totals</Text>
           <View style={styles.voteRowDetailed}>
             {voteStats.map((stat) => {
               const width: DimensionValue =
@@ -93,18 +128,20 @@ export default function ClaimDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Evidence</Text>
-          <Text style={styles.placeholder}>Evidence section coming soon</Text>
+          <Text style={styles.label}>Community Result</Text>
+          {communityResult ? (
+            <View style={styles.resultRow}>
+              <StatusBadge status={communityResult} />
+              <Text style={styles.resultText}>Based on local community voting after the 24-hour window.</Text>
+            </View>
+          ) : (
+            <Text style={styles.placeholder}>Result appears when voting closes.</Text>
+          )}
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Comments</Text>
-          <Text style={styles.placeholder}>Comments section coming soon</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Cast Your Vote</Text>
-          <VoteButtons />
+          <Text style={styles.label}>Final Review</Text>
+          <Text style={styles.placeholder}>Awaiting final review</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -141,7 +178,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: theme.colors.background,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.md,
     ...theme.shadows.light,
@@ -184,6 +221,36 @@ const styles = StyleSheet.create({
   date: {
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.subtext,
+    marginTop: theme.spacing.sm,
+  },
+  windowPanel: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.lightBorder,
+  },
+  windowCaption: {
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
+    marginBottom: theme.spacing.xs,
+  },
+  windowValue: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: theme.colors.primary,
+  },
+  closedValue: {
+    color: theme.colors.subtext,
+  },
+  voteHint: {
+    marginTop: theme.spacing.md,
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
   },
   voteRowDetailed: {
     gap: theme.spacing.md,
@@ -209,6 +276,14 @@ const styles = StyleSheet.create({
   voteBar: {
     height: 6,
     borderRadius: 3,
+  },
+  resultRow: {
+    gap: theme.spacing.md,
+  },
+  resultText: {
+    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.subtext,
+    lineHeight: theme.typography.small.lineHeight,
   },
   placeholder: {
     fontSize: theme.typography.body.fontSize,

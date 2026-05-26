@@ -1,14 +1,17 @@
 // PHASE 1 STEP 4
 import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { Header } from "../../components/Header";
-import { mockClaims } from "../../constants/mockData";
+import { useClaims } from "../../hooks/useClaims";
 import { theme } from "../../constants/theme";
 
 export default function ProfileScreen() {
+  // PHASE 2 STEP 1
+  const { claims } = useClaims();
+
   const user = {
     username: "factlens_user",
-    totalClaims: mockClaims.length,
-    totalVotes: mockClaims.reduce((sum, claim) => sum + claim.votesTrue + claim.votesFake + claim.votesUnsure, 0),
+    totalClaims: claims.length,
+    totalVotes: claims.reduce((sum, claim) => sum + claim.votesTrue + claim.votesFake + claim.votesUnsure, 0),
     reputation: 84,
   };
 

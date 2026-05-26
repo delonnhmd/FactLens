@@ -1,19 +1,47 @@
 // PHASE 1 STEP 4
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { theme } from "../constants/theme";
+import type { VoteOption } from "../types/claim";
 
-export function VoteButtons() {
+// PHASE 2 STEP 1
+const voteOptions: Array<{ label: string; value: VoteOption; style: "primary" | "danger" | "warning" }> = [
+  { label: "True", value: "TRUE", style: "primary" },
+  { label: "Fake", value: "FAKE", style: "danger" },
+  { label: "Not Sure", value: "NOT_SURE", style: "warning" },
+];
+
+interface VoteButtonsProps {
+  disabled?: boolean;
+  userVote?: VoteOption;
+  onVote: (vote: VoteOption) => void;
+}
+
+export function VoteButtons({ disabled = false, userVote, onVote }: VoteButtonsProps) {
+  const isLocked = disabled || Boolean(userVote);
+
   return (
     <View style={styles.row}>
-      <TouchableOpacity style={[styles.button, styles.primary]} activeOpacity={0.8}>
-        <Text style={styles.label}>True</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.danger, styles.buttonSpacing]} activeOpacity={0.8}>
-        <Text style={styles.label}>Fake</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, styles.warning, styles.buttonSpacing]} activeOpacity={0.8}>
-        <Text style={styles.label}>Not Sure</Text>
-      </TouchableOpacity>
+      {voteOptions.map((option, index) => {
+        const selected = userVote === option.value;
+
+        return (
+          <TouchableOpacity
+            key={option.value}
+            style={[
+              styles.button,
+              styles[option.style],
+              index > 0 && styles.buttonSpacing,
+              isLocked && !selected && styles.disabled,
+              selected && styles.selected,
+            ]}
+            activeOpacity={0.8}
+            disabled={isLocked}
+            onPress={() => onVote(option.value)}
+          >
+            <Text style={[styles.label, isLocked && !selected && styles.disabledLabel]}>{option.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -26,8 +54,10 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.sm,
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: "transparent",
   },
   buttonSpacing: {
     marginLeft: theme.spacing.sm,
@@ -45,5 +75,15 @@ const styles = StyleSheet.create({
   },
   warning: {
     backgroundColor: theme.colors.warning,
+  },
+  disabled: {
+    backgroundColor: theme.colors.lightBorder,
+    borderColor: theme.colors.border,
+  },
+  disabledLabel: {
+    color: theme.colors.muted,
+  },
+  selected: {
+    borderColor: theme.colors.text,
   },
 });

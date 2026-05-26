@@ -1,7 +1,18 @@
 // PHASE 1 STEP 1
 import type { User } from "./user";
 
-export type ClaimStatus = "pending" | "true" | "fake" | "unsure";
+// PHASE 2 STEP 1
+export type ClaimStatus =
+  | "OPEN"
+  | "VOTING_CLOSED"
+  | "COMMUNITY_TRUE"
+  | "COMMUNITY_FAKE"
+  | "NEEDS_MORE_EVIDENCE"
+  | "FINAL_TRUE"
+  | "FINAL_FAKE"
+  | "MIXED";
+
+export type VoteOption = "TRUE" | "FAKE" | "NOT_SURE";
 
 export interface Claim {
   id: string;
@@ -13,5 +24,7 @@ export interface Claim {
   votesUnsure: number;
   status: ClaimStatus;
   createdAt: string;
+  expiresAt: string;
+  userVote?: VoteOption;
   author: User;
 }

@@ -3,26 +3,47 @@ import { View, Text, StyleSheet } from "react-native";
 import type { ClaimStatus } from "../types/claim";
 import { theme } from "../constants/theme";
 
+// PHASE 2 STEP 1
 const statusConfig: Record<ClaimStatus, { label: string; backgroundColor: string; color: string }> = {
-  pending: {
-    label: "Pending",
+  OPEN: {
+    label: "Open",
     backgroundColor: "#E0E7FF",
     color: theme.colors.primary,
   },
-  true: {
-    label: "True",
+  VOTING_CLOSED: {
+    label: "Voting Closed",
+    backgroundColor: "#F3F4F6",
+    color: theme.colors.subtext,
+  },
+  COMMUNITY_TRUE: {
+    label: "Community Says True",
     backgroundColor: "#DCFCE7",
     color: theme.colors.success,
   },
-  fake: {
-    label: "Fake",
+  COMMUNITY_FAKE: {
+    label: "Community Says Fake",
     backgroundColor: "#FEE2E2",
     color: theme.colors.danger,
   },
-  unsure: {
-    label: "Not Sure",
+  NEEDS_MORE_EVIDENCE: {
+    label: "Needs More Evidence",
     backgroundColor: "#FEF3C7",
     color: theme.colors.warning,
+  },
+  FINAL_TRUE: {
+    label: "Final True",
+    backgroundColor: "#DCFCE7",
+    color: theme.colors.success,
+  },
+  FINAL_FAKE: {
+    label: "Final Fake",
+    backgroundColor: "#FEE2E2",
+    color: theme.colors.danger,
+  },
+  MIXED: {
+    label: "Mixed",
+    backgroundColor: "#F3E8FF",
+    color: "#7E22CE",
   },
 };
 
@@ -42,7 +63,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: theme.radius.xl,
+    borderRadius: theme.radius.sm,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
   },

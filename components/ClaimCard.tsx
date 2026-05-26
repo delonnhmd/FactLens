@@ -1,27 +1,45 @@
 // PHASE 1 STEP 4
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
-import type { Claim } from "../types/claim";
+import type { Claim, VoteOption } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
+import { VoteButtons } from "./VoteButtons";
 import { theme } from "../constants/theme";
+import { calculateCommunityResult, canUserVote, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
 
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
+  onVote: (claimId: string, vote: VoteOption) => void;
 }
 
-export function ClaimCard({ claim, onPress }: ClaimCardProps) {
+export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
+  // PHASE 2 STEP 1
+  const votingOpen = isVotingOpen(claim);
+  const userCanVote = canUserVote(claim);
+  const communityResult = votingOpen ? undefined : calculateCommunityResult(claim);
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.95}>
-      <View style={styles.headerRow}>
-        <View style={styles.titleWrapper}>
-          <Text style={styles.title}>{claim.title}</Text>
+    <View style={styles.card}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.9} disabled={!onPress}>
+        <View style={styles.headerRow}>
+          <View style={styles.titleWrapper}>
+            <Text style={styles.title}>{claim.title}</Text>
+          </View>
+          <StatusBadge status={votingOpen ? "OPEN" : "VOTING_CLOSED"} />
         </View>
-        <StatusBadge status={claim.status} />
+
+        <Text style={styles.description}>{claim.description}</Text>
+        <Text style={styles.source} numberOfLines={1}>
+          Source: {claim.sourceUrl}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={styles.windowRow}>
+        <Text style={[styles.windowText, !votingOpen && styles.closedText]}>
+          {votingOpen ? `${getTimeRemaining(claim.expiresAt)} remaining` : "Voting closed"}
+        </Text>
+        {!votingOpen && communityResult ? <StatusBadge status={communityResult} /> : null}
       </View>
-
-      <Text style={styles.description}>{claim.description}</Text>
-
-      <Text style={styles.source}>Source: {claim.sourceUrl}</Text>
 
       <View style={styles.divider} />
 
@@ -41,14 +59,18 @@ export function ClaimCard({ claim, onPress }: ClaimCardProps) {
           <Text style={styles.voteLabel}>Not Sure</Text>
         </View>
       </View>
-    </TouchableOpacity>
+
+      <View style={styles.buttonWrap}>
+        <VoteButtons disabled={!userCanVote} userVote={claim.userVote} onVote={(vote) => onVote(claim.id, vote)} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: theme.colors.background,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.md,
     ...theme.shadows.light,
@@ -82,6 +104,21 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     marginBottom: theme.spacing.md,
   },
+  windowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+  windowText: {
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    color: theme.colors.primary,
+  },
+  closedText: {
+    color: theme.colors.subtext,
+  },
   divider: {
     height: 1,
     backgroundColor: theme.colors.lightBorder,
@@ -110,5 +147,8 @@ const styles = StyleSheet.create({
     width: 1,
     height: 24,
     backgroundColor: theme.colors.lightBorder,
+  },
+  buttonWrap: {
+    marginTop: theme.spacing.md,
   },
 });

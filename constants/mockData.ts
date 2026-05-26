@@ -1,5 +1,13 @@
 // PHASE 1 STEP 2
 import type { Claim } from "../types/claim";
+import { getExpiresAt } from "../services/claimVoting";
+
+// PHASE 2 STEP 1
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+const openCreatedAt = hoursAgo(3);
+const trueClosedCreatedAt = hoursAgo(28);
+const evidenceClosedCreatedAt = hoursAgo(30);
 
 export const mockClaims: Claim[] = [
   {
@@ -10,8 +18,9 @@ export const mockClaims: Claim[] = [
     votesTrue: 128,
     votesFake: 26,
     votesUnsure: 14,
-    status: "pending",
-    createdAt: "2026-05-23T12:00:00Z",
+    status: "OPEN",
+    createdAt: openCreatedAt,
+    expiresAt: getExpiresAt(openCreatedAt),
     author: {
       id: "user-01",
       username: "newswatcher",
@@ -26,8 +35,9 @@ export const mockClaims: Claim[] = [
     votesTrue: 94,
     votesFake: 11,
     votesUnsure: 32,
-    status: "true",
-    createdAt: "2026-05-22T08:30:00Z",
+    status: "COMMUNITY_TRUE",
+    createdAt: trueClosedCreatedAt,
+    expiresAt: getExpiresAt(trueClosedCreatedAt),
     author: {
       id: "user-02",
       username: "factfinder",
@@ -42,8 +52,9 @@ export const mockClaims: Claim[] = [
     votesTrue: 65,
     votesFake: 40,
     votesUnsure: 55,
-    status: "unsure",
-    createdAt: "2026-05-21T15:45:00Z",
+    status: "NEEDS_MORE_EVIDENCE",
+    createdAt: evidenceClosedCreatedAt,
+    expiresAt: getExpiresAt(evidenceClosedCreatedAt),
     author: {
       id: "user-03",
       username: "verifynow",
