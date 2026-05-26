@@ -13,6 +13,15 @@
     ],
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d3b9498f-a0d4-435c-81f5-e7b9b0d35d80"
+      }
+    },
+    "android": {
+      "package": "com.pennyfloat.factlens"
     }
   }
 }
