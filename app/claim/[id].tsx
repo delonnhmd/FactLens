@@ -7,13 +7,13 @@ import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
 import { useClaims } from "../../context/ClaimsContext";
-import { calculateCommunityResult, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
+import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { theme } from "../../constants/theme";
 
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  // PHASE 2 STEP 2
+  // PHASE 2 STEP 3
   const { getClaimById, voteOnClaim } = useClaims();
 
   const claimId = Array.isArray(id) ? id[0] : id;
@@ -37,7 +37,7 @@ export default function ClaimDetailScreen() {
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
   const votingOpen = isVotingOpen(claim);
   const userCanVote = canUserVote(claim);
-  const communityResult = votingOpen ? undefined : calculateCommunityResult(claim);
+  const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
   const voteStats = [
     { label: "True", value: claim.votesTrue, color: theme.colors.success },
     { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
@@ -91,24 +91,31 @@ export default function ClaimDetailScreen() {
           <Text style={styles.date}>Closes {new Date(claim.expiresAt).toLocaleString()}</Text>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.label}>Cast Your Vote</Text>
-          <VoteButtons
-            disabled={!userCanVote}
-            userVote={claim.userVote}
-            onVote={(vote) => voteOnClaim(claim.id, vote)}
-          />
-          <Text style={styles.voteHint}>
-            {claim.userVote
-              ? "Your vote is recorded."
-              : votingOpen
-                ? "Choose one option before the window closes."
-                : "Voting is closed for this claim."}
-          </Text>
-        </View>
+        {votingOpen ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>Cast Your Vote</Text>
+            <VoteButtons
+              disabled={!userCanVote}
+              userVote={claim.userVote}
+              onVote={(vote) => voteOnClaim(claim.id, vote)}
+            />
+            <Text style={styles.voteHint}>
+              {claim.userVote ? "Your vote is recorded." : "Choose one option before the window closes."}
+            </Text>
+          </View>
+        ) : null}
+
+        {!votingOpen && automaticVerdict ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>System Verdict</Text>
+            <StatusBadge status={automaticVerdict.status} />
+            <Text style={styles.verdictTitle}>{automaticVerdict.resultLabel}</Text>
+            <Text style={styles.verdictReason}>{automaticVerdict.reason}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.label}>Vote Totals</Text>
+          <Text style={styles.label}>{votingOpen ? "Vote Totals" : "Final Vote Breakdown"}</Text>
           <View style={styles.voteRowDetailed}>
             {voteStats.map((stat) => {
               const width: DimensionValue =
@@ -127,22 +134,12 @@ export default function ClaimDetailScreen() {
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.label}>Community Result</Text>
-          {communityResult ? (
-            <View style={styles.resultRow}>
-              <StatusBadge status={communityResult} />
-              <Text style={styles.resultText}>Based on local community voting after the 24-hour window.</Text>
-            </View>
-          ) : (
+        {votingOpen ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>System Verdict</Text>
             <Text style={styles.placeholder}>Result appears when voting closes.</Text>
-          )}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Final Review</Text>
-          <Text style={styles.placeholder}>Awaiting final review</Text>
-        </View>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -290,10 +287,14 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-  resultRow: {
-    gap: theme.spacing.md,
+  verdictTitle: {
+    color: theme.colors.text,
+    fontSize: 22,
+    fontWeight: "700",
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
   },
-  resultText: {
+  verdictReason: {
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
     lineHeight: theme.typography.small.lineHeight,

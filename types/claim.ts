@@ -1,16 +1,13 @@
 // PHASE 1 STEP 1
 import type { User } from "./user";
 
-// PHASE 2 STEP 1
+// PHASE 2 STEP 3
 export type ClaimStatus =
   | "OPEN"
   | "VOTING_CLOSED"
   | "COMMUNITY_TRUE"
   | "COMMUNITY_FAKE"
-  | "NEEDS_MORE_EVIDENCE"
-  | "FINAL_TRUE"
-  | "FINAL_FAKE"
-  | "MIXED";
+  | "NEEDS_MORE_EVIDENCE";
 
 export type VoteOption = "TRUE" | "FAKE" | "NOT_SURE";
 

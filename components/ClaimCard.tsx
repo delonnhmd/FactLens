@@ -4,7 +4,7 @@ import type { Claim, VoteOption } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
 import { VoteButtons } from "./VoteButtons";
 import { theme } from "../constants/theme";
-import { calculateCommunityResult, canUserVote, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
+import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
 
 interface ClaimCardProps {
   claim: Claim;
@@ -13,10 +13,10 @@ interface ClaimCardProps {
 }
 
 export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
-  // PHASE 2 STEP 1
+  // PHASE 2 STEP 3
   const votingOpen = isVotingOpen(claim);
   const userCanVote = canUserVote(claim);
-  const communityResult = votingOpen ? undefined : calculateCommunityResult(claim);
+  const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
 
   return (
     <View style={styles.card}>
@@ -25,7 +25,7 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
           <View style={styles.titleWrapper}>
             <Text style={styles.title}>{claim.title}</Text>
           </View>
-          <StatusBadge status={votingOpen ? "OPEN" : "VOTING_CLOSED"} />
+          <StatusBadge status={claim.status} />
         </View>
 
         <Text style={styles.description}>{claim.description}</Text>
@@ -40,8 +40,15 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
         <Text style={[styles.windowText, !votingOpen && styles.closedText]}>
           {votingOpen ? `${getTimeRemaining(claim.expiresAt)} remaining` : "Voting closed"}
         </Text>
-        {!votingOpen && communityResult ? <StatusBadge status={communityResult} /> : null}
       </View>
+
+      {!votingOpen && automaticVerdict ? (
+        <View style={styles.verdictPanel}>
+          <Text style={styles.verdictLabel}>System Verdict</Text>
+          <Text style={styles.verdictTitle}>{automaticVerdict.resultLabel}</Text>
+          <Text style={styles.verdictReason}>{automaticVerdict.reason}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.divider} />
 
@@ -62,9 +69,11 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
         </View>
       </View>
 
-      <View style={styles.buttonWrap}>
-        <VoteButtons disabled={!userCanVote} userVote={claim.userVote} onVote={(vote) => onVote(claim.id, vote)} />
-      </View>
+      {votingOpen ? (
+        <View style={styles.buttonWrap}>
+          <VoteButtons disabled={!userCanVote} userVote={claim.userVote} onVote={(vote) => onVote(claim.id, vote)} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -133,6 +142,31 @@ const styles = StyleSheet.create({
   },
   closedText: {
     color: theme.colors.subtext,
+  },
+  verdictPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  verdictLabel: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.xs,
+  },
+  verdictTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.xs,
+  },
+  verdictReason: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    lineHeight: theme.typography.small.lineHeight,
   },
   divider: {
     height: 1,

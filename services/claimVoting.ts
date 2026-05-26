@@ -1,11 +1,17 @@
-// PHASE 2 STEP 1
+// PHASE 2 STEP 3
 import type { Claim, ClaimStatus } from "../types/claim";
 
 const VOTING_WINDOW_MS = 24 * 60 * 60 * 1000;
-const CLOSE_RESULT_PERCENT = 0.1;
-const MIN_CLEAR_LEAD = 3;
+const MIN_VERDICT_VOTES = 5;
+const CLEAR_MAJORITY_PERCENT = 0.6;
 
-type CommunityResultStatus = "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE";
+export type AutomaticVerdictStatus = "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE";
+
+export interface AutomaticVerdict {
+  status: AutomaticVerdictStatus;
+  resultLabel: string;
+  reason: string;
+}
 
 export function getExpiresAt(createdAt: string): string {
   return new Date(new Date(createdAt).getTime() + VOTING_WINDOW_MS).toISOString();
@@ -33,28 +39,51 @@ export function getTimeRemaining(expiresAt: string, now = new Date()): string {
   return `${hours}h ${minutes}m`;
 }
 
-export function calculateCommunityResult(claim: Pick<Claim, "votesTrue" | "votesFake" | "votesUnsure">): CommunityResultStatus {
-  const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+export function calculateAutomaticVerdict(
+  claim: Pick<Claim, "votesTrue" | "votesFake" | "votesUnsure">,
+): AutomaticVerdict {
+  const trueVotes = claim.votesTrue;
+  const fakeVotes = claim.votesFake;
+  const unsureVotes = claim.votesUnsure;
+  const totalVotes = trueVotes + fakeVotes + unsureVotes;
 
-  if (totalVotes <= 0) {
-    return "NEEDS_MORE_EVIDENCE";
+  if (totalVotes < MIN_VERDICT_VOTES) {
+    return {
+      status: "NEEDS_MORE_EVIDENCE",
+      resultLabel: "Needs More Evidence",
+      reason: "Not enough community votes.",
+    };
   }
 
-  const voteGroups = [
-    { status: "COMMUNITY_TRUE" as const, count: claim.votesTrue },
-    { status: "COMMUNITY_FAKE" as const, count: claim.votesFake },
-    { status: "NEEDS_MORE_EVIDENCE" as const, count: claim.votesUnsure },
-  ].sort((a, b) => b.count - a.count);
-
-  const [top, second] = voteGroups;
-  const clearLeadNeeded = Math.max(MIN_CLEAR_LEAD, Math.ceil(totalVotes * CLOSE_RESULT_PERCENT));
-  const lead = top.count - second.count;
-
-  if (top.status === "NEEDS_MORE_EVIDENCE" || lead < clearLeadNeeded) {
-    return "NEEDS_MORE_EVIDENCE";
+  if (unsureVotes > trueVotes && unsureVotes > fakeVotes) {
+    return {
+      status: "NEEDS_MORE_EVIDENCE",
+      resultLabel: "Needs More Evidence",
+      reason: "Most voters were unsure.",
+    };
   }
 
-  return top.status;
+  if (trueVotes > fakeVotes && trueVotes / totalVotes >= CLEAR_MAJORITY_PERCENT) {
+    return {
+      status: "COMMUNITY_TRUE",
+      resultLabel: "Community Says True",
+      reason: "True received at least 60% of total votes.",
+    };
+  }
+
+  if (fakeVotes > trueVotes && fakeVotes / totalVotes >= CLEAR_MAJORITY_PERCENT) {
+    return {
+      status: "COMMUNITY_FAKE",
+      resultLabel: "Community Says Fake",
+      reason: "Fake received at least 60% of total votes.",
+    };
+  }
+
+  return {
+    status: "NEEDS_MORE_EVIDENCE",
+    resultLabel: "Needs More Evidence",
+    reason: "Vote result was too close.",
+  };
 }
 
 export function canUserVote(claim: Pick<Claim, "expiresAt" | "userVote">, now = new Date()): boolean {
@@ -62,15 +91,11 @@ export function canUserVote(claim: Pick<Claim, "expiresAt" | "userVote">, now = 
 }
 
 export function getCurrentClaimStatus(claim: Claim, now = new Date()): ClaimStatus {
-  if (claim.status === "FINAL_TRUE" || claim.status === "FINAL_FAKE" || claim.status === "MIXED") {
-    return claim.status;
-  }
-
   if (isVotingOpen(claim, now)) {
     return "OPEN";
   }
 
-  return calculateCommunityResult(claim);
+  return calculateAutomaticVerdict(claim).status;
 }
 
 export function applyCurrentClaimStatus(claim: Claim, now = new Date()): Claim {
@@ -79,4 +104,3 @@ export function applyCurrentClaimStatus(claim: Claim, now = new Date()): Claim {
     status: getCurrentClaimStatus(claim, now),
   };
 }
-

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import type { ClaimStatus } from "../types/claim";
 import { theme } from "../constants/theme";
 
-// PHASE 2 STEP 1
+// PHASE 2 STEP 3
 const statusConfig: Record<ClaimStatus, { label: string; backgroundColor: string; color: string }> = {
   OPEN: {
     label: "Open",
@@ -29,21 +29,6 @@ const statusConfig: Record<ClaimStatus, { label: string; backgroundColor: string
     label: "Needs More Evidence",
     backgroundColor: "#FEF3C7",
     color: theme.colors.warning,
-  },
-  FINAL_TRUE: {
-    label: "Final True",
-    backgroundColor: "#DCFCE7",
-    color: theme.colors.success,
-  },
-  FINAL_FAKE: {
-    label: "Final Fake",
-    backgroundColor: "#FEE2E2",
-    color: theme.colors.danger,
-  },
-  MIXED: {
-    label: "Mixed",
-    backgroundColor: "#F3E8FF",
-    color: "#7E22CE",
   },
 };
 

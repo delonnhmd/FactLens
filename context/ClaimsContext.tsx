@@ -56,6 +56,24 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
+  // PHASE 2 STEP 3
+  useEffect(() => {
+    setClaims((currentClaimsState) => {
+      let changed = false;
+      const updatedClaims = currentClaimsState.map((claim) => {
+        const updatedClaim = applyCurrentClaimStatus(claim, now);
+
+        if (updatedClaim.status !== claim.status) {
+          changed = true;
+        }
+
+        return updatedClaim;
+      });
+
+      return changed ? updatedClaims : currentClaimsState;
+    });
+  }, [now]);
+
   const currentClaims = useMemo(
     () =>
       claims
@@ -134,4 +152,3 @@ export function useClaims() {
 
   return context;
 }
-
