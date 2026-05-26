@@ -1,5 +1,6 @@
 // PHASE 1 STEP 4
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from "react-native";
+import { useState } from "react";
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,16 +9,108 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
 import { useClaims } from "../../context/ClaimsContext";
 import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
+import type { EvidenceType } from "../../types/claim";
 import { theme } from "../../constants/theme";
+
+// PHASE 2 STEP 4
+type EvidenceFieldName = "url" | "note";
+type EvidenceErrors = Partial<Record<EvidenceFieldName, string>>;
+
+const evidenceTypeOptions: EvidenceType[] = ["SUPPORTS_TRUE", "SUPPORTS_FAKE", "ADDS_CONTEXT", "UNCLEAR"];
+
+const evidenceTypeConfig: Record<EvidenceType, { label: string; backgroundColor: string; color: string }> = {
+  SUPPORTS_TRUE: {
+    label: "Supports True",
+    backgroundColor: "#DCFCE7",
+    color: theme.colors.success,
+  },
+  SUPPORTS_FAKE: {
+    label: "Supports Fake",
+    backgroundColor: "#FEE2E2",
+    color: theme.colors.danger,
+  },
+  ADDS_CONTEXT: {
+    label: "Adds Context",
+    backgroundColor: "#E0E7FF",
+    color: theme.colors.primary,
+  },
+  UNCLEAR: {
+    label: "Unclear",
+    backgroundColor: "#FEF3C7",
+    color: theme.colors.warning,
+  },
+};
 
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   // PHASE 2 STEP 3
-  const { getClaimById, voteOnClaim } = useClaims();
+  const { getClaimById, voteOnClaim, addEvidence } = useClaims();
+  // PHASE 2 STEP 4
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [evidenceNote, setEvidenceNote] = useState("");
+  const [evidenceType, setEvidenceType] = useState<EvidenceType>("ADDS_CONTEXT");
+  const [evidenceErrors, setEvidenceErrors] = useState<EvidenceErrors>({});
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
+
+  const updateEvidenceField = (field: EvidenceFieldName, value: string) => {
+    if (field === "url") {
+      setEvidenceUrl(value);
+    }
+
+    if (field === "note") {
+      setEvidenceNote(value);
+    }
+
+    if (evidenceErrors[field]) {
+      setEvidenceErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+    }
+  };
+
+  const validateEvidence = (): EvidenceErrors => {
+    const nextErrors: EvidenceErrors = {};
+    const trimmedUrl = evidenceUrl.trim();
+    const trimmedNote = evidenceNote.trim();
+
+    if (!trimmedUrl) {
+      nextErrors.url = "Evidence URL is required.";
+    } else if (!/^https?:\/\//i.test(trimmedUrl)) {
+      nextErrors.url = "Evidence URL must start with http:// or https://.";
+    }
+
+    if (!trimmedNote) {
+      nextErrors.note = "Short note is required.";
+    } else if (trimmedNote.length < 10) {
+      nextErrors.note = "Short note must be at least 10 characters.";
+    }
+
+    return nextErrors;
+  };
+
+  const handleAddEvidence = () => {
+    if (!claim) {
+      return;
+    }
+
+    const nextErrors = validateEvidence();
+
+    if (Object.keys(nextErrors).length > 0) {
+      setEvidenceErrors(nextErrors);
+      return;
+    }
+
+    addEvidence(claim.id, {
+      url: evidenceUrl,
+      note: evidenceNote,
+      type: evidenceType,
+    });
+    setEvidenceUrl("");
+    setEvidenceNote("");
+    setEvidenceType("ADDS_CONTEXT");
+    setEvidenceErrors({});
+  };
 
   if (!claim) {
     return (
@@ -70,10 +163,109 @@ export default function ClaimDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Source</Text>
+          <Text style={styles.label}>Main Source</Text>
           <Text style={styles.sourceUrl} selectable>
             {claim.sourceUrl}
           </Text>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.labelNoMargin}>Evidence</Text>
+            <Text style={styles.countBadge}>
+              {claim.evidence.length} {claim.evidence.length === 1 ? "link" : "links"}
+            </Text>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Evidence URL</Text>
+            <TextInput
+              value={evidenceUrl}
+              onChangeText={(value) => updateEvidenceField("url", value)}
+              placeholder="https://example.com/source"
+              style={[styles.input, evidenceErrors.url && styles.inputError]}
+              placeholderTextColor={theme.colors.muted}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {evidenceErrors.url ? <Text style={styles.errorText}>{evidenceErrors.url}</Text> : null}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Short note</Text>
+            <TextInput
+              value={evidenceNote}
+              onChangeText={(value) => updateEvidenceField("note", value)}
+              placeholder="Explain what this source adds"
+              style={[styles.input, styles.textArea, evidenceErrors.note && styles.inputError]}
+              placeholderTextColor={theme.colors.muted}
+              multiline
+            />
+            {evidenceErrors.note ? <Text style={styles.errorText}>{evidenceErrors.note}</Text> : null}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Evidence type</Text>
+            <View style={styles.typeGrid}>
+              {evidenceTypeOptions.map((option) => {
+                const config = evidenceTypeConfig[option];
+                const selected = evidenceType === option;
+
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.typeButton,
+                      selected && {
+                        backgroundColor: config.backgroundColor,
+                        borderColor: config.color,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                    onPress={() => setEvidenceType(option)}
+                  >
+                    <Text style={[styles.typeButtonText, selected && { color: config.color }]}>{config.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.addEvidenceButton} onPress={handleAddEvidence} activeOpacity={0.8}>
+            <Text style={styles.addEvidenceButtonText}>Add Evidence</Text>
+          </TouchableOpacity>
+
+          <View style={styles.evidenceList}>
+            {claim.evidence.length > 0 ? (
+              claim.evidence.map((item) => {
+                const config = evidenceTypeConfig[item.type];
+
+                return (
+                  <View key={item.id} style={styles.evidenceItem}>
+                    <Text
+                      style={[
+                        styles.evidenceBadge,
+                        {
+                          backgroundColor: config.backgroundColor,
+                          color: config.color,
+                        },
+                      ]}
+                    >
+                      {config.label}
+                    </Text>
+                    <Text style={styles.evidenceUrl} selectable>
+                      {item.url}
+                    </Text>
+                    <Text style={styles.evidenceNote}>{item.note}</Text>
+                    <Text style={styles.evidenceTime}>{new Date(item.createdAt).toLocaleString()}</Text>
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={styles.placeholder}>No evidence links added yet.</Text>
+            )}
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -206,6 +398,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
   },
+  labelNoMargin: {
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
   description: {
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.text,
@@ -227,6 +424,114 @@ const styles = StyleSheet.create({
   sourceUrl: {
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.primary,
+  },
+  sectionHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.md,
+  },
+  countBadge: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  fieldGroup: {
+    marginBottom: theme.spacing.md,
+  },
+  fieldLabel: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
+  },
+  input: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  inputError: {
+    borderColor: theme.colors.danger,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    marginTop: theme.spacing.sm,
+  },
+  textArea: {
+    minHeight: 88,
+    textAlignVertical: "top",
+  },
+  typeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  typeButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  typeButtonText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  addEvidenceButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  addEvidenceButtonText: {
+    color: theme.colors.background,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  evidenceList: {
+    marginTop: theme.spacing.lg,
+  },
+  evidenceItem: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 1,
+    paddingVertical: theme.spacing.md,
+  },
+  evidenceBadge: {
+    alignSelf: "flex-start",
+    borderRadius: theme.radius.sm,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  evidenceUrl: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    marginBottom: theme.spacing.sm,
+  },
+  evidenceNote: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
+    lineHeight: theme.typography.body.lineHeight,
+    marginBottom: theme.spacing.xs,
+  },
+  evidenceTime: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
   },
   date: {
     fontSize: theme.typography.body.fontSize,

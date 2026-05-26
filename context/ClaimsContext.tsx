@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { mockClaims } from "../constants/mockData";
 import { applyCurrentClaimStatus, canUserVote, getExpiresAt } from "../services/claimVoting";
-import type { Claim, VoteOption } from "../types/claim";
+import type { Claim, EvidenceType, VoteOption } from "../types/claim";
 
 export interface CreateClaimInput {
   title: string;
@@ -12,10 +12,18 @@ export interface CreateClaimInput {
   category?: string;
 }
 
+// PHASE 2 STEP 4
+export interface EvidenceInput {
+  url: string;
+  note: string;
+  type: EvidenceType;
+}
+
 interface ClaimsContextValue {
   claims: Claim[];
   createClaim: (input: CreateClaimInput) => Claim;
   voteOnClaim: (claimId: string, vote: VoteOption) => void;
+  addEvidence: (claimId: string, evidenceInput: EvidenceInput) => void;
   getClaimById: (claimId: string) => Claim | undefined;
   now: Date;
 }
@@ -30,6 +38,10 @@ const localAuthor = {
 
 function createLocalClaimId(): string {
   return `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createLocalEvidenceId(): string {
+  return `evidence-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function incrementVote(claim: Claim, vote: VoteOption): Claim {
@@ -97,6 +109,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       createdAt,
       expiresAt: getExpiresAt(createdAt),
       userVote: null,
+      evidence: [],
       author: localAuthor,
     };
 
@@ -124,6 +137,28 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  // PHASE 2 STEP 4
+  const addEvidence = useCallback((claimId: string, evidenceInput: EvidenceInput) => {
+    const newEvidence = {
+      id: createLocalEvidenceId(),
+      url: evidenceInput.url.trim(),
+      note: evidenceInput.note.trim(),
+      type: evidenceInput.type,
+      createdAt: new Date().toISOString(),
+    };
+
+    setClaims((currentClaimsState) =>
+      currentClaimsState.map((claim) =>
+        claim.id === claimId
+          ? {
+              ...claim,
+              evidence: [newEvidence, ...claim.evidence],
+            }
+          : claim,
+      ),
+    );
+  }, []);
+
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
     [currentClaims],
@@ -134,10 +169,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       claims: currentClaims,
       createClaim,
       voteOnClaim,
+      addEvidence,
       getClaimById,
       now,
     }),
-    [createClaim, currentClaims, getClaimById, now, voteOnClaim],
+    [addEvidence, createClaim, currentClaims, getClaimById, now, voteOnClaim],
   );
 
   return <ClaimsContext.Provider value={value}>{children}</ClaimsContext.Provider>;

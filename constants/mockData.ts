@@ -23,6 +23,16 @@ export const mockClaims: Claim[] = [
     createdAt: openCreatedAt,
     expiresAt: getExpiresAt(openCreatedAt),
     userVote: null,
+    // PHASE 2 STEP 4
+    evidence: [
+      {
+        id: "evidence-01",
+        url: "https://example.com/coffee-study-details",
+        note: "Study summary with sample size and memory task notes.",
+        type: "ADDS_CONTEXT",
+        createdAt: openCreatedAt,
+      },
+    ],
     author: {
       id: "user-01",
       username: "newswatcher",
@@ -41,6 +51,22 @@ export const mockClaims: Claim[] = [
     createdAt: trueClosedCreatedAt,
     expiresAt: getExpiresAt(trueClosedCreatedAt),
     userVote: null,
+    evidence: [
+      {
+        id: "evidence-02",
+        url: "https://example.com/city-council-agenda",
+        note: "Council agenda confirms the transit program vote.",
+        type: "SUPPORTS_TRUE",
+        createdAt: trueClosedCreatedAt,
+      },
+      {
+        id: "evidence-03",
+        url: "https://example.com/transit-budget-context",
+        note: "Budget note adds context about phased funding.",
+        type: "ADDS_CONTEXT",
+        createdAt: trueClosedCreatedAt,
+      },
+    ],
     author: {
       id: "user-02",
       username: "factfinder",
@@ -59,6 +85,7 @@ export const mockClaims: Claim[] = [
     createdAt: evidenceClosedCreatedAt,
     expiresAt: getExpiresAt(evidenceClosedCreatedAt),
     userVote: null,
+    evidence: [],
     author: {
       id: "user-03",
       username: "verifynow",

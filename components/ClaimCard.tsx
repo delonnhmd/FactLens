@@ -17,6 +17,8 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
   const votingOpen = isVotingOpen(claim);
   const userCanVote = canUserVote(claim);
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  // PHASE 2 STEP 4
+  const evidenceLabel = `${claim.evidence.length} evidence ${claim.evidence.length === 1 ? "link" : "links"}`;
 
   return (
     <View style={styles.card}>
@@ -34,6 +36,7 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
         <Text style={styles.source} numberOfLines={1}>
           Source: {claim.sourceUrl}
         </Text>
+        <Text style={styles.evidenceCount}>{evidenceLabel}</Text>
       </TouchableOpacity>
 
       <View style={styles.windowRow}>
@@ -113,6 +116,12 @@ const styles = StyleSheet.create({
   source: {
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
+    marginBottom: theme.spacing.sm,
+  },
+  evidenceCount: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
     marginBottom: theme.spacing.md,
   },
   category: {

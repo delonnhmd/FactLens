@@ -11,6 +11,17 @@ export type ClaimStatus =
 
 export type VoteOption = "TRUE" | "FAKE" | "NOT_SURE";
 
+// PHASE 2 STEP 4
+export type EvidenceType = "SUPPORTS_TRUE" | "SUPPORTS_FAKE" | "ADDS_CONTEXT" | "UNCLEAR";
+
+export interface Evidence {
+  id: string;
+  url: string;
+  note: string;
+  type: EvidenceType;
+  createdAt: string;
+}
+
 export interface Claim {
   id: string;
   title: string;
@@ -25,5 +36,6 @@ export interface Claim {
   createdAt: string;
   expiresAt: string;
   userVote: VoteOption | null;
+  evidence: Evidence[];
   author: User;
 }
