@@ -2,9 +2,11 @@
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import type { Claim, VoteOption } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
+import { SourceQualityBadge } from "./SourceQualityBadge";
 import { VoteButtons } from "./VoteButtons";
 import { theme } from "../constants/theme";
 import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
+import { getSourceQuality } from "../services/sourceQuality";
 
 interface ClaimCardProps {
   claim: Claim;
@@ -19,6 +21,8 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
   // PHASE 2 STEP 4
   const evidenceLabel = `${claim.evidence.length} evidence ${claim.evidence.length === 1 ? "link" : "links"}`;
+  // PHASE 2 STEP 5
+  const sourceQuality = getSourceQuality(claim.sourceUrl);
 
   return (
     <View style={styles.card}>
@@ -36,6 +40,10 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
         <Text style={styles.source} numberOfLines={1}>
           Source: {claim.sourceUrl}
         </Text>
+        <View style={styles.qualityRow}>
+          <Text style={styles.qualityLabel}>Source Quality:</Text>
+          <SourceQualityBadge quality={sourceQuality} />
+        </View>
         <Text style={styles.evidenceCount}>{evidenceLabel}</Text>
       </TouchableOpacity>
 
@@ -123,6 +131,18 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     fontWeight: "700",
     marginBottom: theme.spacing.md,
+  },
+  qualityRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  qualityLabel: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   category: {
     alignSelf: "flex-start",

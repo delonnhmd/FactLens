@@ -5,10 +5,12 @@ import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { EmptyState } from "../../components/EmptyState";
+import { SourceQualityBadge } from "../../components/SourceQualityBadge";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
 import { useClaims } from "../../context/ClaimsContext";
 import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
+import { getSourceQuality } from "../../services/sourceQuality";
 import type { EvidenceType } from "../../types/claim";
 import { theme } from "../../constants/theme";
 
@@ -131,6 +133,8 @@ export default function ClaimDetailScreen() {
   const votingOpen = isVotingOpen(claim);
   const userCanVote = canUserVote(claim);
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  // PHASE 2 STEP 5
+  const mainSourceQuality = getSourceQuality(claim.sourceUrl);
   const voteStats = [
     { label: "True", value: claim.votesTrue, color: theme.colors.success },
     { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
@@ -167,6 +171,10 @@ export default function ClaimDetailScreen() {
           <Text style={styles.sourceUrl} selectable>
             {claim.sourceUrl}
           </Text>
+          <View style={styles.sourceQualityPanel}>
+            <SourceQualityBadge quality={mainSourceQuality} showScore />
+            <Text style={styles.sourceQualityReason}>{mainSourceQuality.reason}</Text>
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -240,6 +248,7 @@ export default function ClaimDetailScreen() {
             {claim.evidence.length > 0 ? (
               claim.evidence.map((item) => {
                 const config = evidenceTypeConfig[item.type];
+                const sourceQuality = getSourceQuality(item.url);
 
                 return (
                   <View key={item.id} style={styles.evidenceItem}>
@@ -257,6 +266,10 @@ export default function ClaimDetailScreen() {
                     <Text style={styles.evidenceUrl} selectable>
                       {item.url}
                     </Text>
+                    <View style={styles.evidenceQuality}>
+                      <SourceQualityBadge quality={sourceQuality} showScore />
+                      <Text style={styles.sourceQualityReason}>{sourceQuality.reason}</Text>
+                    </View>
                     <Text style={styles.evidenceNote}>{item.note}</Text>
                     <Text style={styles.evidenceTime}>{new Date(item.createdAt).toLocaleString()}</Text>
                   </View>
@@ -425,6 +438,20 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.primary,
   },
+  sourceQualityPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  sourceQualityReason: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    lineHeight: theme.typography.small.lineHeight,
+  },
   sectionHeaderRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -521,6 +548,10 @@ const styles = StyleSheet.create({
   evidenceUrl: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
+    marginBottom: theme.spacing.sm,
+  },
+  evidenceQuality: {
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.sm,
   },
   evidenceNote: {
