@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { mockClaims } from "../constants/mockData";
 import { applyCurrentClaimStatus, canUserVote, getExpiresAt } from "../services/claimVoting";
-import type { Claim, EvidenceType, VoteOption } from "../types/claim";
+import type { Claim, EvidenceType, ReportReason, VoteOption } from "../types/claim";
 
 export interface CreateClaimInput {
   title: string;
@@ -24,6 +24,7 @@ interface ClaimsContextValue {
   createClaim: (input: CreateClaimInput) => Claim;
   voteOnClaim: (claimId: string, vote: VoteOption) => void;
   addEvidence: (claimId: string, evidenceInput: EvidenceInput) => void;
+  reportClaim: (claimId: string, reason: ReportReason, note: string) => void;
   getClaimById: (claimId: string) => Claim | undefined;
   now: Date;
 }
@@ -42,6 +43,10 @@ function createLocalClaimId(): string {
 
 function createLocalEvidenceId(): string {
   return `evidence-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createLocalReportId(): string {
+  return `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function incrementVote(claim: Claim, vote: VoteOption): Claim {
@@ -110,6 +115,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       expiresAt: getExpiresAt(createdAt),
       userVote: null,
       evidence: [],
+      reports: [],
+      reportCount: 0,
+      isFlagged: false,
       author: localAuthor,
     };
 
@@ -159,6 +167,35 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  // PHASE 2 STEP 6
+  const reportClaim = useCallback((claimId: string, reason: ReportReason, note: string) => {
+    const newReport = {
+      id: createLocalReportId(),
+      claimId,
+      reason,
+      note: note.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setClaims((currentClaimsState) =>
+      currentClaimsState.map((claim) => {
+        if (claim.id !== claimId) {
+          return claim;
+        }
+
+        const reports = [newReport, ...claim.reports];
+        const reportCount = reports.length;
+
+        return {
+          ...claim,
+          reports,
+          reportCount,
+          isFlagged: reportCount >= 3,
+        };
+      }),
+    );
+  }, []);
+
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
     [currentClaims],
@@ -170,10 +207,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       createClaim,
       voteOnClaim,
       addEvidence,
+      reportClaim,
       getClaimById,
       now,
     }),
-    [addEvidence, createClaim, currentClaims, getClaimById, now, voteOnClaim],
+    [addEvidence, createClaim, currentClaims, getClaimById, now, reportClaim, voteOnClaim],
   );
 
   return <ClaimsContext.Provider value={value}>{children}</ClaimsContext.Provider>;

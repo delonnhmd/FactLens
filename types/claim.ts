@@ -22,6 +22,24 @@ export interface Evidence {
   createdAt: string;
 }
 
+// PHASE 2 STEP 6
+export type ReportReason =
+  | "Spam"
+  | "Fake source"
+  | "Duplicate claim"
+  | "Harmful content"
+  | "Misleading title"
+  | "Harassment or abuse"
+  | "Other";
+
+export interface Report {
+  id: string;
+  claimId: string;
+  reason: ReportReason;
+  note: string;
+  createdAt: string;
+}
+
 export interface Claim {
   id: string;
   title: string;
@@ -37,5 +55,8 @@ export interface Claim {
   expiresAt: string;
   userVote: VoteOption | null;
   evidence: Evidence[];
+  reports: Report[];
+  reportCount: number;
+  isFlagged: boolean;
   author: User;
 }

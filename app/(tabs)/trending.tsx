@@ -8,8 +8,8 @@ import { theme } from "../../constants/theme";
 
 export default function TrendingScreen() {
   const router = useRouter();
-  // PHASE 2 STEP 2
-  const { claims, voteOnClaim } = useClaims();
+  // PHASE 2 STEP 6
+  const { claims, voteOnClaim, reportClaim } = useClaims();
 
   const handleClaimPress = (claimId: string) => {
     router.push(`/claim/${claimId}`);
@@ -25,6 +25,7 @@ export default function TrendingScreen() {
             claim={claim}
             onPress={() => handleClaimPress(claim.id)}
             onVote={voteOnClaim}
+            onReport={reportClaim}
           />
         ))}
       </ScrollView>

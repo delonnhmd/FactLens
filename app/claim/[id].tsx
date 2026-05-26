@@ -9,9 +9,10 @@ import { SourceQualityBadge } from "../../components/SourceQualityBadge";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
 import { useClaims } from "../../context/ClaimsContext";
+import { reportReasons } from "../../constants/reportReasons";
 import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { getSourceQuality } from "../../services/sourceQuality";
-import type { EvidenceType } from "../../types/claim";
+import type { EvidenceType, ReportReason } from "../../types/claim";
 import { theme } from "../../constants/theme";
 
 // PHASE 2 STEP 4
@@ -47,12 +48,16 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   // PHASE 2 STEP 3
-  const { getClaimById, voteOnClaim, addEvidence } = useClaims();
+  const { getClaimById, voteOnClaim, addEvidence, reportClaim } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
   const [evidenceType, setEvidenceType] = useState<EvidenceType>("ADDS_CONTEXT");
   const [evidenceErrors, setEvidenceErrors] = useState<EvidenceErrors>({});
+  // PHASE 2 STEP 6
+  const [reportReason, setReportReason] = useState<ReportReason>("Spam");
+  const [reportNote, setReportNote] = useState("");
+  const [reportSuccess, setReportSuccess] = useState(false);
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
@@ -114,6 +119,17 @@ export default function ClaimDetailScreen() {
     setEvidenceErrors({});
   };
 
+  const handleSubmitReport = () => {
+    if (!claim) {
+      return;
+    }
+
+    reportClaim(claim.id, reportReason, reportNote);
+    setReportReason("Spam");
+    setReportNote("");
+    setReportSuccess(true);
+  };
+
   if (!claim) {
     return (
       <SafeAreaView style={styles.container}>
@@ -157,6 +173,7 @@ export default function ClaimDetailScreen() {
             <Text style={styles.title}>{claim.title}</Text>
             <StatusBadge status={claim.status} />
           </View>
+          {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for Review</Text> : null}
           <Text style={styles.authorText}>by @{claim.author.username}</Text>
         </View>
 
@@ -175,6 +192,52 @@ export default function ClaimDetailScreen() {
             <SourceQualityBadge quality={mainSourceQuality} showScore />
             <Text style={styles.sourceQualityReason}>{mainSourceQuality.reason}</Text>
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.labelNoMargin}>Report this claim</Text>
+            {claim.reportCount > 0 ? (
+              <Text style={styles.reportCountBadge}>
+                {claim.reportCount} {claim.reportCount === 1 ? "report" : "reports"}
+              </Text>
+            ) : null}
+          </View>
+          <Text style={styles.reportHelp}>Flag spam, fake sources, duplicate claims, harmful content, or abuse.</Text>
+          <View style={styles.reasonGrid}>
+            {reportReasons.map((reason) => {
+              const selected = reportReason === reason;
+
+              return (
+                <TouchableOpacity
+                  key={reason}
+                  style={[styles.reasonButton, selected && styles.reasonButtonSelected]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setReportReason(reason);
+                    setReportSuccess(false);
+                  }}
+                >
+                  <Text style={[styles.reasonButtonText, selected && styles.reasonButtonTextSelected]}>{reason}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TextInput
+            value={reportNote}
+            onChangeText={(value) => {
+              setReportNote(value);
+              setReportSuccess(false);
+            }}
+            placeholder="Optional note"
+            placeholderTextColor={theme.colors.muted}
+            style={[styles.input, styles.reportNoteInput]}
+            multiline
+          />
+          <TouchableOpacity style={styles.submitReportButton} activeOpacity={0.8} onPress={handleSubmitReport}>
+            <Text style={styles.submitReportButtonText}>Submit report</Text>
+          </TouchableOpacity>
+          {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
         </View>
 
         <View style={styles.card}>
@@ -405,6 +468,19 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
   },
+  flaggedBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FECACA",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   label: {
     fontSize: theme.typography.body.fontSize,
     fontWeight: "700",
@@ -469,6 +545,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
+  reportCountBadge: {
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FECACA",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  reportHelp: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    lineHeight: theme.typography.small.lineHeight,
+    marginBottom: theme.spacing.md,
+  },
   fieldGroup: {
     marginBottom: theme.spacing.md,
   },
@@ -504,6 +597,53 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm,
+  },
+  reasonGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  reasonButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  reasonButtonSelected: {
+    backgroundColor: "#E0E7FF",
+    borderColor: theme.colors.primary,
+  },
+  reasonButtonText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  reasonButtonTextSelected: {
+    color: theme.colors.primary,
+  },
+  reportNoteInput: {
+    minHeight: 88,
+    textAlignVertical: "top",
+  },
+  submitReportButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  submitReportButtonText: {
+    color: theme.colors.background,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  reportSuccess: {
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.md,
   },
   typeButton: {
     borderColor: theme.colors.border,
