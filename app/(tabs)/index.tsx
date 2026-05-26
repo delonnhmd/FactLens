@@ -1,9 +1,10 @@
 // PHASE 1 STEP 4
 import { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, SafeAreaView, Text, TextInput, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, SafeAreaView, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
+import { EmptyState } from "../../components/EmptyState";
 import { useClaims } from "../../context/ClaimsContext";
 import { theme } from "../../constants/theme";
 
@@ -14,6 +15,8 @@ export default function HomeScreen() {
   const { claims, voteOnClaim, reportClaim } = useClaims();
   // PHASE 2 STEP 8
   const [query, setQuery] = useState("");
+  // PHASE 2 STEP 10
+  const [refreshing, setRefreshing] = useState(false);
 
   const filteredClaims = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -40,10 +43,19 @@ export default function HomeScreen() {
     router.push(`/claim/${claimId}`);
   };
 
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 450);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Header title="FactLens" subtitle="Verify news with community evidence" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+      >
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -58,15 +70,21 @@ export default function HomeScreen() {
             <Text style={styles.successText}>Claim posted. Voting closes in 24 hours.</Text>
           </View>
         ) : null}
-        {filteredClaims.map((claim) => (
-          <ClaimCard
-            key={claim.id}
-            claim={claim}
-            onPress={() => handleClaimPress(claim.id)}
-            onVote={voteOnClaim}
-            onReport={reportClaim}
-          />
-        ))}
+        {claims.length === 0 ? (
+          <EmptyState message="No claims yet. Be the first to post a news claim." />
+        ) : filteredClaims.length === 0 ? (
+          <EmptyState message="No matching claims." />
+        ) : (
+          filteredClaims.map((claim) => (
+            <ClaimCard
+              key={claim.id}
+              claim={claim}
+              onPress={() => handleClaimPress(claim.id)}
+              onVote={voteOnClaim}
+              onReport={reportClaim}
+            />
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );

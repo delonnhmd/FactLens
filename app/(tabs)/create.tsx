@@ -1,21 +1,24 @@
 // PHASE 1 STEP 4
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
+import { claimCategories } from "../../constants/claimCategories";
+import { PROHIBITED_CONTENT } from "../../constants/contentRules";
+import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
-import { PROHIBITED_CONTENT } from "../../constants/contentRules";
 import { containsProhibitedContent, isValidHttpUrl, isValidVideoUrl } from "../../services/urlValidation";
-import { theme } from "../../constants/theme";
 
-// PHASE 2 STEP 8
+// PHASE 2 STEP 10
+const TITLE_MAX_LENGTH = 160;
+const DESCRIPTION_MAX_LENGTH = 1000;
+
 type FieldName = "title" | "description" | "sourceUrl" | "videoUrl";
 type FormErrors = Partial<Record<FieldName | "general", string>>;
 
 export default function CreateScreen() {
   const router = useRouter();
-  // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified, loginPlaceholder } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
@@ -24,6 +27,19 @@ export default function CreateScreen() {
   const [videoUrl, setVideoUrl] = useState("");
   const [category, setCategory] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
+
+  const titleOverLimit = title.length > TITLE_MAX_LENGTH;
+  const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
+  const submitDisabled = titleOverLimit || descriptionOverLimit;
+
+  const titleCounterStyle = useMemo(
+    () => [styles.counterText, titleOverLimit && styles.counterTextError],
+    [titleOverLimit],
+  );
+  const descriptionCounterStyle = useMemo(
+    () => [styles.counterText, descriptionOverLimit && styles.counterTextError],
+    [descriptionOverLimit],
+  );
 
   const updateField = (field: FieldName, value: string) => {
     if (field === "title") {
@@ -42,8 +58,8 @@ export default function CreateScreen() {
       setVideoUrl(value);
     }
 
-    if (errors[field]) {
-      setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+    if (errors[field] || errors.general) {
+      setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined, general: undefined }));
     }
   };
 
@@ -73,12 +89,16 @@ export default function CreateScreen() {
       nextErrors.title = "Title is required.";
     } else if (trimmedTitle.length < 10) {
       nextErrors.title = "Title must be at least 10 characters.";
+    } else if (title.length > TITLE_MAX_LENGTH) {
+      nextErrors.title = "Title must be 160 characters or fewer.";
     }
 
     if (!trimmedDescription) {
       nextErrors.description = "Description is required.";
     } else if (trimmedDescription.length < 20) {
       nextErrors.description = "Description must be at least 20 characters.";
+    } else if (description.length > DESCRIPTION_MAX_LENGTH) {
+      nextErrors.description = "Description must be 1000 characters or fewer.";
     }
 
     if (!trimmedSourceUrl) {
@@ -95,6 +115,17 @@ export default function CreateScreen() {
   };
 
   const handleSubmit = () => {
+    if (submitDisabled) {
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        title: titleOverLimit ? "Title must be 160 characters or fewer." : currentErrors.title,
+        description: descriptionOverLimit
+          ? "Description must be 1000 characters or fewer."
+          : currentErrors.description,
+      }));
+      return;
+    }
+
     const nextErrors = validateForm();
 
     if (Object.keys(nextErrors).length > 0) {
@@ -148,91 +179,141 @@ export default function CreateScreen() {
     <SafeAreaView style={styles.container}>
       <Header title="Create Claim" subtitle="Draft a new news claim" />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.noticePanel}>
-          <Text style={styles.noticeTitle}>Account required to post.</Text>
-          <Text style={styles.noticeText}>
-            Posting as {currentUser.displayName} (@{currentUser.username}) - Verified demo account
-          </Text>
-        </View>
-        <View style={styles.warningPanel}>
-          <Text style={styles.warningText}>Nude, porn, and sexually explicit content are not allowed.</Text>
-        </View>
-        {errors.general ? <Text style={styles.generalError}>{errors.general}</Text> : null}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Claim Title</Text>
-          <TextInput
-            value={title}
-            onChangeText={(value) => updateField("title", value)}
-            placeholder="Enter a concise claim title"
-            style={[styles.input, errors.title && styles.inputError]}
-            placeholderTextColor={theme.colors.muted}
-          />
-          {errors.title ? <Text style={styles.errorText}>{errors.title}</Text> : null}
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Description</Text>
-          <TextInput
-            value={description}
-            onChangeText={(value) => updateField("description", value)}
-            placeholder="Describe the claim in a few sentences"
-            style={[styles.input, styles.textArea, errors.description && styles.inputError]}
-            placeholderTextColor={theme.colors.muted}
-            multiline
-          />
-          {errors.description ? <Text style={styles.errorText}>{errors.description}</Text> : null}
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Main Source URL</Text>
-          <TextInput
-            value={sourceUrl}
-            onChangeText={(value) => updateField("sourceUrl", value)}
-            placeholder="Add a source link"
-            style={[styles.input, errors.sourceUrl && styles.inputError]}
-            placeholderTextColor={theme.colors.muted}
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {errors.sourceUrl ? <Text style={styles.errorText}>{errors.sourceUrl}</Text> : null}
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>YouTube / Video URL (Optional)</Text>
-          <TextInput
-            value={videoUrl}
-            onChangeText={(value) => updateField("videoUrl", value)}
-            placeholder="YouTube, TikTok, X/Twitter, Facebook, Instagram, or video link"
-            style={[styles.input, errors.videoUrl && styles.inputError]}
-            placeholderTextColor={theme.colors.muted}
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {errors.videoUrl ? <Text style={styles.errorText}>{errors.videoUrl}</Text> : null}
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Image / Screenshot</Text>
+        <View style={styles.composeCard}>
+          <View style={styles.accountRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{currentUser.displayName.slice(0, 1).toUpperCase()}</Text>
+            </View>
+            <View style={styles.accountTextWrap}>
+              <View style={styles.accountNameRow}>
+                <Text style={styles.accountName}>{currentUser.displayName}</Text>
+                {currentUser.verified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
+              </View>
+              <Text style={styles.accountMeta}>@{currentUser.username}</Text>
+            </View>
+          </View>
+
+          <View style={styles.warningPanel}>
+            <Text style={styles.warningText}>Nude, porn, and sexually explicit content are not allowed.</Text>
+          </View>
+
+          {errors.general ? <Text style={styles.generalError}>{errors.general}</Text> : null}
+
+          <View style={styles.fieldGroup}>
+            <TextInput
+              value={title}
+              onChangeText={(value) => updateField("title", value)}
+              placeholder="What claim should the community verify?"
+              style={[styles.titleInput, (errors.title || titleOverLimit) && styles.inputError]}
+              placeholderTextColor={theme.colors.muted}
+              multiline
+            />
+            <View style={styles.fieldFooter}>
+              {errors.title || titleOverLimit ? (
+                <Text style={styles.errorText}>
+                  {errors.title ?? "Title must be 160 characters or fewer."}
+                </Text>
+              ) : (
+                <View />
+              )}
+              <Text style={titleCounterStyle}>{title.length}/{TITLE_MAX_LENGTH}</Text>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <TextInput
+              value={description}
+              onChangeText={(value) => updateField("description", value)}
+              placeholder="Add context, what was said, and why it matters."
+              style={[styles.input, styles.textArea, (errors.description || descriptionOverLimit) && styles.inputError]}
+              placeholderTextColor={theme.colors.muted}
+              multiline
+            />
+            <View style={styles.fieldFooter}>
+              {errors.description || descriptionOverLimit ? (
+                <Text style={styles.errorText}>
+                  {errors.description ?? "Description must be 1000 characters or fewer."}
+                </Text>
+              ) : (
+                <View />
+              )}
+              <Text style={descriptionCounterStyle}>{description.length}/{DESCRIPTION_MAX_LENGTH}</Text>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Main Source URL</Text>
+            <TextInput
+              value={sourceUrl}
+              onChangeText={(value) => updateField("sourceUrl", value)}
+              placeholder="https://example.com/source"
+              style={[styles.input, errors.sourceUrl && styles.inputError]}
+              placeholderTextColor={theme.colors.muted}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {errors.sourceUrl ? <Text style={styles.errorText}>{errors.sourceUrl}</Text> : null}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Video URL (Optional)</Text>
+            <TextInput
+              value={videoUrl}
+              onChangeText={(value) => updateField("videoUrl", value)}
+              placeholder="YouTube, TikTok, X/Twitter, Facebook, Instagram, or video link"
+              style={[styles.input, errors.videoUrl && styles.inputError]}
+              placeholderTextColor={theme.colors.muted}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {errors.videoUrl ? <Text style={styles.errorText}>{errors.videoUrl}</Text> : null}
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Category (Optional)</Text>
+            <View style={styles.categoryGrid}>
+              {claimCategories.map((option) => {
+                const selected = category === option;
+
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.categoryButton, selected && styles.categoryButtonSelected]}
+                    activeOpacity={0.8}
+                    onPress={() => setCategory((currentCategory) => (currentCategory === option ? "" : option))}
+                  >
+                    <Text style={[styles.categoryButtonText, selected && styles.categoryButtonTextSelected]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Image / Screenshot</Text>
+            <TouchableOpacity
+              style={styles.imageButton}
+              activeOpacity={0.8}
+              onPress={() => Alert.alert("Image upload will be added in backend phase.")}
+            >
+              <Text style={styles.imageButtonText}>Add Image / Screenshot</Text>
+            </TouchableOpacity>
+            <Text style={styles.helperText}>Images will be automatically resized and compressed before upload.</Text>
+          </View>
+
           <TouchableOpacity
-            style={styles.imageButton}
+            style={[styles.button, submitDisabled && styles.buttonDisabled]}
+            onPress={handleSubmit}
             activeOpacity={0.8}
-            onPress={() => Alert.alert("Image upload will be added in backend phase.")}
+            disabled={submitDisabled}
           >
-            <Text style={styles.imageButtonText}>Add Image / Screenshot</Text>
+            <Text style={styles.buttonText}>Post Claim</Text>
           </TouchableOpacity>
-          <Text style={styles.helperText}>Images will be automatically resized and compressed before upload.</Text>
         </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Category (Optional)</Text>
-          <TextInput
-            value={category}
-            onChangeText={setCategory}
-            placeholder="Politics, health, technology..."
-            style={styles.input}
-            placeholderTextColor={theme.colors.muted}
-          />
-        </View>
-        <TouchableOpacity style={styles.button} onPress={handleSubmit} activeOpacity={0.8}>
-          <Text style={styles.buttonText}>Post Claim</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -266,26 +347,62 @@ const styles = StyleSheet.create({
     lineHeight: theme.typography.body.lineHeight,
     marginBottom: theme.spacing.md,
   },
-  fieldGroup: {
+  composeCard: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    padding: theme.spacing.lg,
+    ...theme.shadows.light,
+  },
+  accountRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.md,
     marginBottom: theme.spacing.lg,
   },
-  noticePanel: {
+  avatar: {
+    alignItems: "center",
     backgroundColor: "#E0E7FF",
-    borderColor: "#BFDBFE",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    marginBottom: theme.spacing.md,
-    padding: theme.spacing.md,
+    borderRadius: 24,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
   },
-  noticeTitle: {
+  avatarText: {
     color: theme.colors.primary,
-    fontSize: theme.typography.body.fontSize,
+    fontSize: 20,
     fontWeight: "700",
+  },
+  accountTextWrap: {
+    flex: 1,
+  },
+  accountNameRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
-  noticeText: {
+  accountName: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  accountMeta: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
+  },
+  verifiedBadge: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   warningPanel: {
     backgroundColor: "#FEF3C7",
@@ -306,33 +423,91 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: theme.spacing.md,
   },
+  fieldGroup: {
+    marginBottom: theme.spacing.lg,
+  },
   label: {
-    marginBottom: theme.spacing.sm,
-    fontSize: theme.typography.small.fontSize,
     color: theme.colors.text,
-    fontWeight: "600",
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
+  },
+  titleInput: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: 22,
+    fontWeight: "700",
+    lineHeight: 30,
+    minHeight: 96,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    textAlignVertical: "top",
   },
   input: {
     backgroundColor: theme.colors.background,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
-    fontSize: theme.typography.body.fontSize,
-    color: theme.colors.text,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   inputError: {
     borderColor: theme.colors.danger,
   },
-  errorText: {
-    color: theme.colors.danger,
-    fontSize: theme.typography.small.fontSize,
+  textArea: {
+    minHeight: 148,
+    textAlignVertical: "top",
+  },
+  fieldFooter: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    justifyContent: "space-between",
     marginTop: theme.spacing.sm,
   },
-  textArea: {
-    minHeight: 120,
-    textAlignVertical: "top",
+  counterText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontVariant: ["tabular-nums"],
+    marginLeft: "auto",
+  },
+  counterTextError: {
+    color: theme.colors.danger,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: theme.colors.danger,
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+  },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  categoryButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  categoryButtonSelected: {
+    backgroundColor: "#E0E7FF",
+    borderColor: theme.colors.primary,
+  },
+  categoryButtonText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  categoryButtonTextSelected: {
+    color: theme.colors.primary,
   },
   imageButton: {
     alignItems: "center",
@@ -353,15 +528,18 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   button: {
-    marginTop: theme.spacing.sm,
+    alignItems: "center",
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
+    marginTop: theme.spacing.sm,
     paddingVertical: theme.spacing.lg,
-    alignItems: "center",
+  },
+  buttonDisabled: {
+    backgroundColor: theme.colors.muted,
   },
   buttonText: {
     color: theme.colors.background,
-    fontWeight: "700",
     fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
   },
 });
