@@ -2,9 +2,10 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View, StyleSheet } from "react-native";
-import { ClaimsProvider } from "../hooks/useClaims";
+import { ClaimsProvider } from "../context/ClaimsContext";
 
 export default function Layout() {
+  // PHASE 2 STEP 2
   return (
     <ClaimsProvider>
       <View style={styles.root}>

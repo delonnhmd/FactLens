@@ -1,11 +1,11 @@
 // PHASE 1 STEP 4
 import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { Header } from "../../components/Header";
-import { useClaims } from "../../hooks/useClaims";
+import { useClaims } from "../../context/ClaimsContext";
 import { theme } from "../../constants/theme";
 
 export default function ProfileScreen() {
-  // PHASE 2 STEP 1
+  // PHASE 2 STEP 2
   const { claims } = useClaims();
 
   const user = {

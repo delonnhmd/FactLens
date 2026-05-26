@@ -12,7 +12,8 @@ const voteOptions: Array<{ label: string; value: VoteOption; style: "primary" | 
 
 interface VoteButtonsProps {
   disabled?: boolean;
-  userVote?: VoteOption;
+  // PHASE 2 STEP 2
+  userVote?: VoteOption | null;
   onVote: (vote: VoteOption) => void;
 }
 

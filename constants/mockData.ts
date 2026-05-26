@@ -9,6 +9,7 @@ const openCreatedAt = hoursAgo(3);
 const trueClosedCreatedAt = hoursAgo(28);
 const evidenceClosedCreatedAt = hoursAgo(30);
 
+// PHASE 2 STEP 2
 export const mockClaims: Claim[] = [
   {
     id: "claim-01",
@@ -21,6 +22,7 @@ export const mockClaims: Claim[] = [
     status: "OPEN",
     createdAt: openCreatedAt,
     expiresAt: getExpiresAt(openCreatedAt),
+    userVote: null,
     author: {
       id: "user-01",
       username: "newswatcher",
@@ -38,6 +40,7 @@ export const mockClaims: Claim[] = [
     status: "COMMUNITY_TRUE",
     createdAt: trueClosedCreatedAt,
     expiresAt: getExpiresAt(trueClosedCreatedAt),
+    userVote: null,
     author: {
       id: "user-02",
       username: "factfinder",
@@ -55,6 +58,7 @@ export const mockClaims: Claim[] = [
     status: "NEEDS_MORE_EVIDENCE",
     createdAt: evidenceClosedCreatedAt,
     expiresAt: getExpiresAt(evidenceClosedCreatedAt),
+    userVote: null,
     author: {
       id: "user-03",
       username: "verifynow",

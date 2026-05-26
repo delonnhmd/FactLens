@@ -29,6 +29,8 @@ export function ClaimCard({ claim, onPress, onVote }: ClaimCardProps) {
         </View>
 
         <Text style={styles.description}>{claim.description}</Text>
+        {/* PHASE 2 STEP 2 */}
+        {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
         <Text style={styles.source} numberOfLines={1}>
           Source: {claim.sourceUrl}
         </Text>
@@ -103,6 +105,19 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
     marginBottom: theme.spacing.md,
+  },
+  category: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   windowRow: {
     flexDirection: "row",

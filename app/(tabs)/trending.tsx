@@ -3,13 +3,13 @@ import { ScrollView, StyleSheet, SafeAreaView } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
-import { useClaims } from "../../hooks/useClaims";
+import { useClaims } from "../../context/ClaimsContext";
 import { theme } from "../../constants/theme";
 
 export default function TrendingScreen() {
   const router = useRouter();
-  // PHASE 2 STEP 1
-  const { claims, castVote } = useClaims();
+  // PHASE 2 STEP 2
+  const { claims, voteOnClaim } = useClaims();
 
   const handleClaimPress = (claimId: string) => {
     router.push(`/claim/${claimId}`);
@@ -24,7 +24,7 @@ export default function TrendingScreen() {
             key={claim.id}
             claim={claim}
             onPress={() => handleClaimPress(claim.id)}
-            onVote={castVote}
+            onVote={voteOnClaim}
           />
         ))}
       </ScrollView>

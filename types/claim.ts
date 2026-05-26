@@ -19,12 +19,14 @@ export interface Claim {
   title: string;
   description: string;
   sourceUrl: string;
+  // PHASE 2 STEP 2
+  category?: string;
   votesTrue: number;
   votesFake: number;
   votesUnsure: number;
   status: ClaimStatus;
   createdAt: string;
   expiresAt: string;
-  userVote?: VoteOption;
+  userVote: VoteOption | null;
   author: User;
 }

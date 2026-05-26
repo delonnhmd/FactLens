@@ -3,17 +3,18 @@ import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } fr
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons } from "../../components/VoteButtons";
-import { useClaims } from "../../hooks/useClaims";
+import { useClaims } from "../../context/ClaimsContext";
 import { calculateCommunityResult, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { theme } from "../../constants/theme";
 
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  // PHASE 2 STEP 1
-  const { getClaimById, castVote } = useClaims();
+  // PHASE 2 STEP 2
+  const { getClaimById, voteOnClaim } = useClaims();
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
@@ -28,9 +29,7 @@ export default function ClaimDetailScreen() {
           <Text style={styles.headerTitle}>Claim Details</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Claim not found</Text>
-        </View>
+        <EmptyState message="Claim not found." />
       </SafeAreaView>
     );
   }
@@ -67,6 +66,7 @@ export default function ClaimDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Description</Text>
           <Text style={styles.description}>{claim.description}</Text>
+          {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
         </View>
 
         <View style={styles.card}>
@@ -96,7 +96,7 @@ export default function ClaimDetailScreen() {
           <VoteButtons
             disabled={!userCanVote}
             userVote={claim.userVote}
-            onVote={(vote) => castVote(claim.id, vote)}
+            onVote={(vote) => voteOnClaim(claim.id, vote)}
           />
           <Text style={styles.voteHint}>
             {claim.userVote
@@ -214,6 +214,19 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     lineHeight: theme.typography.body.lineHeight,
   },
+  category: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   sourceUrl: {
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.primary,
@@ -289,15 +302,5 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body.fontSize,
     color: theme.colors.muted,
     fontStyle: "italic",
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: theme.spacing.lg,
-  },
-  errorText: {
-    fontSize: theme.typography.body.fontSize,
-    color: theme.colors.text,
   },
 });
