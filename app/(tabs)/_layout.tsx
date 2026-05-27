@@ -1,8 +1,28 @@
 // PHASE 3 STEP 14
-// Fixed FactLens bottom tabs
+// Fixed FactLens bottom tabs with explicit labels
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { ColorValue } from 'react-native';
+
+type IoniconName =
+  | 'home-outline'
+  | 'search-outline'
+  | 'add-circle-outline'
+  | 'flame-outline'
+  | 'person-outline';
+
+function TabIcon({
+  name,
+  color,
+  size,
+}: {
+  name: IoniconName;
+  color: ColorValue;
+  size: number;
+}) {
+  return <Ionicons name={name} size={size} color={color} />;
+}
 
 export default function TabLayout() {
   return (
@@ -27,8 +47,9 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+            <TabIcon name="home-outline" color={color} size={size} />
           ),
         }}
       />
@@ -37,8 +58,9 @@ export default function TabLayout() {
         name="search"
         options={{
           title: 'Search',
+          tabBarLabel: 'Search',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search-outline" size={size} color={color} />
+            <TabIcon name="search-outline" color={color} size={size} />
           ),
         }}
       />
@@ -47,8 +69,9 @@ export default function TabLayout() {
         name="create"
         options={{
           title: 'Create',
+          tabBarLabel: 'Create',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle-outline" size={size} color={color} />
+            <TabIcon name="add-circle-outline" color={color} size={size} />
           ),
         }}
       />
@@ -57,8 +80,9 @@ export default function TabLayout() {
         name="trending"
         options={{
           title: 'Trending',
+          tabBarLabel: 'Trending',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flame-outline" size={size} color={color} />
+            <TabIcon name="flame-outline" color={color} size={size} />
           ),
         }}
       />
@@ -67,8 +91,9 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarLabel: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <TabIcon name="person-outline" color={color} size={size} />
           ),
         }}
       />
