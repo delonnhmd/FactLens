@@ -27,6 +27,8 @@ export interface CreateClaimInput {
   description: string;
   sourceUrl: string;
   videoUrl?: string;
+  // PHASE 3 STEP 7
+  imageUrl?: string | null;
   category?: string;
 }
 
@@ -174,6 +176,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       description: input.description,
       sourceUrl: input.sourceUrl,
       videoUrl: input.videoUrl,
+      imageUrl: input.imageUrl ?? null,
       category: input.category,
       profile,
     });

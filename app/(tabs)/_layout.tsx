@@ -2,18 +2,19 @@
 import { Tabs } from "expo-router";
 import type { ComponentProps } from "react";
 import type { ColorValue } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { colors } from "../../constants/colors";
 
 type TabIconName = ComponentProps<typeof Ionicons>["name"];
 
-function tabOptions(title: string, iconName: TabIconName) {
+function tabOptions(title: string, iconName: TabIconName, activeIconName: TabIconName = iconName) {
   return {
     title,
     tabBarLabel: title,
-    tabBarIcon: ({ color, size }: { focused: boolean; color: ColorValue; size: number }) => (
-      <Ionicons name={iconName} size={size} color={String(color)} />
-    ),
+    tabBarIcon: ({ focused, color, size }: { focused: boolean; color: ColorValue; size: number }) => {
+      const icon = focused ? activeIconName : iconName;
+      return <Ionicons name={icon} size={size} color={String(color)} />;
+    },
   };
 }
 
@@ -31,11 +32,11 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen name="index" options={tabOptions("Home", "home-outline")} />
-      <Tabs.Screen name="search" options={tabOptions("Search", "search-outline")} />
-      <Tabs.Screen name="create" options={tabOptions("Create", "add-circle-outline")} />
-      <Tabs.Screen name="trending" options={tabOptions("Trending", "flame-outline")} />
-      <Tabs.Screen name="profile" options={tabOptions("Profile", "person-outline")} />
+      <Tabs.Screen name="index" options={tabOptions("Home", "home-outline", "home")} />
+      <Tabs.Screen name="search" options={tabOptions("Search", "search-outline", "search")} />
+      <Tabs.Screen name="create" options={tabOptions("Create", "add-circle-outline", "add-circle")} />
+      <Tabs.Screen name="trending" options={tabOptions("Trending", "flame-outline", "flame")} />
+      <Tabs.Screen name="profile" options={tabOptions("Profile", "person-outline", "person")} />
     </Tabs>
   );
 }

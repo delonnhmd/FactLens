@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 import { useEffect, useState } from "react";
-import { Alert, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
+import { Alert, Image, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -436,16 +436,19 @@ export default function ClaimDetailScreen() {
           <Text style={styles.label}>Media</Text>
           {claim.media.youtubeUrl || claim.media.videoUrl || claim.media.imageUrl ? (
             <View style={styles.mediaList}>
+              {/* PHASE 3 STEP 7 */}
+              {claim.media.imageUrl ? (
+                <Image source={{ uri: claim.media.imageUrl }} style={styles.detailImage} resizeMode="cover" />
+              ) : null}
               {claim.media.youtubeUrl ? (
                 <Text style={styles.mediaText}>YouTube: {claim.media.youtubeUrl}</Text>
               ) : null}
               {claim.media.videoUrl ? <Text style={styles.mediaText}>Video: {claim.media.videoUrl}</Text> : null}
-              {claim.media.imageUrl ? <Text style={styles.mediaText}>Image: {claim.media.imageUrl}</Text> : null}
             </View>
           ) : (
             <Text style={styles.placeholder}>No image or video attached yet.</Text>
           )}
-          <Text style={styles.mediaNote}>Real image upload and media processing will be added in the backend phase.</Text>
+          <Text style={styles.mediaNote}>Video upload and real image moderation will be added later.</Text>
         </View>
 
         <View style={styles.card}>
@@ -896,6 +899,12 @@ const styles = StyleSheet.create({
   mediaText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
+  },
+  detailImage: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.sm,
+    height: 260,
+    width: "100%",
   },
   mediaNote: {
     color: theme.colors.subtext,

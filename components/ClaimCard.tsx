@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 import { useState } from "react";
-import { Alert, Share, TouchableOpacity, View, Text, StyleSheet, TextInput } from "react-native";
+import { Alert, Image, Share, TouchableOpacity, View, Text, StyleSheet, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ReportReason, VoteOption } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
@@ -148,6 +148,10 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
         <Text style={styles.description} numberOfLines={3}>
           {claim.description}
         </Text>
+        {/* PHASE 3 STEP 7 */}
+        {claim.media.imageUrl ? (
+          <Image source={{ uri: claim.media.imageUrl }} style={styles.claimImage} resizeMode="cover" />
+        ) : null}
         {/* PHASE 2 STEP 2 */}
         {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
         <Text style={styles.source} numberOfLines={1}>
@@ -364,6 +368,13 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
     lineHeight: theme.typography.body.lineHeight,
+  },
+  claimImage: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.sm,
+    height: 180,
+    marginBottom: theme.spacing.md,
+    width: "100%",
   },
   source: {
     fontSize: theme.typography.small.fontSize,

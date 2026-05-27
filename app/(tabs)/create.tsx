@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 import { useMemo, useState } from "react";
-import { Alert, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
+import { Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { claimCategories } from "../../constants/claimCategories";
@@ -8,6 +8,7 @@ import { PROHIBITED_CONTENT } from "../../constants/contentRules";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
+import { pickClaimImage, uploadClaimImage, type PickedClaimImage } from "../../services/imageUploadService";
 import { containsProhibitedContent, isValidHttpUrl, isValidVideoUrl } from "../../services/urlValidation";
 
 // PHASE 2 STEP 10
@@ -20,13 +21,16 @@ type FormErrors = Partial<Record<FieldName | "general", string>>;
 export default function CreateScreen() {
   const router = useRouter();
   // PHASE 3 STEP 2
-  const { profile, profileError, isAuthenticated, isVerified, loading, refreshUser, refreshProfile } = useAuth();
+  const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, refreshProfile } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [category, setCategory] = useState("");
+  // PHASE 3 STEP 7
+  const [selectedImage, setSelectedImage] = useState<PickedClaimImage | null>(null);
+  const [imageError, setImageError] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -116,7 +120,22 @@ export default function CreateScreen() {
     return nextErrors;
   };
 
-  // PHASE 3 STEP 3
+  // PHASE 3 STEP 7
+  const handlePickImage = async () => {
+    setImageError("");
+
+    try {
+      const image = await pickClaimImage();
+
+      if (image) {
+        setSelectedImage(image);
+      }
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "We could not select this image. Please try again.");
+    }
+  };
+
+  // PHASE 3 STEP 7
   const handleSubmit = async () => {
     if (submitDisabled) {
       setErrors((currentErrors) => ({
@@ -138,11 +157,22 @@ export default function CreateScreen() {
 
     try {
       setIsSubmitting(true);
+      let imageUrl: string | null = null;
+
+      if (selectedImage) {
+        if (!currentUser) {
+          throw new Error("You need an account to post.");
+        }
+
+        imageUrl = await uploadClaimImage(currentUser.id, selectedImage.uri, selectedImage.mimeType);
+      }
+
       await createClaim({
         title,
         description,
         sourceUrl,
         videoUrl,
+        imageUrl,
         category,
       });
 
@@ -151,6 +181,8 @@ export default function CreateScreen() {
       setSourceUrl("");
       setVideoUrl("");
       setCategory("");
+      setSelectedImage(null);
+      setImageError("");
       setErrors({});
       router.replace({ pathname: "/", params: { claimPosted: "1" } });
     } catch (claimError) {
@@ -251,7 +283,9 @@ export default function CreateScreen() {
           </View>
 
           <View style={styles.warningPanel}>
-            <Text style={styles.warningText}>Nude, porn, and sexually explicit content are not allowed.</Text>
+            <Text style={styles.warningText}>
+              Nude, porn, sexually explicit, and harmful images are not allowed.
+            </Text>
           </View>
 
           {errors.general ? <Text style={styles.generalError}>{errors.general}</Text> : null}
@@ -352,14 +386,29 @@ export default function CreateScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Image / Screenshot</Text>
-            <TouchableOpacity
-              style={styles.imageButton}
-              activeOpacity={0.8}
-              onPress={() => Alert.alert("Image upload will be added in backend phase.")}
-            >
+            {selectedImage ? (
+              <View style={styles.imagePreviewPanel}>
+                <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedImage(null);
+                    setImageError("");
+                  }}
+                >
+                  <Text style={styles.removeImageButtonText}>Remove image</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <TouchableOpacity style={styles.imageButton} activeOpacity={0.8} onPress={handlePickImage}>
               <Text style={styles.imageButtonText}>Add Image / Screenshot</Text>
             </TouchableOpacity>
-            <Text style={styles.helperText}>Images will be automatically resized and compressed before upload.</Text>
+            {imageError ? <Text style={styles.errorText}>{imageError}</Text> : null}
+            <Text style={styles.helperText}>Images are compressed before upload to save storage.</Text>
+            <Text style={styles.helperText}>
+              Full 1200px resize compression will be enabled after expo-image-manipulator is installed.
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -579,6 +628,29 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     paddingVertical: theme.spacing.md,
+  },
+  imagePreviewPanel: {
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  imagePreview: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.sm,
+    height: 180,
+    width: "100%",
+  },
+  removeImageButton: {
+    alignSelf: "flex-start",
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  removeImageButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   imageButtonText: {
     color: theme.colors.primary,
