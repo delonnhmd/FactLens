@@ -5,9 +5,14 @@ import { useAuth } from "./AuthContext";
 import { applyCurrentClaimStatus } from "../services/claimVoting";
 import {
   createClaim as createRemoteClaim,
+  fetchClaimsByCategory as fetchRemoteClaimsByCategory,
+  fetchClaimsByStatus as fetchRemoteClaimsByStatus,
   fetchClaimById as fetchRemoteClaimById,
-  fetchClaims as fetchRemoteClaims,
+  fetchLatestClaims as fetchRemoteLatestClaims,
+  fetchTrendingClaims as fetchRemoteTrendingClaims,
+  searchClaims as searchRemoteClaims,
 } from "../services/claimService";
+import type { ClaimSearchFilters } from "../services/claimService";
 import {
   fetchUserVoteForClaim,
   voteOnClaim as voteOnRemoteClaim,
@@ -20,7 +25,7 @@ import {
   fetchReportsForClaim as fetchRemoteReportsForClaim,
   reportClaim as reportRemoteClaim,
 } from "../services/reportService";
-import type { Claim, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
+import type { Claim, ClaimStatus, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
 
 export interface CreateClaimInput {
   title: string;
@@ -51,6 +56,12 @@ interface ClaimsContextValue {
   // PHASE 3 STEP 6
   fetchReportsForClaim: (claimId: string) => Promise<Report[]>;
   reportClaim: (claimId: string, reason: ReportReason, note: string) => Promise<void>;
+  // PHASE 3 STEP 9
+  searchClaims: (query: string, filters?: ClaimSearchFilters) => Promise<Claim[]>;
+  fetchClaimsByCategory: (category: string) => Promise<Claim[]>;
+  fetchClaimsByStatus: (status: ClaimStatus) => Promise<Claim[]>;
+  fetchTrendingClaims: () => Promise<Claim[]>;
+  fetchLatestClaims: () => Promise<Claim[]>;
   getClaimById: (claimId: string) => Claim | undefined;
   fetchClaimById: (claimId: string) => Promise<Claim | undefined>;
   now: Date;
@@ -71,6 +82,17 @@ function mergeLocalClaimState(remoteClaim: Claim, existingClaim?: Claim): Claim 
     reportCount: remoteClaim.reportCount,
     isFlagged: remoteClaim.isFlagged,
   };
+}
+
+// PHASE 3 STEP 9
+function mergeClaimLists(currentClaims: Claim[], incomingClaims: Claim[]): Claim[] {
+  const claimsById = new Map(currentClaims.map((claim) => [claim.id, claim]));
+
+  incomingClaims.forEach((claim) => {
+    claimsById.set(claim.id, mergeLocalClaimState(claim, claimsById.get(claim.id)));
+  });
+
+  return Array.from(claimsById.values());
 }
 
 export function ClaimsProvider({ children }: { children: ReactNode }) {
@@ -101,22 +123,43 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentUser],
   );
 
+  // PHASE 3 STEP 9
+  const applyRemoteClaims = useCallback(
+    async (result: { claims: Claim[]; error?: string }, replace = false) => {
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const claimsWithVotes = await applyUserVotes(result.claims);
+
+      setClaims((currentClaimsState) =>
+        replace ? claimsWithVotes : mergeClaimLists(currentClaimsState, claimsWithVotes),
+      );
+
+      return claimsWithVotes;
+    },
+    [applyUserVotes],
+  );
+
+  // PHASE 3 STEP 9
+  const fetchLatestClaims = useCallback(
+    async () => applyRemoteClaims(await fetchRemoteLatestClaims(), true),
+    [applyRemoteClaims],
+  );
+
   const loadClaims = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    const result = await fetchRemoteClaims();
-
-    if (result.error) {
+    try {
+      await fetchLatestClaims();
+    } catch (loadError) {
       setClaims([]);
-      setError(result.error);
-    } else {
-      const claimsWithVotes = await applyUserVotes(result.claims);
-      setClaims(claimsWithVotes);
+      setError(loadError instanceof Error ? loadError.message : "We could not load claims right now.");
     }
 
     setLoading(false);
-  }, [applyUserVotes]);
+  }, [fetchLatestClaims]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -365,6 +408,31 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentClaims, currentUser, profile],
   );
 
+  // PHASE 3 STEP 9
+  const searchClaims = useCallback(
+    async (query: string, filters?: ClaimSearchFilters) =>
+      applyRemoteClaims(await searchRemoteClaims(query, filters), false),
+    [applyRemoteClaims],
+  );
+
+  // PHASE 3 STEP 9
+  const fetchClaimsByCategory = useCallback(
+    async (category: string) => applyRemoteClaims(await fetchRemoteClaimsByCategory(category), false),
+    [applyRemoteClaims],
+  );
+
+  // PHASE 3 STEP 9
+  const fetchClaimsByStatus = useCallback(
+    async (status: ClaimStatus) => applyRemoteClaims(await fetchRemoteClaimsByStatus(status), false),
+    [applyRemoteClaims],
+  );
+
+  // PHASE 3 STEP 9
+  const fetchTrendingClaims = useCallback(
+    async () => applyRemoteClaims(await fetchRemoteTrendingClaims(), false),
+    [applyRemoteClaims],
+  );
+
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
     [currentClaims],
@@ -411,6 +479,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       addEvidence,
       fetchReportsForClaim,
       reportClaim,
+      searchClaims,
+      fetchClaimsByCategory,
+      fetchClaimsByStatus,
+      fetchTrendingClaims,
+      fetchLatestClaims,
       getClaimById,
       fetchClaimById,
       now,
@@ -422,11 +495,16 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       error,
       fetchEvidenceForClaim,
       fetchClaimById,
+      fetchClaimsByCategory,
+      fetchClaimsByStatus,
+      fetchLatestClaims,
       fetchReportsForClaim,
+      fetchTrendingClaims,
       getClaimById,
       loading,
       now,
       reportClaim,
+      searchClaims,
       voteOnClaim,
     ],
   );

@@ -2,12 +2,30 @@
 import { supabase } from "../lib/supabase";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { getExpiresAt } from "./claimVoting";
+import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
 import type { User as AppUser } from "../types/user";
 import type { Profile } from "./profileService";
 
 type ClaimAiStatus = AiCheck["status"];
+
+// PHASE 3 STEP 9
+export type ClaimFeedFilter =
+  | "ALL"
+  | "OPEN_VOTING"
+  | "COMMUNITY_TRUE"
+  | "COMMUNITY_FAKE"
+  | "NEEDS_MORE_EVIDENCE"
+  | "FLAGGED"
+  | "HAS_IMAGE"
+  | "HAS_VIDEO";
+
+export interface ClaimSearchFilters {
+  category?: string | null;
+  filter?: ClaimFeedFilter;
+  limit?: number;
+}
 
 interface ClaimProfileRow {
   id: string;
@@ -79,6 +97,8 @@ interface ClaimsResult {
   error?: string;
 }
 
+const DEFAULT_CLAIM_LIMIT = 50;
+
 const CLAIM_SELECT = `
   *,
   profiles:author_id (
@@ -135,6 +155,24 @@ function mapAiStatus(status: string | null): ClaimAiStatus {
   }
 
   return "PENDING";
+}
+
+// PHASE 3 STEP 9
+function cleanSearchTerm(query: string): string {
+  return query
+    .trim()
+    .replace(/[%,()]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function getSearchExpression(query: string): string {
+  const searchTerm = cleanSearchTerm(query);
+  return [
+    `title.ilike.%${searchTerm}%`,
+    `description.ilike.%${searchTerm}%`,
+    `source_url.ilike.%${searchTerm}%`,
+    `category.ilike.%${searchTerm}%`,
+  ].join(",");
 }
 
 function getEmbeddedProfile(row: ClaimRow): ClaimProfileRow | null {
@@ -237,10 +275,16 @@ export function mapClaimToInsert(input: CreateClaimInput) {
 }
 
 export async function fetchClaims(): Promise<ClaimsResult> {
+  return fetchLatestClaims();
+}
+
+// PHASE 3 STEP 9
+export async function fetchLatestClaims(limit = DEFAULT_CLAIM_LIMIT): Promise<ClaimsResult> {
   const { data, error } = await supabase
     .from("claims")
     .select(CLAIM_SELECT)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(limit);
 
   if (error) {
     return {
@@ -251,6 +295,125 @@ export async function fetchClaims(): Promise<ClaimsResult> {
 
   return {
     claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
+  };
+}
+
+// PHASE 3 STEP 9
+export async function searchClaims(query: string, filters: ClaimSearchFilters = {}): Promise<ClaimsResult> {
+  const searchTerm = cleanSearchTerm(query);
+  let request = supabase.from("claims").select(CLAIM_SELECT);
+
+  if (searchTerm) {
+    request = request.or(getSearchExpression(searchTerm));
+  }
+
+  if (filters.category) {
+    request = request.eq("category", filters.category);
+  }
+
+  if (filters.filter === "OPEN_VOTING") {
+    request = request.eq("status", "OPEN").gt("expires_at", new Date().toISOString());
+  }
+
+  if (
+    filters.filter === "COMMUNITY_TRUE" ||
+    filters.filter === "COMMUNITY_FAKE" ||
+    filters.filter === "NEEDS_MORE_EVIDENCE"
+  ) {
+    request = request.eq("status", filters.filter);
+  }
+
+  if (filters.filter === "FLAGGED") {
+    request = request.eq("is_flagged", true);
+  }
+
+  if (filters.filter === "HAS_IMAGE") {
+    request = request.not("image_url", "is", null);
+  }
+
+  if (filters.filter === "HAS_VIDEO") {
+    request = request.not("video_url", "is", null);
+  }
+
+  const { data, error } = await request
+    .order("created_at", { ascending: false })
+    .limit(filters.limit ?? DEFAULT_CLAIM_LIMIT);
+
+  if (error) {
+    return {
+      claims: [],
+      error: getClaimServiceErrorMessage(error.message),
+    };
+  }
+
+  return {
+    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
+  };
+}
+
+// PHASE 3 STEP 9
+export async function fetchClaimsByCategory(category: string): Promise<ClaimsResult> {
+  const { data, error } = await supabase
+    .from("claims")
+    .select(CLAIM_SELECT)
+    .eq("category", category)
+    .order("created_at", { ascending: false })
+    .limit(DEFAULT_CLAIM_LIMIT);
+
+  if (error) {
+    return {
+      claims: [],
+      error: getClaimServiceErrorMessage(error.message),
+    };
+  }
+
+  return {
+    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
+  };
+}
+
+// PHASE 3 STEP 9
+export async function fetchClaimsByStatus(status: ClaimStatus): Promise<ClaimsResult> {
+  const { data, error } = await supabase
+    .from("claims")
+    .select(CLAIM_SELECT)
+    .eq("status", status)
+    .order("created_at", { ascending: false })
+    .limit(DEFAULT_CLAIM_LIMIT);
+
+  if (error) {
+    return {
+      claims: [],
+      error: getClaimServiceErrorMessage(error.message),
+    };
+  }
+
+  return {
+    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
+  };
+}
+
+// PHASE 3 STEP 9
+export async function fetchTrendingClaims(limit = 100): Promise<ClaimsResult> {
+  const { data, error } = await supabase
+    .from("claims")
+    .select(CLAIM_SELECT)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    return {
+      claims: [],
+      error: getClaimServiceErrorMessage(error.message),
+    };
+  }
+
+  const claims = ((data ?? []) as ClaimRow[])
+    .map(mapClaimRowToClaim)
+    .sort((first, second) => calculateTrendingScore(second) - calculateTrendingScore(first));
+
+  return {
+    claims,
   };
 }
 

@@ -1,5 +1,5 @@
 // PHASE 1 STEP 4
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, SafeAreaView, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { EmptyState } from "../../components/EmptyState";
@@ -47,20 +47,63 @@ function claimMatchesFilter(claim: Claim, filter: TrendingFilter): boolean {
 
 export default function TrendingScreen() {
   const router = useRouter();
-  // PHASE 2 STEP 7
-  const { claims, voteOnClaim, reportClaim } = useClaims();
+  // PHASE 3 STEP 9
+  const { claims, fetchTrendingClaims, voteOnClaim, reportClaim } = useClaims();
   const [activeFilter, setActiveFilter] = useState<TrendingFilter>("ALL");
+  const [trendingSourceClaims, setTrendingSourceClaims] = useState<Claim[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // PHASE 3 STEP 9
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadTrendingClaims() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const nextClaims = await fetchTrendingClaims();
+
+        if (mounted) {
+          setTrendingSourceClaims(nextClaims);
+        }
+      } catch (loadError) {
+        if (mounted) {
+          setTrendingSourceClaims([]);
+          setError(loadError instanceof Error ? loadError.message : "We could not load trending claims.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadTrendingClaims();
+
+    return () => {
+      mounted = false;
+    };
+  }, [fetchTrendingClaims]);
+
+  // PHASE 3 STEP 9
+  const syncedTrendingClaims = useMemo(
+    () =>
+      trendingSourceClaims.map((claim) => claims.find((currentClaim) => currentClaim.id === claim.id) ?? claim),
+    [claims, trendingSourceClaims],
+  );
 
   const trendingClaims = useMemo(
     () =>
-      claims
+      syncedTrendingClaims
         .filter((claim) => claimMatchesFilter(claim, activeFilter))
         .map((claim) => ({
           claim,
           trendingScore: calculateTrendingScore(claim),
         }))
         .sort((first, second) => second.trendingScore - first.trendingScore),
-    [activeFilter, claims],
+    [activeFilter, syncedTrendingClaims],
   );
 
   const handleClaimPress = (claimId: string) => {
@@ -88,7 +131,15 @@ export default function TrendingScreen() {
           })}
         </View>
 
-        {trendingClaims.length > 0 ? (
+        {loading ? (
+          <View style={styles.statePanel}>
+            <Text style={styles.stateText}>Loading trending claims...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorPanel}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : trendingClaims.length > 0 ? (
           trendingClaims.map(({ claim, trendingScore }) => (
             <View key={claim.id} style={styles.trendingItem}>
               <Text style={styles.scoreLabel}>Trending Score: {trendingScore}</Text>
@@ -152,5 +203,29 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     fontWeight: "700",
     marginBottom: theme.spacing.sm,
+  },
+  statePanel: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  stateText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  errorPanel: {
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FECACA",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
   },
 });
