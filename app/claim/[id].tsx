@@ -74,7 +74,15 @@ export default function ClaimDetailScreen() {
   // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
-  const { getClaimById, fetchClaimById, voteOnClaim, fetchEvidenceForClaim, addEvidence, reportClaim } = useClaims();
+  const {
+    getClaimById,
+    fetchClaimById,
+    voteOnClaim,
+    fetchEvidenceForClaim,
+    addEvidence,
+    fetchReportsForClaim,
+    reportClaim,
+  } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
@@ -88,12 +96,18 @@ export default function ClaimDetailScreen() {
   const [reportReason, setReportReason] = useState<ReportReason>("Spam");
   const [reportNote, setReportNote] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
+  // PHASE 3 STEP 6
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportError, setReportError] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [voteError, setVoteError] = useState("");
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
+  // PHASE 3 STEP 6
+  const userReport = claim && currentUser ? claim.reports.find((report) => report.userId === currentUser.id) : undefined;
 
   // PHASE 3 STEP 3
   useEffect(() => {
@@ -153,6 +167,43 @@ export default function ClaimDetailScreen() {
       mounted = false;
     };
   }, [claim?.id, fetchEvidenceForClaim]);
+
+  // PHASE 3 STEP 6
+  useEffect(() => {
+    if (!claim?.id || !currentUser) {
+      return;
+    }
+
+    let mounted = true;
+    setReportLoading(true);
+    setReportError("");
+
+    fetchReportsForClaim(claim.id)
+      .catch((error) => {
+        if (mounted) {
+          setReportError(error instanceof Error ? error.message : "We could not load reports right now.");
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setReportLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [claim?.id, currentUser, fetchReportsForClaim]);
+
+  // PHASE 3 STEP 6
+  useEffect(() => {
+    if (!userReport) {
+      return;
+    }
+
+    setReportReason(userReport.reason);
+    setReportNote(userReport.note);
+  }, [userReport?.id]);
 
   const updateEvidenceField = (field: EvidenceFieldName, value: string) => {
     if (field === "url") {
@@ -220,15 +271,23 @@ export default function ClaimDetailScreen() {
     }
   };
 
-  const handleSubmitReport = () => {
+  // PHASE 3 STEP 6
+  const handleSubmitReport = async () => {
     if (!claim) {
       return;
     }
 
-    reportClaim(claim.id, reportReason, reportNote);
-    setReportReason("Spam");
-    setReportNote("");
-    setReportSuccess(true);
+    setReportError("");
+    setReportSubmitting(true);
+
+    try {
+      await reportClaim(claim.id, reportReason, reportNote);
+      setReportSuccess(true);
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : "We could not save this report. Please try again.");
+    } finally {
+      setReportSubmitting(false);
+    }
   };
 
   // PHASE 3 STEP 4
@@ -399,6 +458,8 @@ export default function ClaimDetailScreen() {
             ) : null}
           </View>
           <Text style={styles.reportHelp}>Flag spam, fake sources, duplicate claims, harmful content, or abuse.</Text>
+          {reportLoading ? <Text style={styles.placeholder}>Loading reports...</Text> : null}
+          {userReport ? <Text style={styles.reportAlready}>You already reported this claim.</Text> : null}
           <View style={styles.reasonGrid}>
             {reportReasons.map((reason) => {
               const selected = reportReason === reason;
@@ -411,6 +472,7 @@ export default function ClaimDetailScreen() {
                   onPress={() => {
                     setReportReason(reason);
                     setReportSuccess(false);
+                    setReportError("");
                   }}
                 >
                   <Text style={[styles.reasonButtonText, selected && styles.reasonButtonTextSelected]}>{reason}</Text>
@@ -423,15 +485,24 @@ export default function ClaimDetailScreen() {
             onChangeText={(value) => {
               setReportNote(value);
               setReportSuccess(false);
+              setReportError("");
             }}
             placeholder="Optional note"
             placeholderTextColor={theme.colors.muted}
             style={[styles.input, styles.reportNoteInput]}
             multiline
           />
-          <TouchableOpacity style={styles.submitReportButton} activeOpacity={0.8} onPress={handleSubmitReport}>
-            <Text style={styles.submitReportButtonText}>Submit report</Text>
+          <TouchableOpacity
+            style={[styles.submitReportButton, reportSubmitting && styles.disabledButton]}
+            activeOpacity={0.8}
+            onPress={handleSubmitReport}
+            disabled={reportSubmitting}
+          >
+            <Text style={styles.submitReportButtonText}>
+              {reportSubmitting ? "Submitting report..." : "Submit report"}
+            </Text>
           </TouchableOpacity>
+          {reportError ? <Text style={styles.errorText}>{reportError}</Text> : null}
           {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
         </View>
 
@@ -864,6 +935,12 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     lineHeight: theme.typography.small.lineHeight,
+    marginBottom: theme.spacing.md,
+  },
+  reportAlready: {
+    color: theme.colors.warning,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
     marginBottom: theme.spacing.md,
   },
   fieldGroup: {

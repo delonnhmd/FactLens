@@ -40,9 +40,12 @@ export type ReportReason =
 export interface Report {
   id: string;
   claimId: string;
+  // PHASE 3 STEP 6
+  userId?: string;
   reason: ReportReason;
   note: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 // PHASE 2 STEP 8

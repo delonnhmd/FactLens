@@ -16,7 +16,11 @@ import {
   addEvidence as addRemoteEvidence,
   fetchEvidenceForClaim as fetchRemoteEvidenceForClaim,
 } from "../services/evidenceService";
-import type { Claim, Evidence, EvidenceType, ReportReason, VoteOption } from "../types/claim";
+import {
+  fetchReportsForClaim as fetchRemoteReportsForClaim,
+  reportClaim as reportRemoteClaim,
+} from "../services/reportService";
+import type { Claim, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
 
 export interface CreateClaimInput {
   title: string;
@@ -42,17 +46,15 @@ interface ClaimsContextValue {
   // PHASE 3 STEP 5
   fetchEvidenceForClaim: (claimId: string) => Promise<Evidence[]>;
   addEvidence: (claimId: string, evidenceInput: EvidenceInput) => Promise<Evidence[]>;
-  reportClaim: (claimId: string, reason: ReportReason, note: string) => void;
+  // PHASE 3 STEP 6
+  fetchReportsForClaim: (claimId: string) => Promise<Report[]>;
+  reportClaim: (claimId: string, reason: ReportReason, note: string) => Promise<void>;
   getClaimById: (claimId: string) => Claim | undefined;
   fetchClaimById: (claimId: string) => Promise<Claim | undefined>;
   now: Date;
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
-
-function createLocalReportId(): string {
-  return `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function mergeLocalClaimState(remoteClaim: Claim, existingClaim?: Claim): Claim {
   if (!existingClaim) {
@@ -64,8 +66,8 @@ function mergeLocalClaimState(remoteClaim: Claim, existingClaim?: Claim): Claim 
     evidence: existingClaim.evidence,
     evidenceCount: remoteClaim.evidenceCount,
     reports: existingClaim.reports,
-    reportCount: existingClaim.reportCount,
-    isFlagged: existingClaim.isFlagged,
+    reportCount: remoteClaim.reportCount,
+    isFlagged: remoteClaim.isFlagged,
   };
 }
 
@@ -290,34 +292,75 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentUser, profile],
   );
 
-  // PHASE 2 STEP 6
-  const reportClaim = useCallback((claimId: string, reason: ReportReason, note: string) => {
-    const newReport = {
-      id: createLocalReportId(),
-      claimId,
-      reason,
-      note: note.trim(),
-      createdAt: new Date().toISOString(),
-    };
+  // PHASE 3 STEP 6
+  const fetchReportsForClaim = useCallback(
+    async (claimId: string) => {
+      if (!currentUser) {
+        return [];
+      }
 
-    setClaims((currentClaimsState) =>
-      currentClaimsState.map((claim) => {
-        if (claim.id !== claimId) {
-          return claim;
-        }
+      const result = await fetchRemoteReportsForClaim(claimId);
 
-        const reports = [newReport, ...claim.reports];
-        const reportCount = reports.length;
+      if (result.error) {
+        throw new Error(result.error);
+      }
 
-        return {
-          ...claim,
-          reports,
-          reportCount,
-          isFlagged: reportCount >= 3,
-        };
-      }),
-    );
-  }, []);
+      setClaims((currentClaimsState) =>
+        currentClaimsState.map((claim) =>
+          claim.id === claimId
+            ? {
+                ...claim,
+                reports: result.reports,
+                reportCount: result.reports.length,
+                isFlagged: result.reports.length >= 3,
+              }
+            : claim,
+        ),
+      );
+
+      return result.reports;
+    },
+    [currentUser],
+  );
+
+  // PHASE 3 STEP 6
+  const reportClaim = useCallback(
+    async (claimId: string, reason: ReportReason, note: string) => {
+      if (!currentUser) {
+        throw new Error("Log in to report claims.");
+      }
+
+      if (!currentUser.email_confirmed_at) {
+        throw new Error("Verify your email to report claims.");
+      }
+
+      if (!profile) {
+        throw new Error("Profile required to report claims.");
+      }
+
+      const existingClaim = currentClaims.find((claim) => claim.id === claimId);
+      const result = await reportRemoteClaim(claimId, currentUser.id, reason, note);
+
+      if (result.error || !result.claim) {
+        throw new Error(result.error ?? "We could not save this report. Please try again.");
+      }
+
+      const reportsResult = await fetchRemoteReportsForClaim(claimId);
+      const updatedClaim = {
+        ...mergeLocalClaimState(result.claim, existingClaim),
+        reports: reportsResult.error ? existingClaim?.reports ?? [] : reportsResult.reports,
+      };
+
+      setClaims((currentClaimsState) =>
+        currentClaimsState.map((claim) => (claim.id === claimId ? updatedClaim : claim)),
+      );
+
+      if (reportsResult.error) {
+        throw new Error(reportsResult.error);
+      }
+    },
+    [currentClaims, currentUser, profile],
+  );
 
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
@@ -363,6 +406,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       voteOnClaim,
       fetchEvidenceForClaim,
       addEvidence,
+      fetchReportsForClaim,
       reportClaim,
       getClaimById,
       fetchClaimById,
@@ -375,6 +419,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       error,
       fetchEvidenceForClaim,
       fetchClaimById,
+      fetchReportsForClaim,
       getClaimById,
       loading,
       now,

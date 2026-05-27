@@ -47,7 +47,8 @@ interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
   onVote: (claimId: string, vote: VoteOption) => void | Promise<void>;
-  onReport: (claimId: string, reason: ReportReason, note: string) => void;
+  // PHASE 3 STEP 6
+  onReport: (claimId: string, reason: ReportReason, note: string) => void | Promise<void>;
 }
 
 export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) {
@@ -58,6 +59,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   const [selectedReportReason, setSelectedReportReason] = useState<ReportReason>("Spam");
   const [reportNote, setReportNote] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
+  // PHASE 3 STEP 6
+  const [reportError, setReportError] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const [voteError, setVoteError] = useState("");
   // PHASE 2 STEP 3
   const votingOpen = isVotingOpen(claim);
@@ -71,12 +75,22 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   // PHASE 2 STEP 10
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
 
-  const handleSubmitReport = () => {
-    onReport(claim.id, selectedReportReason, reportNote);
-    setReportNote("");
-    setSelectedReportReason("Spam");
-    setShowReportForm(false);
-    setReportSuccess(true);
+  // PHASE 3 STEP 6
+  const handleSubmitReport = async () => {
+    setReportError("");
+    setReportSubmitting(true);
+
+    try {
+      await onReport(claim.id, selectedReportReason, reportNote);
+      setReportNote("");
+      setSelectedReportReason("Spam");
+      setShowReportForm(false);
+      setReportSuccess(true);
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : "We could not save this report. Please try again.");
+    } finally {
+      setReportSubmitting(false);
+    }
   };
 
   const handleVote = async (vote: VoteOption) => {
@@ -228,6 +242,7 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
           onPress={() => {
             setShowReportForm((currentValue) => !currentValue);
             setReportSuccess(false);
+            setReportError("");
           }}
         >
           <Ionicons name="flag-outline" size={17} color={theme.colors.subtext} />
@@ -253,7 +268,11 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
                   key={reason}
                   style={[styles.reasonButton, selected && styles.reasonButtonSelected]}
                   activeOpacity={0.8}
-                  onPress={() => setSelectedReportReason(reason)}
+                  onPress={() => {
+                    setSelectedReportReason(reason);
+                    setReportSuccess(false);
+                    setReportError("");
+                  }}
                 >
                   <Text style={[styles.reasonButtonText, selected && styles.reasonButtonTextSelected]}>{reason}</Text>
                 </TouchableOpacity>
@@ -262,15 +281,25 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
           </View>
           <TextInput
             value={reportNote}
-            onChangeText={setReportNote}
+            onChangeText={(value) => {
+              setReportNote(value);
+              setReportSuccess(false);
+              setReportError("");
+            }}
             placeholder="Optional note"
             placeholderTextColor={theme.colors.muted}
             style={styles.reportInput}
             multiline
           />
-          <TouchableOpacity style={styles.submitReportButton} activeOpacity={0.8} onPress={handleSubmitReport}>
-            <Text style={styles.submitReportButtonText}>Submit report</Text>
+          <TouchableOpacity
+            style={[styles.submitReportButton, reportSubmitting && styles.disabledButton]}
+            activeOpacity={0.8}
+            onPress={handleSubmitReport}
+            disabled={reportSubmitting}
+          >
+            <Text style={styles.submitReportButtonText}>{reportSubmitting ? "Submitting..." : "Submit report"}</Text>
           </TouchableOpacity>
+          {reportError ? <Text style={styles.reportError}>{reportError}</Text> : null}
         </View>
       ) : null}
     </View>
@@ -376,6 +405,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: theme.spacing.md,
   },
+  reportError: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
   reportPanel: {
     backgroundColor: theme.colors.card,
     borderColor: theme.colors.lightBorder,
@@ -431,6 +465,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.danger,
     borderRadius: theme.radius.sm,
     paddingVertical: theme.spacing.md,
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
   submitReportButtonText: {
     color: theme.colors.background,
