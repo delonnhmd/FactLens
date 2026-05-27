@@ -11,9 +11,9 @@ import { VoteButtons } from "../../components/VoteButtons";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { reportReasons } from "../../constants/reportReasons";
-import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
+import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { getSourceQuality } from "../../services/sourceQuality";
-import type { EvidenceType, ReportReason } from "../../types/claim";
+import type { EvidenceType, ReportReason, VoteOption } from "../../types/claim";
 import { theme } from "../../constants/theme";
 
 // PHASE 2 STEP 4
@@ -57,7 +57,7 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   // PHASE 2 STEP 9
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
   const { getClaimById, fetchClaimById, voteOnClaim, addEvidence, reportClaim } = useClaims();
   // PHASE 2 STEP 4
@@ -71,6 +71,7 @@ export default function ClaimDetailScreen() {
   const [reportSuccess, setReportSuccess] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
+  const [voteError, setVoteError] = useState("");
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
@@ -175,6 +176,21 @@ export default function ClaimDetailScreen() {
     setReportSuccess(true);
   };
 
+  // PHASE 3 STEP 4
+  const handleVote = async (vote: VoteOption) => {
+    if (!claim) {
+      return;
+    }
+
+    setVoteError("");
+
+    try {
+      await voteOnClaim(claim.id, vote);
+    } catch (error) {
+      setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
+    }
+  };
+
   if (!claim) {
     return (
       <SafeAreaView style={styles.container}>
@@ -192,7 +208,7 @@ export default function ClaimDetailScreen() {
 
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
   const votingOpen = isVotingOpen(claim);
-  const userCanVote = canUserVote(claim);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
   // PHASE 3 STEP 1
   const isOwner = currentUser?.id === claim.authorId;
@@ -203,6 +219,15 @@ export default function ClaimDetailScreen() {
     { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
     { label: "Not Sure", value: claim.votesUnsure, color: theme.colors.warning },
   ];
+  const voteMessage = !votingOpen
+    ? ""
+    : !isAuthenticated
+      ? "Log in to vote."
+      : !isVerified
+        ? "Verify your email to vote."
+        : claim.userVote
+          ? "Your vote is recorded. You can change it until voting closes."
+          : "Choose one option before voting closes.";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -476,13 +501,12 @@ export default function ClaimDetailScreen() {
           <View style={styles.card}>
             <Text style={styles.label}>Cast Your Vote</Text>
             <VoteButtons
-              disabled={!userCanVote}
+              disabled={voteDisabled}
               userVote={claim.userVote}
-              onVote={(vote) => voteOnClaim(claim.id, vote)}
+              onVote={handleVote}
             />
-            <Text style={styles.voteHint}>
-              {claim.userVote ? "Your vote is recorded." : "Choose one option before the window closes."}
-            </Text>
+            {voteMessage ? <Text style={styles.voteHint}>{voteMessage}</Text> : null}
+            {voteError ? <Text style={styles.voteError}>{voteError}</Text> : null}
           </View>
         ) : null}
 
@@ -949,6 +973,12 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
+  },
+  voteError: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.sm,
   },
   voteRowDetailed: {
     gap: theme.spacing.md,

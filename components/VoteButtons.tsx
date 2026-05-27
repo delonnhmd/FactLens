@@ -12,14 +12,12 @@ const voteOptions: Array<{ label: string; value: VoteOption; style: "primary" | 
 
 interface VoteButtonsProps {
   disabled?: boolean;
-  // PHASE 2 STEP 2
+  // PHASE 3 STEP 4
   userVote?: VoteOption | null;
-  onVote: (vote: VoteOption) => void;
+  onVote: (vote: VoteOption) => void | Promise<void>;
 }
 
 export function VoteButtons({ disabled = false, userVote, onVote }: VoteButtonsProps) {
-  const isLocked = disabled || Boolean(userVote);
-
   return (
     <View style={styles.row}>
       {voteOptions.map((option, index) => {
@@ -32,14 +30,14 @@ export function VoteButtons({ disabled = false, userVote, onVote }: VoteButtonsP
               styles.button,
               styles[option.style],
               index > 0 && styles.buttonSpacing,
-              isLocked && !selected && styles.disabled,
+              disabled && !selected && styles.disabled,
               selected && styles.selected,
             ]}
             activeOpacity={0.8}
-            disabled={isLocked}
+            disabled={disabled}
             onPress={() => onVote(option.value)}
           >
-            <Text style={[styles.label, isLocked && !selected && styles.disabledLabel]}>{option.label}</Text>
+            <Text style={[styles.label, disabled && !selected && styles.disabledLabel]}>{option.label}</Text>
           </TouchableOpacity>
         );
       })}

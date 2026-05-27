@@ -8,7 +8,8 @@ import { SourceQualityBadge } from "./SourceQualityBadge";
 import { VoteButtons } from "./VoteButtons";
 import { reportReasons } from "../constants/reportReasons";
 import { theme } from "../constants/theme";
-import { calculateAutomaticVerdict, canUserVote, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
+import { useAuth } from "../context/AuthContext";
+import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
 import { getSourceQuality } from "../services/sourceQuality";
 
 // PHASE 2 STEP 8
@@ -45,19 +46,22 @@ function getRelativeTime(createdAt: string): string {
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
-  onVote: (claimId: string, vote: VoteOption) => void;
+  onVote: (claimId: string, vote: VoteOption) => void | Promise<void>;
   onReport: (claimId: string, reason: ReportReason, note: string) => void;
 }
 
 export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) {
+  // PHASE 3 STEP 4
+  const { isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 6
   const [showReportForm, setShowReportForm] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState<ReportReason>("Spam");
   const [reportNote, setReportNote] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
+  const [voteError, setVoteError] = useState("");
   // PHASE 2 STEP 3
   const votingOpen = isVotingOpen(claim);
-  const userCanVote = canUserVote(claim);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
   // PHASE 2 STEP 4
   const evidenceLabel = `${claim.evidence.length} evidence ${claim.evidence.length === 1 ? "link" : "links"}`;
@@ -74,6 +78,16 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
     setReportSuccess(true);
   };
 
+  const handleVote = async (vote: VoteOption) => {
+    setVoteError("");
+
+    try {
+      await onVote(claim.id, vote);
+    } catch (error) {
+      setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
+    }
+  };
+
   const handleShareClaim = async () => {
     const message = `Check this claim on FactLens: ${claim.title} ${claim.shareUrl}`;
 
@@ -87,6 +101,16 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
       Alert.alert("Share", message);
     }
   };
+
+  const voteMessage = !votingOpen
+    ? ""
+    : !isAuthenticated
+      ? "Log in to vote."
+      : !isVerified
+        ? "Verify your email to vote."
+        : claim.userVote
+          ? "Your vote is recorded. You can change it until voting closes."
+          : "Choose one option before voting closes.";
 
   return (
     <View style={styles.card}>
@@ -169,7 +193,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
 
       {votingOpen ? (
         <View style={styles.buttonWrap}>
-          <VoteButtons disabled={!userCanVote} userVote={claim.userVote} onVote={(vote) => onVote(claim.id, vote)} />
+          <VoteButtons disabled={voteDisabled} userVote={claim.userVote} onVote={handleVote} />
+          {voteMessage ? <Text style={styles.voteMessage}>{voteMessage}</Text> : null}
+          {voteError ? <Text style={styles.voteError}>{voteError}</Text> : null}
         </View>
       ) : null}
 
@@ -521,6 +547,17 @@ const styles = StyleSheet.create({
   },
   buttonWrap: {
     marginTop: theme.spacing.md,
+  },
+  voteMessage: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    marginTop: theme.spacing.sm,
+  },
+  voteError: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.sm,
   },
   actionRow: {
     alignItems: "center",
