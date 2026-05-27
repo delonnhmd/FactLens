@@ -22,6 +22,13 @@
     },
     "android": {
       "package": "com.pennyfloat.factlens"
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d3b9498f-a0d4-435c-81f5-e7b9b0d35d80"
+    },
+    "ios": {}
   }
 }
