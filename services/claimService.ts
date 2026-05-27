@@ -110,6 +110,8 @@ interface ClaimsResult {
 }
 
 const DEFAULT_CLAIM_LIMIT = 50;
+// PHASE 3 STEP 11
+export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 
 const CLAIM_SELECT = `
   *,
@@ -355,11 +357,20 @@ export async function fetchClaims(): Promise<ClaimsResult> {
 
 // PHASE 3 STEP 9
 export async function fetchLatestClaims(limit = DEFAULT_CLAIM_LIMIT): Promise<ClaimsResult> {
+  // PHASE 3 STEP 11
+  return fetchLatestClaimsPage(limit, 0);
+}
+
+// PHASE 3 STEP 11
+export async function fetchLatestClaimsPage(
+  limit = DEFAULT_CLAIMS_PAGE_SIZE,
+  offset = 0,
+): Promise<ClaimsResult> {
   const { data, error } = await supabase
     .from("claims")
     .select(CLAIM_SELECT)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) {
     return {
@@ -375,6 +386,17 @@ export async function fetchLatestClaims(limit = DEFAULT_CLAIM_LIMIT): Promise<Cl
 
 // PHASE 3 STEP 9
 export async function searchClaims(query: string, filters: ClaimSearchFilters = {}): Promise<ClaimsResult> {
+  // PHASE 3 STEP 11
+  return searchClaimsPage(query, filters, filters.limit ?? DEFAULT_CLAIM_LIMIT, 0);
+}
+
+// PHASE 3 STEP 11
+export async function searchClaimsPage(
+  query: string,
+  filters: ClaimSearchFilters = {},
+  limit = DEFAULT_CLAIMS_PAGE_SIZE,
+  offset = 0,
+): Promise<ClaimsResult> {
   const searchTerm = cleanSearchTerm(query);
   let request = supabase.from("claims").select(CLAIM_SELECT);
 
@@ -412,7 +434,7 @@ export async function searchClaims(query: string, filters: ClaimSearchFilters = 
 
   const { data, error } = await request
     .order("created_at", { ascending: false })
-    .limit(filters.limit ?? DEFAULT_CLAIM_LIMIT);
+    .range(offset, offset + limit - 1);
 
   if (error) {
     return {
@@ -470,11 +492,20 @@ export async function fetchClaimsByStatus(status: ClaimStatus): Promise<ClaimsRe
 
 // PHASE 3 STEP 9
 export async function fetchTrendingClaims(limit = 100): Promise<ClaimsResult> {
+  // PHASE 3 STEP 11
+  return fetchTrendingClaimsPage(limit, 0);
+}
+
+// PHASE 3 STEP 11
+export async function fetchTrendingClaimsPage(
+  limit = DEFAULT_CLAIMS_PAGE_SIZE,
+  offset = 0,
+): Promise<ClaimsResult> {
   const { data, error } = await supabase
     .from("claims")
     .select(CLAIM_SELECT)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) {
     return {

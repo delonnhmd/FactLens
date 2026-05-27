@@ -1,5 +1,5 @@
 // PHASE 2 STEP 2
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import { applyCurrentClaimStatus, isVotingOpen } from "../services/claimVoting";
@@ -8,11 +8,14 @@ import {
   fetchClaimsByCategory as fetchRemoteClaimsByCategory,
   fetchClaimsByStatus as fetchRemoteClaimsByStatus,
   fetchClaimById as fetchRemoteClaimById,
-  fetchLatestClaims as fetchRemoteLatestClaims,
+  fetchLatestClaimsPage as fetchRemoteLatestClaimsPage,
   fetchTrendingClaims as fetchRemoteTrendingClaims,
+  fetchTrendingClaimsPage as fetchRemoteTrendingClaimsPage,
   finalizeExpiredClaims as finalizeRemoteExpiredClaims,
   refreshClaimVerdict as refreshRemoteClaimVerdict,
   searchClaims as searchRemoteClaims,
+  searchClaimsPage as searchRemoteClaimsPage,
+  DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
 import type { ClaimSearchFilters } from "../services/claimService";
 import {
@@ -27,6 +30,11 @@ import {
   fetchReportsForClaim as fetchRemoteReportsForClaim,
   reportClaim as reportRemoteClaim,
 } from "../services/reportService";
+import {
+  subscribeToClaims,
+  unsubscribe,
+  type RealtimeChangePayload,
+} from "../services/realtimeService";
 import type { Claim, ClaimStatus, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
 
 export interface CreateClaimInput {
@@ -49,6 +57,11 @@ export interface EvidenceInput {
 interface ClaimsContextValue {
   claims: Claim[];
   loading: boolean;
+  // PHASE 3 STEP 11
+  hasMoreClaims: boolean;
+  loadingMore: boolean;
+  // PHASE 3 STEP 12
+  liveUpdatesEnabled: boolean;
   error: string | null;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<void>;
@@ -63,7 +76,17 @@ interface ClaimsContextValue {
   fetchClaimsByCategory: (category: string) => Promise<Claim[]>;
   fetchClaimsByStatus: (status: ClaimStatus) => Promise<Claim[]>;
   fetchTrendingClaims: () => Promise<Claim[]>;
+  // PHASE 3 STEP 11
+  fetchTrendingClaimsPage: (limit?: number, offset?: number) => Promise<Claim[]>;
   fetchLatestClaims: () => Promise<Claim[]>;
+  refreshClaims: () => Promise<void>;
+  loadMoreClaims: () => Promise<void>;
+  searchClaimsPage: (
+    query: string,
+    filters?: ClaimSearchFilters,
+    limit?: number,
+    offset?: number,
+  ) => Promise<Claim[]>;
   // PHASE 3 STEP 10
   refreshClaimVerdict: (claimId: string) => Promise<Claim | undefined>;
   getClaimById: (claimId: string) => Claim | undefined;
@@ -99,13 +122,40 @@ function mergeClaimLists(currentClaims: Claim[], incomingClaims: Claim[]): Claim
   return Array.from(claimsById.values());
 }
 
+// PHASE 3 STEP 11
+function sortClaimsNewestFirst(nextClaims: Claim[]): Claim[] {
+  return [...nextClaims].sort(
+    (first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
+  );
+}
+
+// PHASE 3 STEP 12
+function getRealtimeClaimId(payload: RealtimeChangePayload): string | null {
+  const row = payload.eventType === "DELETE" ? payload.old : payload.new ?? payload.old;
+  const id = row?.id;
+
+  return typeof id === "string" ? id : null;
+}
+
 export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 3
   const { currentUser, profile } = useAuth();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
+  // PHASE 3 STEP 11
+  const [hasMoreClaims, setHasMoreClaims] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [claimOffset, setClaimOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // PHASE 3 STEP 12
+  const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const claimsRef = useRef<Claim[]>([]);
+  const locallyCreatedClaimIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    claimsRef.current = claims;
+  }, [claims]);
 
   const applyUserVotes = useCallback(
     async (nextClaims: Claim[]) => {
@@ -139,7 +189,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       const claimsWithVotes = await applyUserVotes(finalizedResult.claims);
 
       setClaims((currentClaimsState) =>
-        replace ? claimsWithVotes : mergeClaimLists(currentClaimsState, claimsWithVotes),
+        sortClaimsNewestFirst(replace ? claimsWithVotes : mergeClaimLists(currentClaimsState, claimsWithVotes)),
       );
 
       return claimsWithVotes;
@@ -147,13 +197,22 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [applyUserVotes],
   );
 
-  // PHASE 3 STEP 9
+  // PHASE 3 STEP 11
   const fetchLatestClaims = useCallback(
-    async () => applyRemoteClaims(await fetchRemoteLatestClaims(), true),
+    async () => {
+      const nextClaims = await applyRemoteClaims(
+        await fetchRemoteLatestClaimsPage(DEFAULT_CLAIMS_PAGE_SIZE, 0),
+        true,
+      );
+      setClaimOffset(nextClaims.length);
+      setHasMoreClaims(nextClaims.length === DEFAULT_CLAIMS_PAGE_SIZE);
+      return nextClaims;
+    },
     [applyRemoteClaims],
   );
 
-  const loadClaims = useCallback(async () => {
+  // PHASE 3 STEP 11
+  const refreshClaims = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -161,11 +220,37 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       await fetchLatestClaims();
     } catch (loadError) {
       setClaims([]);
+      setClaimOffset(0);
+      setHasMoreClaims(false);
       setError(loadError instanceof Error ? loadError.message : "We could not load claims right now.");
+      throw loadError;
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchLatestClaims]);
+
+  // PHASE 3 STEP 11
+  const loadMoreClaims = useCallback(async () => {
+    if (loading || loadingMore || !hasMoreClaims) {
+      return;
     }
 
-    setLoading(false);
-  }, [fetchLatestClaims]);
+    setLoadingMore(true);
+    setError(null);
+
+    try {
+      const nextClaims = await applyRemoteClaims(
+        await fetchRemoteLatestClaimsPage(DEFAULT_CLAIMS_PAGE_SIZE, claimOffset),
+        false,
+      );
+      setClaimOffset((currentOffset) => currentOffset + nextClaims.length);
+      setHasMoreClaims(nextClaims.length === DEFAULT_CLAIMS_PAGE_SIZE);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load claims. Pull to retry.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [applyRemoteClaims, claimOffset, hasMoreClaims, loading, loadingMore]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -177,8 +262,67 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 3
   useEffect(() => {
-    void loadClaims();
-  }, [loadClaims]);
+    void refreshClaims().catch(() => undefined);
+  }, [refreshClaims]);
+
+  // PHASE 3 STEP 12
+  useEffect(() => {
+    let mounted = true;
+
+    const channel = subscribeToClaims(
+      async (payload) => {
+        const realtimeClaimId = getRealtimeClaimId(payload);
+
+        if (!realtimeClaimId) {
+          return;
+        }
+
+        const claimAlreadyLoaded = claimsRef.current.some((claim) => claim.id === realtimeClaimId);
+        const locallyCreatedClaimAlreadyCounted = locallyCreatedClaimIdsRef.current.has(realtimeClaimId);
+
+        if (payload.eventType === "DELETE") {
+          setClaims((currentClaimsState) =>
+            currentClaimsState.filter((claim) => claim.id !== realtimeClaimId),
+          );
+
+          locallyCreatedClaimIdsRef.current.delete(realtimeClaimId);
+
+          if (claimAlreadyLoaded) {
+            setClaimOffset((currentOffset) => Math.max(0, currentOffset - 1));
+          }
+
+          return;
+        }
+
+        const result = await fetchRemoteClaimById(realtimeClaimId);
+
+        if (!mounted || result.error || !result.claim) {
+          return;
+        }
+
+        await applyRemoteClaims({ claims: [result.claim] }, false);
+
+        if (locallyCreatedClaimAlreadyCounted) {
+          locallyCreatedClaimIdsRef.current.delete(realtimeClaimId);
+        }
+
+        if (payload.eventType === "INSERT" && !claimAlreadyLoaded && !locallyCreatedClaimAlreadyCounted) {
+          setClaimOffset((currentOffset) => currentOffset + 1);
+        }
+      },
+      (status) => {
+        if (mounted) {
+          setLiveUpdatesEnabled(status === "active");
+        }
+      },
+    );
+
+    return () => {
+      mounted = false;
+      setLiveUpdatesEnabled(false);
+      unsubscribe(channel);
+    };
+  }, [applyRemoteClaims]);
 
   // PHASE 3 STEP 10
   useEffect(() => {
@@ -246,10 +390,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     }
 
     const createdClaim = result.claim;
+    locallyCreatedClaimIdsRef.current.add(createdClaim.id);
     setClaims((currentClaimsState) => [
       createdClaim,
       ...currentClaimsState.filter((claim) => claim.id !== createdClaim.id),
     ]);
+    setClaimOffset((currentOffset) => currentOffset + 1);
     return createdClaim;
   }, [currentUser, profile]);
 
@@ -453,6 +599,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [applyRemoteClaims],
   );
 
+  // PHASE 3 STEP 11
+  const searchClaimsPage = useCallback(
+    async (query: string, filters?: ClaimSearchFilters, limit = DEFAULT_CLAIMS_PAGE_SIZE, offset = 0) =>
+      applyRemoteClaims(await searchRemoteClaimsPage(query, filters, limit, offset), false),
+    [applyRemoteClaims],
+  );
+
   // PHASE 3 STEP 9
   const fetchClaimsByCategory = useCallback(
     async (category: string) => applyRemoteClaims(await fetchRemoteClaimsByCategory(category), false),
@@ -468,6 +621,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 9
   const fetchTrendingClaims = useCallback(
     async () => applyRemoteClaims(await fetchRemoteTrendingClaims(), false),
+    [applyRemoteClaims],
+  );
+
+  // PHASE 3 STEP 11
+  const fetchTrendingClaimsPage = useCallback(
+    async (limit = DEFAULT_CLAIMS_PAGE_SIZE, offset = 0) =>
+      applyRemoteClaims(await fetchRemoteTrendingClaimsPage(limit, offset), false),
     [applyRemoteClaims],
   );
 
@@ -528,6 +688,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     () => ({
       claims: currentClaims,
       loading,
+      hasMoreClaims,
+      loadingMore,
+      liveUpdatesEnabled,
       error,
       createClaim,
       voteOnClaim,
@@ -536,10 +699,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       fetchReportsForClaim,
       reportClaim,
       searchClaims,
+      searchClaimsPage,
       fetchClaimsByCategory,
       fetchClaimsByStatus,
       fetchTrendingClaims,
+      fetchTrendingClaimsPage,
       fetchLatestClaims,
+      refreshClaims,
+      loadMoreClaims,
       refreshClaimVerdict,
       getClaimById,
       fetchClaimById,
@@ -557,12 +724,19 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       fetchLatestClaims,
       fetchReportsForClaim,
       fetchTrendingClaims,
+      fetchTrendingClaimsPage,
       getClaimById,
+      hasMoreClaims,
+      liveUpdatesEnabled,
+      loadMoreClaims,
       loading,
+      loadingMore,
       now,
       reportClaim,
+      refreshClaims,
       refreshClaimVerdict,
       searchClaims,
+      searchClaimsPage,
       voteOnClaim,
     ],
   );

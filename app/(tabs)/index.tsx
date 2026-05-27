@@ -1,171 +1,280 @@
 // PHASE 1 STEP 4
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, SafeAreaView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  SafeAreaView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
 import { EmptyState } from "../../components/EmptyState";
 import { claimCategories } from "../../constants/claimCategories";
+import { theme } from "../../constants/theme";
 import { useClaims } from "../../context/ClaimsContext";
 import { useDebounce } from "../../hooks/useDebounce";
 import type { Claim } from "../../types/claim";
-import { theme } from "../../constants/theme";
 
 // PHASE 3 STEP 9
 const categoryChips = ["All", ...claimCategories];
+// PHASE 3 STEP 11
+const HOME_PAGE_SIZE = 20;
+
+function mergeClaimsById(currentClaims: Claim[], incomingClaims: Claim[]): Claim[] {
+  const claimsById = new Map(currentClaims.map((claim) => [claim.id, claim]));
+
+  incomingClaims.forEach((claim) => {
+    claimsById.set(claim.id, claim);
+  });
+
+  return Array.from(claimsById.values()).sort(
+    (first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime(),
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { claimPosted } = useLocalSearchParams<{ claimPosted?: string }>();
-  // PHASE 3 STEP 3
   const {
     claims,
     loading,
+    hasMoreClaims,
+    loadingMore,
+    liveUpdatesEnabled,
     error,
     voteOnClaim,
     reportClaim,
-    searchClaims,
-    fetchClaimsByCategory,
-    fetchLatestClaims,
+    searchClaimsPage,
+    refreshClaims,
+    loadMoreClaims,
   } = useClaims();
   // PHASE 2 STEP 8
   const [query, setQuery] = useState("");
   // PHASE 3 STEP 9
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [feedClaims, setFeedClaims] = useState<Claim[] | null>(null);
+  const [feedClaims, setFeedClaims] = useState<Claim[]>([]);
   const [feedLoading, setFeedLoading] = useState(false);
+  const [feedLoadingMore, setFeedLoadingMore] = useState(false);
+  const [feedHasMore, setFeedHasMore] = useState(true);
+  const [feedOffset, setFeedOffset] = useState(0);
   const [feedError, setFeedError] = useState("");
   const debouncedQuery = useDebounce(query, 400);
   // PHASE 2 STEP 10
   const [refreshing, setRefreshing] = useState(false);
 
-  // PHASE 3 STEP 9
+  const filteredFeedActive = debouncedQuery.trim().length > 0 || Boolean(activeCategory);
+
   const visibleClaims = useMemo(() => {
-    const baseClaims = feedClaims ?? claims;
+    const baseClaims = filteredFeedActive ? feedClaims : claims;
     return baseClaims.map((claim) => claims.find((currentClaim) => currentClaim.id === claim.id) ?? claim);
-  }, [claims, feedClaims]);
+  }, [claims, feedClaims, filteredFeedActive]);
 
-  // PHASE 3 STEP 9
-  const loadHomeFeed = useCallback(async () => {
-    const normalizedQuery = debouncedQuery.trim();
+  // PHASE 3 STEP 11
+  const loadFilteredClaims = useCallback(
+    async (nextOffset = 0, replace = true) => {
+      if (!filteredFeedActive) {
+        setFeedClaims([]);
+        setFeedOffset(0);
+        setFeedHasMore(true);
+        setFeedError("");
+        return;
+      }
 
-    if (!normalizedQuery && !activeCategory) {
-      setFeedClaims(null);
+      if (replace) {
+        setFeedLoading(true);
+      } else {
+        setFeedLoadingMore(true);
+      }
+
       setFeedError("");
-      setFeedLoading(false);
-      return;
-    }
 
-    setFeedLoading(true);
-    setFeedError("");
+      try {
+        const nextClaims = await searchClaimsPage(
+          debouncedQuery.trim(),
+          { category: activeCategory },
+          HOME_PAGE_SIZE,
+          nextOffset,
+        );
 
-    try {
-      const nextClaims = normalizedQuery
-        ? await searchClaims(normalizedQuery, { category: activeCategory, limit: 50 })
-        : activeCategory
-          ? await fetchClaimsByCategory(activeCategory)
-          : await fetchLatestClaims();
+        setFeedClaims((currentClaims) => (replace ? nextClaims : mergeClaimsById(currentClaims, nextClaims)));
+        setFeedOffset(nextOffset + nextClaims.length);
+        setFeedHasMore(nextClaims.length === HOME_PAGE_SIZE);
+      } catch {
+        if (replace) {
+          setFeedClaims([]);
+          setFeedOffset(0);
+        }
 
-      setFeedClaims(nextClaims);
-    } catch (loadError) {
-      setFeedClaims([]);
-      setFeedError(loadError instanceof Error ? loadError.message : "We could not load this feed.");
-    } finally {
-      setFeedLoading(false);
-    }
-  }, [activeCategory, debouncedQuery, fetchClaimsByCategory, fetchLatestClaims, searchClaims]);
+        setFeedError("Could not load claims. Pull to retry.");
+      } finally {
+        setFeedLoading(false);
+        setFeedLoadingMore(false);
+      }
+    },
+    [activeCategory, debouncedQuery, filteredFeedActive, searchClaimsPage],
+  );
 
-  // PHASE 3 STEP 9
+  // PHASE 3 STEP 11
   useEffect(() => {
-    void loadHomeFeed();
-  }, [loadHomeFeed]);
+    setFeedClaims([]);
+    setFeedOffset(0);
+    setFeedHasMore(true);
 
-  const handleClaimPress = (claimId: string) => {
-    router.push(`/claim/${claimId}`);
-  };
+    void loadFilteredClaims(0, true);
+  }, [loadFilteredClaims]);
 
-  const handleRefresh = async () => {
+  const handleClaimPress = useCallback(
+    (claimId: string) => {
+      router.push(`/claim/${claimId}`);
+    },
+    [router],
+  );
+
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
 
     try {
-      if (debouncedQuery.trim() || activeCategory) {
-        await loadHomeFeed();
+      if (filteredFeedActive) {
+        await loadFilteredClaims(0, true);
       } else {
-        await fetchLatestClaims();
+        await refreshClaims();
       }
-    } catch (refreshError) {
-      setFeedError(refreshError instanceof Error ? refreshError.message : "We could not refresh claims.");
+    } catch {
+      setFeedError("Could not load claims. Pull to retry.");
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [filteredFeedActive, loadFilteredClaims, refreshClaims]);
+
+  const handleEndReached = useCallback(() => {
+    if (filteredFeedActive) {
+      if (!feedLoading && !feedLoadingMore && feedHasMore) {
+        void loadFilteredClaims(feedOffset, false);
+      }
+
+      return;
+    }
+
+    if (!loading && !loadingMore && hasMoreClaims) {
+      void loadMoreClaims();
+    }
+  }, [
+    feedHasMore,
+    feedLoading,
+    feedLoadingMore,
+    feedOffset,
+    filteredFeedActive,
+    hasMoreClaims,
+    loadFilteredClaims,
+    loadMoreClaims,
+    loading,
+    loadingMore,
+  ]);
+
+  const renderClaim = useCallback(
+    ({ item }: { item: Claim }) => (
+      <ClaimCard
+        claim={item}
+        onPress={() => handleClaimPress(item.id)}
+        onVote={voteOnClaim}
+        onReport={reportClaim}
+      />
+    ),
+    [handleClaimPress, reportClaim, voteOnClaim],
+  );
+
+  const listLoading = filteredFeedActive ? feedLoading : loading;
+  const listLoadingMore = filteredFeedActive ? feedLoadingMore : loadingMore;
+  const displayError = feedError || error ? "Could not load claims. Pull to retry." : "";
+
+  const listHeader = (
+    <View>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search claims, sources, topics..."
+        placeholderTextColor={theme.colors.muted}
+        style={styles.searchInput}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      {/* PHASE 3 STEP 12 */}
+      {liveUpdatesEnabled ? <Text style={styles.liveText}>Live updates on</Text> : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+        {categoryChips.map((category) => {
+          const selected = category === "All" ? !activeCategory : activeCategory === category;
+
+          return (
+            <TouchableOpacity
+              key={category}
+              style={[styles.categoryChip, selected && styles.categoryChipSelected]}
+              activeOpacity={0.8}
+              onPress={() => setActiveCategory(category === "All" ? null : category)}
+            >
+              <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>{category}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+      {claimPosted === "1" ? (
+        <View style={styles.successBanner}>
+          <Text style={styles.successText}>Claim posted. Voting closes in 24 hours.</Text>
+        </View>
+      ) : null}
+      {displayError ? (
+        <View style={styles.errorPanel}>
+          <Text style={styles.errorText}>{displayError}</Text>
+        </View>
+      ) : null}
+      {listLoading ? (
+        <View style={styles.statePanel}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text style={styles.stateText}>Loading claims...</Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <Header title="FactLens" subtitle="Verify news with community evidence" />
-      <ScrollView
+      <FlatList
+        data={visibleClaims}
+        keyExtractor={(claim) => claim.id}
+        renderItem={renderClaim}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
-      >
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search claims, sources, topics..."
-          placeholderTextColor={theme.colors.muted}
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryRow}
-        >
-          {categoryChips.map((category) => {
-            const selected = category === "All" ? !activeCategory : activeCategory === category;
-
-            return (
-              <TouchableOpacity
-                key={category}
-                style={[styles.categoryChip, selected && styles.categoryChipSelected]}
-                activeOpacity={0.8}
-                onPress={() => setActiveCategory(category === "All" ? null : category)}
-              >
-                <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>{category}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-        {claimPosted === "1" ? (
-          <View style={styles.successBanner}>
-            <Text style={styles.successText}>Claim posted. Voting closes in 24 hours.</Text>
-          </View>
-        ) : null}
-        {loading || feedLoading ? (
-          <View style={styles.statePanel}>
-            <Text style={styles.stateText}>Loading claims...</Text>
-          </View>
-        ) : error || feedError ? (
-          <View style={styles.errorPanel}>
-            <Text style={styles.errorText}>{feedError || error}</Text>
-          </View>
-        ) : claims.length === 0 && !feedClaims ? (
-          <EmptyState message="No claims yet. Be the first to post a news claim." />
-        ) : visibleClaims.length === 0 ? (
-          <EmptyState message="No matching claims." />
-        ) : (
-          visibleClaims.map((claim) => (
-            <ClaimCard
-              key={claim.id}
-              claim={claim}
-              onPress={() => handleClaimPress(claim.id)}
-              onVote={voteOnClaim}
-              onReport={reportClaim}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.45}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={
+          !listLoading && !displayError ? (
+            <EmptyState
+              message={
+                filteredFeedActive
+                  ? "No matching claims."
+                  : "No claims yet. Be the first to post a news claim."
+              }
             />
-          ))
-        )}
-      </ScrollView>
+          ) : null
+        }
+        ListFooterComponent={
+          listLoadingMore ? (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+            </View>
+          ) : null
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -205,6 +314,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
   },
+  // PHASE 3 STEP 12
+  liveText: {
+    alignSelf: "flex-start",
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   categoryRow: {
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
@@ -231,10 +354,14 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   statePanel: {
+    alignItems: "center",
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
     padding: theme.spacing.md,
   },
   stateText: {
@@ -247,6 +374,7 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
     borderRadius: theme.radius.sm,
     borderWidth: 1,
+    marginBottom: theme.spacing.md,
     padding: theme.spacing.md,
   },
   errorText: {
@@ -254,5 +382,8 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body.fontSize,
     fontWeight: "700",
   },
+  footerLoader: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.lg,
+  },
 });
-

@@ -1,5 +1,5 @@
 // PHASE 1 STEP 4
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Alert, Image, Share, TouchableOpacity, View, Text, StyleSheet, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ReportReason, VoteOption } from "../types/claim";
@@ -58,7 +58,7 @@ interface ClaimCardProps {
   onReport: (claimId: string, reason: ReportReason, note: string) => void | Promise<void>;
 }
 
-export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) {
+function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
   // PHASE 3 STEP 4
   const { isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 6
@@ -95,7 +95,7 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
 
   // PHASE 3 STEP 6
-  const handleSubmitReport = async () => {
+  const handleSubmitReport = useCallback(async () => {
     setReportError("");
     setReportSubmitting(true);
 
@@ -110,9 +110,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
     } finally {
       setReportSubmitting(false);
     }
-  };
+  }, [claim.id, onReport, reportNote, selectedReportReason]);
 
-  const handleVote = async (vote: VoteOption) => {
+  const handleVote = useCallback(async (vote: VoteOption) => {
     setVoteError("");
 
     try {
@@ -120,9 +120,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
     } catch (error) {
       setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
     }
-  };
+  }, [claim.id, onVote]);
 
-  const handleShareClaim = async () => {
+  const handleShareClaim = useCallback(async () => {
     const message = `Check this claim on FactLens: ${claim.title} ${claim.shareUrl}`;
 
     try {
@@ -134,7 +134,7 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
     } catch {
       Alert.alert("Share", message);
     }
-  };
+  }, [claim.shareUrl, claim.title]);
 
   const voteMessage = !votingOpen
     ? ""
@@ -358,6 +358,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   );
 }
 
+// PHASE 3 STEP 11
+export const ClaimCard = memo(ClaimCardComponent);
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: theme.colors.background,
@@ -420,7 +423,8 @@ const styles = StyleSheet.create({
   claimImage: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.sm,
-    height: 180,
+    height: 160,
+    maxHeight: 180,
     marginBottom: theme.spacing.md,
     width: "100%",
   },

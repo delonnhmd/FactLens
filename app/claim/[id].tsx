@@ -13,6 +13,13 @@ import { useClaims } from "../../context/ClaimsContext";
 import { reportReasons } from "../../constants/reportReasons";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { getSourceQuality, type SourceQuality } from "../../services/sourceQuality";
+import {
+  subscribeToClaimById,
+  subscribeToEvidenceForClaim,
+  subscribeToReportsForClaim,
+  subscribeToVotesForClaim,
+  unsubscribe,
+} from "../../services/realtimeService";
 import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../types/claim";
 import { theme } from "../../constants/theme";
 
@@ -111,6 +118,8 @@ export default function ClaimDetailScreen() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [voteError, setVoteError] = useState("");
+  // PHASE 3 STEP 12
+  const [liveUpdatesOn, setLiveUpdatesOn] = useState(false);
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
@@ -148,6 +157,77 @@ export default function ClaimDetailScreen() {
       mounted = false;
     };
   }, [claim, claimId, fetchClaimById]);
+
+  // PHASE 3 STEP 12
+  useEffect(() => {
+    if (!claimId) {
+      return;
+    }
+
+    let mounted = true;
+    let activeSubscriptions = 0;
+
+    const handleRealtimeStatus = (status: "active" | "error" | "closed") => {
+      if (!mounted) {
+        return;
+      }
+
+      if (status === "active") {
+        activeSubscriptions += 1;
+        setLiveUpdatesOn(true);
+        return;
+      }
+
+      activeSubscriptions = Math.max(0, activeSubscriptions - 1);
+      setLiveUpdatesOn(activeSubscriptions > 0);
+    };
+
+    const refreshClaim = () => {
+      refreshClaimVerdict(claimId).catch(() => undefined);
+    };
+
+    const refreshEvidence = () => {
+      fetchEvidenceForClaim(claimId).catch((error) => {
+        if (mounted) {
+          setEvidenceError(error instanceof Error ? error.message : "We could not load evidence right now.");
+        }
+      });
+    };
+
+    const refreshReports = () => {
+      refreshClaim();
+
+      if (!currentUser) {
+        return;
+      }
+
+      fetchReportsForClaim(claimId).catch((error) => {
+        if (mounted) {
+          setReportError(error instanceof Error ? error.message : "We could not load reports right now.");
+        }
+      });
+    };
+
+    const channels = [
+      subscribeToClaimById(claimId, refreshClaim, handleRealtimeStatus),
+      subscribeToVotesForClaim(claimId, refreshClaim, handleRealtimeStatus),
+      subscribeToEvidenceForClaim(
+        claimId,
+        () => {
+          refreshEvidence();
+          refreshClaim();
+        },
+        handleRealtimeStatus,
+      ),
+      subscribeToReportsForClaim(claimId, refreshReports, handleRealtimeStatus),
+    ];
+
+    return () => {
+      mounted = false;
+      setLiveUpdatesOn(false);
+      channels.forEach(unsubscribe);
+    };
+  }, [claimId, currentUser, fetchEvidenceForClaim, fetchReportsForClaim, refreshClaimVerdict]);
 
   // PHASE 3 STEP 10
   useEffect(() => {
@@ -398,6 +478,8 @@ export default function ClaimDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* PHASE 3 STEP 12 */}
+        {liveUpdatesOn ? <Text style={styles.liveText}>Live updates on</Text> : null}
         <View style={styles.card}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{claim.title}</Text>
@@ -791,6 +873,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+  },
+  // PHASE 3 STEP 12
+  liveText: {
+    alignSelf: "flex-start",
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
   card: {
     backgroundColor: theme.colors.background,
