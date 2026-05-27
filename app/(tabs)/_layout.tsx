@@ -2,7 +2,7 @@
 import { Tabs } from "expo-router";
 import type { ComponentProps } from "react";
 import type { ColorValue } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../constants/colors";
 
 type TabIconName = ComponentProps<typeof Ionicons>["name"];
@@ -32,6 +32,7 @@ export default function TabsLayout() {
         },
       }}
     >
+      {/* PHASE 3 STEP 14 */}
       <Tabs.Screen name="index" options={tabOptions("Home", "home-outline", "home")} />
       <Tabs.Screen name="search" options={tabOptions("Search", "search-outline", "search")} />
       <Tabs.Screen name="create" options={tabOptions("Create", "add-circle-outline", "add-circle")} />
