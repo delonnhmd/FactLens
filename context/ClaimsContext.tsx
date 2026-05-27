@@ -62,8 +62,8 @@ function incrementVote(claim: Claim, vote: VoteOption): Claim {
 }
 
 export function ClaimsProvider({ children }: { children: ReactNode }) {
-  // PHASE 3 STEP 1
-  const { currentUser } = useAuth();
+  // PHASE 3 STEP 2
+  const { currentUser, profile } = useAuth();
   const [claims, setClaims] = useState<Claim[]>(() => mockClaims);
   const [now, setNow] = useState(() => new Date());
 
@@ -109,12 +109,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     const localAuthor: AppUser = currentUser
       ? {
           id: currentUser.id,
-          username: authProfile.username,
-          displayName: authProfile.displayName,
-          avatar: authProfile.avatar,
+          username: profile?.username ?? authProfile.username,
+          displayName: profile?.display_name || profile?.username || authProfile.displayName,
+          avatar: profile?.avatar_url ?? authProfile.avatar,
           verified: !!currentUser.email_confirmed_at,
-          reputationScore: 0,
-          joinedAt: currentUser.created_at ?? createdAt,
+          reputationScore: profile?.reputation_score ?? 0,
+          joinedAt: profile?.created_at ?? currentUser.created_at ?? createdAt,
         }
       : mockUser;
     const newClaim: Claim = {
@@ -147,7 +147,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       reports: [],
       reportCount: 0,
       isFlagged: false,
-      // PHASE 3 STEP 1
+      // PHASE 3 STEP 2
       authorId: localAuthor.id,
       authorUsername: localAuthor.username,
       authorDisplayName: localAuthor.displayName,
@@ -157,7 +157,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
     setClaims((currentClaimsState) => [newClaim, ...currentClaimsState]);
     return newClaim;
-  }, [currentUser]);
+  }, [currentUser, profile]);
 
   const voteOnClaim = useCallback((claimId: string, vote: VoteOption) => {
     const voteTime = new Date();

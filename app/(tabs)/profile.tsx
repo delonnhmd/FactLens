@@ -1,20 +1,56 @@
 // PHASE 1 STEP 4
+import { useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthProfile } from "../../services/authProfile";
+import { createProfile } from "../../services/profileService";
 
 export default function ProfileScreen() {
-  // PHASE 3 STEP 1
+  // PHASE 3 STEP 2
   const router = useRouter();
-  const { currentUser, isAuthenticated, isVerified, loading, signOut } = useAuth();
-  const profile = getAuthProfile(currentUser);
+  const {
+    currentUser,
+    profile,
+    profileError,
+    isAuthenticated,
+    isVerified,
+    loading,
+    signOut,
+    refreshProfile,
+  } = useAuth();
+  const fallbackProfile = getAuthProfile(currentUser);
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
+  const username = profile?.username ?? fallbackProfile.username;
+  const createdAt = profile?.created_at ?? currentUser?.created_at;
+  const initial = displayName.slice(0, 1).toUpperCase() || "U";
 
   const handleSignOut = async () => {
     await signOut();
     router.replace("/");
+  };
+
+  const handleCreateMissingProfile = async () => {
+    if (!currentUser) {
+      return;
+    }
+
+    setActionError("");
+    setActionMessage("");
+    const result = await createProfile(currentUser.id, fallbackProfile.username, fallbackProfile.displayName);
+
+    if (result.error) {
+      setActionError(result.error);
+      return;
+    }
+
+    setActionMessage("Profile created.");
+    await refreshProfile();
   };
 
   return (
@@ -42,25 +78,41 @@ export default function ProfileScreen() {
           <View style={styles.card}>
             <View style={styles.profileHeader}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{profile.initial}</Text>
+                <Text style={styles.avatarText}>{initial}</Text>
               </View>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.displayName}>{profile.username}</Text>
-                  {isVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
+                  <Text style={styles.displayName}>{displayName}</Text>
+                  {isVerified ? <Text style={styles.verifiedBadge}>Email Verified</Text> : null}
                 </View>
-                <Text style={styles.username}>@{profile.username}</Text>
+                <Text style={styles.username}>@{username}</Text>
               </View>
             </View>
 
+            {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+            {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+            {actionMessage ? <Text style={styles.messageText}>{actionMessage}</Text> : null}
+
+            {!profile ? (
+              <View style={styles.missingProfilePanel}>
+                <Text style={styles.missingProfileTitle}>Profile missing</Text>
+                <Text style={styles.subtitle}>
+                  FactLens could not find your public profile row. Create it from your auth metadata.
+                </Text>
+                <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateMissingProfile}>
+                  <Text style={styles.buttonText}>Create Missing Profile</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Email</Text>
-              <Text style={styles.detailValue}>{profile.email || "No email on account"}</Text>
+              <Text style={styles.detailValue}>{fallbackProfile.email || "No email on account"}</Text>
             </View>
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Username</Text>
-              <Text style={styles.detailValue}>{profile.username}</Text>
+              <Text style={styles.detailValue}>@{username}</Text>
             </View>
 
             <View style={styles.detailRow}>
@@ -68,6 +120,16 @@ export default function ProfileScreen() {
               <Text style={[styles.detailValue, isVerified ? styles.successText : styles.warningText]}>
                 {isVerified ? "Verified" : "Not verified"}
               </Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Reputation score</Text>
+              <Text style={styles.detailValue}>{profile?.reputation_score ?? 0}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Account created</Text>
+              <Text style={styles.detailValue}>{createdAt ? new Date(createdAt).toLocaleDateString() : "Unknown"}</Text>
             </View>
 
             <TouchableOpacity style={styles.signOutButton} activeOpacity={0.8} onPress={handleSignOut}>
@@ -157,6 +219,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
+  missingProfilePanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  missingProfileTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
+  },
   detailRow: {
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: 1,
@@ -179,6 +255,18 @@ const styles = StyleSheet.create({
   warningText: {
     color: theme.colors.warning,
     fontWeight: "700",
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.md,
+  },
+  messageText: {
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.md,
   },
   button: {
     alignItems: "center",

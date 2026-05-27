@@ -1,8 +1,10 @@
-// PHASE 3 STEP 1
+// PHASE 3 STEP 2
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { createProfile, getProfile } from "../services/profileService";
+import type { Profile } from "../services/profileService";
 
 interface AuthActionResult {
   error?: string;
@@ -11,6 +13,8 @@ interface AuthActionResult {
 
 interface AuthContextValue {
   currentUser: SupabaseUser | null;
+  profile: Profile | null;
+  profileError: string | null;
   session: Session | null;
   isAuthenticated: boolean;
   isVerified: boolean;
@@ -19,6 +23,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<AuthActionResult>;
   signOut: () => Promise<AuthActionResult>;
   refreshUser: () => Promise<AuthActionResult>;
+  refreshProfile: () => Promise<AuthActionResult>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -26,20 +31,50 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const loadProfile = useCallback(async (userId: string): Promise<AuthActionResult> => {
+    const result = await getProfile(userId);
+    setProfile(result.profile);
+    setProfileError(result.error ?? null);
+
+    if (result.error) {
+      return { error: result.error };
+    }
+
+    return {};
+  }, []);
+
+  const applySession = useCallback(
+    async (nextSession: Session | null) => {
+      const nextUser = nextSession?.user ?? null;
+      setSession(nextSession);
+      setCurrentUser(nextUser);
+
+      if (nextUser) {
+        await loadProfile(nextUser.id);
+        return;
+      }
+
+      setProfile(null);
+      setProfileError(null);
+    },
+    [loadProfile],
+  );
 
   useEffect(() => {
     let mounted = true;
 
     supabase.auth
       .getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!mounted) {
           return;
         }
 
-        setSession(data.session);
-        setCurrentUser(data.session?.user ?? null);
+        await applySession(data.session);
       })
       .finally(() => {
         if (mounted) {
@@ -50,16 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setCurrentUser(nextSession?.user ?? null);
-      setLoading(false);
+      void applySession(nextSession).finally(() => setLoading(false));
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [applySession]);
+
+  const refreshProfile = useCallback(async (): Promise<AuthActionResult> => {
+    if (!currentUser) {
+      return { error: "You must be signed in to load a profile." };
+    }
+
+    return loadProfile(currentUser.id);
+  }, [currentUser, loadProfile]);
 
   const refreshUser = useCallback(async (): Promise<AuthActionResult> => {
     const { data, error } = await supabase.auth.getUser();
@@ -71,16 +112,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sessionData } = await supabase.auth.getSession();
     setSession(sessionData.session);
     setCurrentUser(data.user);
+    await loadProfile(data.user.id);
     return {};
-  }, []);
+  }, [loadProfile]);
 
   const signUp = useCallback(async (email: string, password: string, username: string): Promise<AuthActionResult> => {
+    const trimmedUsername = username.trim();
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
         data: {
-          username: username.trim(),
+          username: trimmedUsername,
+          displayName: trimmedUsername,
         },
       },
     });
@@ -89,25 +133,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: error.message };
     }
 
+    const nextUser = data.session?.user ?? data.user ?? null;
     setSession(data.session);
-    setCurrentUser(data.session?.user ?? null);
+    setCurrentUser(nextUser);
+
+    if (data.user) {
+      const profileResult = await createProfile(data.user.id, trimmedUsername, trimmedUsername);
+
+      if (profileResult.profile) {
+        setProfile(profileResult.profile);
+        setProfileError(null);
+      } else if (profileResult.error === "Username already taken." || data.session) {
+        setProfileError(profileResult.error ?? null);
+        return { error: profileResult.error };
+      }
+    }
+
     return { message: "Check your email to verify your account." };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string): Promise<AuthActionResult> => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<AuthActionResult> => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-    if (error) {
-      return { error: error.message };
-    }
+      if (error) {
+        return { error: error.message };
+      }
 
-    setSession(data.session);
-    setCurrentUser(data.user);
-    return {};
-  }, []);
+      setSession(data.session);
+      setCurrentUser(data.user);
+      await loadProfile(data.user.id);
+      return {};
+    },
+    [loadProfile],
+  );
 
   const signOut = useCallback(async (): Promise<AuthActionResult> => {
     const { error } = await supabase.auth.signOut();
@@ -118,12 +180,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setSession(null);
     setCurrentUser(null);
+    setProfile(null);
+    setProfileError(null);
     return {};
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       currentUser,
+      profile,
+      profileError,
       session,
       isAuthenticated: !!session,
       isVerified: !!currentUser?.email_confirmed_at,
@@ -132,8 +198,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       refreshUser,
+      refreshProfile,
     }),
-    [currentUser, loading, refreshUser, session, signIn, signOut, signUp],
+    [currentUser, loading, profile, profileError, refreshProfile, refreshUser, session, signIn, signOut, signUp],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

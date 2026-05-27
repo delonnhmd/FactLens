@@ -19,8 +19,8 @@ type FormErrors = Partial<Record<FieldName | "general", string>>;
 
 export default function CreateScreen() {
   const router = useRouter();
-  // PHASE 3 STEP 1
-  const { currentUser, isAuthenticated, isVerified, loading, refreshUser } = useAuth();
+  // PHASE 3 STEP 2
+  const { profile, profileError, isAuthenticated, isVerified, loading, refreshUser, refreshProfile } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -190,14 +190,34 @@ export default function CreateScreen() {
     );
   }
 
-  const username =
-    typeof currentUser?.user_metadata?.username === "string" && currentUser.user_metadata.username.trim()
-      ? currentUser.user_metadata.username.trim()
-      : currentUser?.email?.split("@")[0] ?? "user";
-  const displayName =
-    typeof currentUser?.user_metadata?.displayName === "string" && currentUser.user_metadata.displayName.trim()
-      ? currentUser.user_metadata.displayName.trim()
-      : username;
+  if (!profile) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header title="Create Claim" subtitle="Draft a new news claim" />
+        <View style={styles.content}>
+          <View style={styles.gateCard}>
+            <Text style={styles.gateTitle}>Profile required to post.</Text>
+            <Text style={styles.gateText}>
+              {profileError ?? "Your account profile is still syncing. Refresh your profile before posting."}
+            </Text>
+            <TouchableOpacity style={styles.button} onPress={refreshProfile} activeOpacity={0.8}>
+              <Text style={styles.buttonText}>Refresh Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => router.push("/profile")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.secondaryButtonText}>Open Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const username = profile.username;
+  const displayName = profile.display_name || profile.username;
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
 
   return (
@@ -215,6 +235,7 @@ export default function CreateScreen() {
                 {isVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
               </View>
               <Text style={styles.accountMeta}>@{username}</Text>
+              <Text style={styles.accountScore}>Reputation {profile.reputation_score}</Text>
             </View>
           </View>
 
@@ -418,6 +439,12 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
   },
+  accountScore: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.xs,
+  },
   verifiedBadge: {
     backgroundColor: "#DCFCE7",
     borderColor: "#BBF7D0",
@@ -565,6 +592,16 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  secondaryButton: {
+    alignItems: "center",
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  secondaryButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
     fontWeight: "700",
   },
 });
