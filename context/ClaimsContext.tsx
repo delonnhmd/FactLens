@@ -1,14 +1,14 @@
 // PHASE 2 STEP 2
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { mockClaims } from "../constants/mockData";
-import { mockUser } from "../constants/mockUser";
 import { useAuth } from "./AuthContext";
-import { generateClaimShareUrl, generateClaimSlug, isYouTubeUrl } from "../services/claimLinks";
-import { applyCurrentClaimStatus, canUserVote, getExpiresAt } from "../services/claimVoting";
-import { getAuthProfile } from "../services/authProfile";
+import { applyCurrentClaimStatus, canUserVote } from "../services/claimVoting";
+import {
+  createClaim as createRemoteClaim,
+  fetchClaimById as fetchRemoteClaimById,
+  fetchClaims as fetchRemoteClaims,
+} from "../services/claimService";
 import type { Claim, EvidenceType, ReportReason, VoteOption } from "../types/claim";
-import type { User as AppUser } from "../types/user";
 
 export interface CreateClaimInput {
   title: string;
@@ -27,19 +27,18 @@ export interface EvidenceInput {
 
 interface ClaimsContextValue {
   claims: Claim[];
-  createClaim: (input: CreateClaimInput) => Claim;
+  loading: boolean;
+  error: string | null;
+  createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => void;
   addEvidence: (claimId: string, evidenceInput: EvidenceInput) => void;
   reportClaim: (claimId: string, reason: ReportReason, note: string) => void;
   getClaimById: (claimId: string) => Claim | undefined;
+  fetchClaimById: (claimId: string) => Promise<Claim | undefined>;
   now: Date;
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
-
-function createLocalClaimId(): string {
-  return `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function createLocalEvidenceId(): string {
   return `evidence-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -62,10 +61,28 @@ function incrementVote(claim: Claim, vote: VoteOption): Claim {
 }
 
 export function ClaimsProvider({ children }: { children: ReactNode }) {
-  // PHASE 3 STEP 2
+  // PHASE 3 STEP 3
   const { currentUser, profile } = useAuth();
-  const [claims, setClaims] = useState<Claim[]>(() => mockClaims);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+
+  const loadClaims = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    const result = await fetchRemoteClaims();
+
+    if (result.error) {
+      setClaims([]);
+      setError(result.error);
+    } else {
+      setClaims(result.claims);
+    }
+
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -74,6 +91,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
     return () => clearInterval(timer);
   }, []);
+
+  // PHASE 3 STEP 3
+  useEffect(() => {
+    void loadClaims();
+  }, [loadClaims]);
 
   // PHASE 2 STEP 3
   useEffect(() => {
@@ -101,62 +123,39 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [claims, now],
   );
 
-  const createClaim = useCallback((input: CreateClaimInput) => {
-    const createdAt = new Date().toISOString();
-    const id = createLocalClaimId();
-    const trimmedVideoUrl = input.videoUrl?.trim() || "";
-    const authProfile = getAuthProfile(currentUser);
-    const localAuthor: AppUser = currentUser
-      ? {
-          id: currentUser.id,
-          username: profile?.username ?? authProfile.username,
-          displayName: profile?.display_name || profile?.username || authProfile.displayName,
-          avatar: profile?.avatar_url ?? authProfile.avatar,
-          verified: !!currentUser.email_confirmed_at,
-          reputationScore: profile?.reputation_score ?? 0,
-          joinedAt: profile?.created_at ?? currentUser.created_at ?? createdAt,
-        }
-      : mockUser;
-    const newClaim: Claim = {
-      // PHASE 2 STEP 8
-      id,
-      slug: generateClaimSlug(input.title),
-      shareUrl: generateClaimShareUrl(id),
-      title: input.title.trim(),
-      description: input.description.trim(),
-      sourceUrl: input.sourceUrl.trim(),
-      media: {
-        imageUrl: null,
-        videoUrl: trimmedVideoUrl && !isYouTubeUrl(trimmedVideoUrl) ? trimmedVideoUrl : null,
-        youtubeUrl: trimmedVideoUrl && isYouTubeUrl(trimmedVideoUrl) ? trimmedVideoUrl : null,
-      },
-      aiCheck: {
-        status: "PENDING",
-        confidence: null,
-        reason: null,
-      },
-      category: input.category?.trim() || undefined,
-      votesTrue: 0,
-      votesFake: 0,
-      votesUnsure: 0,
-      status: "OPEN",
-      createdAt,
-      expiresAt: getExpiresAt(createdAt),
-      userVote: null,
-      evidence: [],
-      reports: [],
-      reportCount: 0,
-      isFlagged: false,
-      // PHASE 3 STEP 2
-      authorId: localAuthor.id,
-      authorUsername: localAuthor.username,
-      authorDisplayName: localAuthor.displayName,
-      authorVerified: localAuthor.verified,
-      author: localAuthor,
-    };
+  const createClaim = useCallback(async (input: CreateClaimInput) => {
+    if (!currentUser) {
+      throw new Error("You need an account to post.");
+    }
 
-    setClaims((currentClaimsState) => [newClaim, ...currentClaimsState]);
-    return newClaim;
+    if (!currentUser.email_confirmed_at) {
+      throw new Error("Please verify your email before posting.");
+    }
+
+    if (!profile) {
+      throw new Error("Profile required to post.");
+    }
+
+    const result = await createRemoteClaim({
+      authorId: currentUser.id,
+      title: input.title,
+      description: input.description,
+      sourceUrl: input.sourceUrl,
+      videoUrl: input.videoUrl,
+      category: input.category,
+      profile,
+    });
+
+    if (result.error || !result.claim) {
+      throw new Error(result.error ?? "We could not save this claim. Please try again.");
+    }
+
+    const createdClaim = result.claim;
+    setClaims((currentClaimsState) => [
+      createdClaim,
+      ...currentClaimsState.filter((claim) => claim.id !== createdClaim.id),
+    ]);
+    return createdClaim;
   }, [currentUser, profile]);
 
   const voteOnClaim = useCallback((claimId: string, vote: VoteOption) => {
@@ -235,17 +234,61 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentClaims],
   );
 
+  // PHASE 3 STEP 3
+  const fetchClaimById = useCallback(
+    async (claimId: string) => {
+      const existingClaim = currentClaims.find((claim) => claim.id === claimId);
+
+      if (existingClaim) {
+        return existingClaim;
+      }
+
+      const result = await fetchRemoteClaimById(claimId);
+
+      if (result.error) {
+        setError(result.error);
+        return undefined;
+      }
+
+      if (result.claim) {
+        const loadedClaim = result.claim;
+        setClaims((currentClaimsState) => [
+          loadedClaim,
+          ...currentClaimsState.filter((claim) => claim.id !== loadedClaim.id),
+        ]);
+        return loadedClaim;
+      }
+
+      return undefined;
+    },
+    [currentClaims],
+  );
+
   const value = useMemo(
     () => ({
       claims: currentClaims,
+      loading,
+      error,
       createClaim,
       voteOnClaim,
       addEvidence,
       reportClaim,
       getClaimById,
+      fetchClaimById,
       now,
     }),
-    [addEvidence, createClaim, currentClaims, getClaimById, now, reportClaim, voteOnClaim],
+    [
+      addEvidence,
+      createClaim,
+      currentClaims,
+      error,
+      fetchClaimById,
+      getClaimById,
+      loading,
+      now,
+      reportClaim,
+      voteOnClaim,
+    ],
   );
 
   return <ClaimsContext.Provider value={value}>{children}</ClaimsContext.Provider>;

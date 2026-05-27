@@ -28,10 +28,11 @@ export default function CreateScreen() {
   const [videoUrl, setVideoUrl] = useState("");
   const [category, setCategory] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
-  const submitDisabled = titleOverLimit || descriptionOverLimit;
+  const submitDisabled = titleOverLimit || descriptionOverLimit || isSubmitting;
 
   const titleCounterStyle = useMemo(
     () => [styles.counterText, titleOverLimit && styles.counterTextError],
@@ -115,7 +116,8 @@ export default function CreateScreen() {
     return nextErrors;
   };
 
-  const handleSubmit = () => {
+  // PHASE 3 STEP 3
+  const handleSubmit = async () => {
     if (submitDisabled) {
       setErrors((currentErrors) => ({
         ...currentErrors,
@@ -134,21 +136,30 @@ export default function CreateScreen() {
       return;
     }
 
-    createClaim({
-      title,
-      description,
-      sourceUrl,
-      videoUrl,
-      category,
-    });
+    try {
+      setIsSubmitting(true);
+      await createClaim({
+        title,
+        description,
+        sourceUrl,
+        videoUrl,
+        category,
+      });
 
-    setTitle("");
-    setDescription("");
-    setSourceUrl("");
-    setVideoUrl("");
-    setCategory("");
-    setErrors({});
-    router.replace({ pathname: "/", params: { claimPosted: "1" } });
+      setTitle("");
+      setDescription("");
+      setSourceUrl("");
+      setVideoUrl("");
+      setCategory("");
+      setErrors({});
+      router.replace({ pathname: "/", params: { claimPosted: "1" } });
+    } catch (claimError) {
+      setErrors({
+        general: claimError instanceof Error ? claimError.message : "We could not save this claim. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -357,7 +368,7 @@ export default function CreateScreen() {
             activeOpacity={0.8}
             disabled={submitDisabled}
           >
-            <Text style={styles.buttonText}>Post Claim</Text>
+            <Text style={styles.buttonText}>{isSubmitting ? "Posting..." : "Post Claim"}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

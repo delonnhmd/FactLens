@@ -11,8 +11,8 @@ import { theme } from "../../constants/theme";
 export default function HomeScreen() {
   const router = useRouter();
   const { claimPosted } = useLocalSearchParams<{ claimPosted?: string }>();
-  // PHASE 2 STEP 6
-  const { claims, voteOnClaim, reportClaim } = useClaims();
+  // PHASE 3 STEP 3
+  const { claims, loading, error, voteOnClaim, reportClaim } = useClaims();
   // PHASE 2 STEP 8
   const [query, setQuery] = useState("");
   // PHASE 2 STEP 10
@@ -70,7 +70,15 @@ export default function HomeScreen() {
             <Text style={styles.successText}>Claim posted. Voting closes in 24 hours.</Text>
           </View>
         ) : null}
-        {claims.length === 0 ? (
+        {loading ? (
+          <View style={styles.statePanel}>
+            <Text style={styles.stateText}>Loading claims...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorPanel}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : claims.length === 0 ? (
           <EmptyState message="No claims yet. Be the first to post a news claim." />
         ) : filteredClaims.length === 0 ? (
           <EmptyState message="No matching claims." />
@@ -124,6 +132,30 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
+  },
+  statePanel: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  stateText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  errorPanel: {
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FECACA",
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
   },
 });
 

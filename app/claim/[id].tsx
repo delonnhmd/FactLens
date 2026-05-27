@@ -1,5 +1,5 @@
 // PHASE 1 STEP 4
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -59,7 +59,7 @@ export default function ClaimDetailScreen() {
   // PHASE 2 STEP 9
   const { currentUser } = useAuth();
   // PHASE 2 STEP 3
-  const { getClaimById, voteOnClaim, addEvidence, reportClaim } = useClaims();
+  const { getClaimById, fetchClaimById, voteOnClaim, addEvidence, reportClaim } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
@@ -69,9 +69,43 @@ export default function ClaimDetailScreen() {
   const [reportReason, setReportReason] = useState<ReportReason>("Spam");
   const [reportNote, setReportNote] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
+
+  // PHASE 3 STEP 3
+  useEffect(() => {
+    if (!claimId || claim) {
+      return;
+    }
+
+    let mounted = true;
+    setDetailLoading(true);
+    setDetailError("");
+
+    fetchClaimById(claimId)
+      .then((loadedClaim) => {
+        if (mounted && !loadedClaim) {
+          setDetailError("Claim not found.");
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setDetailError("We could not load this claim. Please try again.");
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setDetailLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [claim, claimId, fetchClaimById]);
 
   const updateEvidenceField = (field: EvidenceFieldName, value: string) => {
     if (field === "url") {
@@ -151,7 +185,7 @@ export default function ClaimDetailScreen() {
           <Text style={styles.headerTitle}>Claim Details</Text>
           <View style={styles.headerSpacer} />
         </View>
-        <EmptyState message="Claim not found." />
+        <EmptyState message={detailLoading ? "Loading claim..." : detailError || "Claim not found."} />
       </SafeAreaView>
     );
   }
