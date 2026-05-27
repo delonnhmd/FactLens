@@ -91,6 +91,11 @@ export function canUserVote(claim: Pick<Claim, "expiresAt" | "userVote">, now = 
 }
 
 export function getCurrentClaimStatus(claim: Claim, now = new Date()): ClaimStatus {
+  // PHASE 3 STEP 10
+  if (claim.status === "COMMUNITY_TRUE" || claim.status === "COMMUNITY_FAKE" || claim.status === "NEEDS_MORE_EVIDENCE") {
+    return claim.status;
+  }
+
   if (isVotingOpen(claim, now)) {
     return "OPEN";
   }

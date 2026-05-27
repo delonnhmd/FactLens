@@ -78,6 +78,10 @@ export interface Claim {
   votesTrue: number;
   votesFake: number;
   votesUnsure: number;
+  // PHASE 3 STEP 10
+  totalVotes: number;
+  verdictReason: string | null;
+  verdictCalculatedAt: string | null;
   status: ClaimStatus;
   createdAt: string;
   expiresAt: string;

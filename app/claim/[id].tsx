@@ -53,6 +53,13 @@ const aiCheckLabels = {
   NEEDS_MORE_EVIDENCE: "Needs More Evidence",
 };
 
+// PHASE 3 STEP 10
+const verdictLabels = {
+  COMMUNITY_TRUE: "Community Says True",
+  COMMUNITY_FAKE: "Community Says Fake",
+  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+};
+
 // PHASE 3 STEP 5
 function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
   const fallbackQuality = getSourceQuality(evidence.url);
@@ -82,6 +89,7 @@ export default function ClaimDetailScreen() {
     addEvidence,
     fetchReportsForClaim,
     reportClaim,
+    refreshClaimVerdict,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -140,6 +148,25 @@ export default function ClaimDetailScreen() {
       mounted = false;
     };
   }, [claim, claimId, fetchClaimById]);
+
+  // PHASE 3 STEP 10
+  useEffect(() => {
+    if (!claimId) {
+      return;
+    }
+
+    let mounted = true;
+
+    refreshClaimVerdict(claimId).catch((error) => {
+      if (mounted) {
+        setDetailError(error instanceof Error ? error.message : "We could not refresh this verdict.");
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [claimId, refreshClaimVerdict]);
 
   // PHASE 3 STEP 5
   useEffect(() => {
@@ -320,10 +347,22 @@ export default function ClaimDetailScreen() {
     );
   }
 
-  const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
-  const votingOpen = isVotingOpen(claim);
+  const currentVoteTotal = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  const totalVotes = claim.verdictCalculatedAt ? claim.totalVotes : currentVoteTotal;
+  const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  // PHASE 3 STEP 10
+  const verdictTitle =
+    claim.status === "COMMUNITY_TRUE" ||
+    claim.status === "COMMUNITY_FAKE" ||
+    claim.status === "NEEDS_MORE_EVIDENCE"
+      ? verdictLabels[claim.status]
+      : automaticVerdict?.resultLabel;
+  const verdictReason = claim.verdictReason ?? automaticVerdict?.reason;
+  const verdictCalculatedText = claim.verdictCalculatedAt
+    ? new Date(claim.verdictCalculatedAt).toLocaleString()
+    : "Pending save";
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   // PHASE 3 STEP 1
@@ -662,7 +701,7 @@ export default function ClaimDetailScreen() {
                 {votingOpen ? getTimeRemaining(claim.expiresAt) : "Voting closed"}
               </Text>
             </View>
-            <StatusBadge status={votingOpen ? "OPEN" : "VOTING_CLOSED"} />
+            <StatusBadge status={votingOpen ? "OPEN" : claim.status} />
           </View>
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
           <Text style={styles.date}>Closes {new Date(claim.expiresAt).toLocaleString()}</Text>
@@ -681,12 +720,16 @@ export default function ClaimDetailScreen() {
           </View>
         ) : null}
 
-        {!votingOpen && automaticVerdict ? (
+        {!votingOpen && verdictTitle ? (
           <View style={styles.card}>
             <Text style={styles.label}>System Verdict</Text>
-            <StatusBadge status={automaticVerdict.status} />
-            <Text style={styles.verdictTitle}>{automaticVerdict.resultLabel}</Text>
-            <Text style={styles.verdictReason}>{automaticVerdict.reason}</Text>
+            <StatusBadge status={claim.status === "OPEN" ? automaticVerdict?.status ?? "NEEDS_MORE_EVIDENCE" : claim.status} />
+            <Text style={styles.verdictTitle}>{verdictTitle}</Text>
+            {verdictReason ? <Text style={styles.verdictReason}>{verdictReason}</Text> : null}
+            <View style={styles.verdictMetaPanel}>
+              <Text style={styles.verdictMetaText}>Total votes: {totalVotes}</Text>
+              <Text style={styles.verdictMetaText}>Calculated: {verdictCalculatedText}</Text>
+            </View>
           </View>
         ) : null}
 
@@ -1246,6 +1289,20 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
     lineHeight: theme.typography.small.lineHeight,
+  },
+  verdictMetaPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  verdictMetaText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   placeholder: {
     fontSize: theme.typography.body.fontSize,

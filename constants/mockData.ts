@@ -33,6 +33,10 @@ export const mockClaims: Claim[] = [
     votesTrue: 128,
     votesFake: 26,
     votesUnsure: 14,
+    // PHASE 3 STEP 10
+    totalVotes: 168,
+    verdictReason: null,
+    verdictCalculatedAt: null,
     status: "OPEN",
     createdAt: openCreatedAt,
     expiresAt: getExpiresAt(openCreatedAt),
@@ -88,6 +92,10 @@ export const mockClaims: Claim[] = [
     votesTrue: 94,
     votesFake: 11,
     votesUnsure: 32,
+    // PHASE 3 STEP 10
+    totalVotes: 137,
+    verdictReason: "True received at least 60% of total votes.",
+    verdictCalculatedAt: new Date(new Date(trueClosedCreatedAt).getTime() + 24 * 60 * 60 * 1000).toISOString(),
     status: "COMMUNITY_TRUE",
     createdAt: trueClosedCreatedAt,
     expiresAt: getExpiresAt(trueClosedCreatedAt),
@@ -147,6 +155,10 @@ export const mockClaims: Claim[] = [
     votesTrue: 65,
     votesFake: 40,
     votesUnsure: 55,
+    // PHASE 3 STEP 10
+    totalVotes: 160,
+    verdictReason: "Vote result was too close.",
+    verdictCalculatedAt: new Date(new Date(evidenceClosedCreatedAt).getTime() + 24 * 60 * 60 * 1000).toISOString(),
     status: "NEEDS_MORE_EVIDENCE",
     createdAt: evidenceClosedCreatedAt,
     expiresAt: getExpiresAt(evidenceClosedCreatedAt),

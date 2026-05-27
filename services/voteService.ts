@@ -1,6 +1,6 @@
 // PHASE 3 STEP 4
 import { supabase } from "../lib/supabase";
-import { fetchClaimById } from "./claimService";
+import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import type { Claim, VoteOption } from "../types/claim";
 
 export type VoteType = "TRUE" | "FAKE" | "UNSURE";
@@ -150,9 +150,12 @@ export async function voteOnClaim(
   }
 
   if (new Date(claimResult.claim.expiresAt).getTime() <= Date.now()) {
+    // PHASE 3 STEP 10
+    const finalizedClaim = await finalizeExpiredClaim(claimId);
+
     return {
-      claim: claimResult.claim,
-      error: "Voting is closed for this claim.",
+      claim: finalizedClaim.claim ?? claimResult.claim,
+      error: "Voting closed. System verdict has been calculated.",
     };
   }
 

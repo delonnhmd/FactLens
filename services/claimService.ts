@@ -1,7 +1,7 @@
 // PHASE 3 STEP 3
 import { supabase } from "../lib/supabase";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
-import { getExpiresAt } from "./claimVoting";
+import { getExpiresAt, isVotingOpen } from "./claimVoting";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
@@ -25,6 +25,14 @@ export interface ClaimSearchFilters {
   category?: string | null;
   filter?: ClaimFeedFilter;
   limit?: number;
+}
+
+// PHASE 3 STEP 10
+interface AutomaticVerdictResult {
+  status: Extract<ClaimStatus, "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE">;
+  resultLabel: string;
+  reason: string;
+  totalVotes: number;
 }
 
 interface ClaimProfileRow {
@@ -58,6 +66,10 @@ export interface ClaimRow {
   report_count: number | null;
   evidence_count: number | null;
   is_flagged: boolean | null;
+  // PHASE 3 STEP 10
+  verdict_reason: string | null;
+  verdict_calculated_at: string | null;
+  total_votes: number | null;
   created_at: string;
   expires_at: string;
   updated_at: string;
@@ -175,6 +187,59 @@ function getSearchExpression(query: string): string {
   ].join(",");
 }
 
+// PHASE 3 STEP 10
+export function calculateAutomaticVerdict(
+  claim: Pick<Claim, "votesTrue" | "votesFake" | "votesUnsure">,
+): AutomaticVerdictResult {
+  const trueVotes = claim.votesTrue;
+  const fakeVotes = claim.votesFake;
+  const unsureVotes = claim.votesUnsure;
+  const totalVotes = trueVotes + fakeVotes + unsureVotes;
+
+  if (totalVotes < 5) {
+    return {
+      status: "NEEDS_MORE_EVIDENCE",
+      resultLabel: "Needs More Evidence",
+      reason: "Not enough community votes.",
+      totalVotes,
+    };
+  }
+
+  if (unsureVotes > trueVotes && unsureVotes > fakeVotes) {
+    return {
+      status: "NEEDS_MORE_EVIDENCE",
+      resultLabel: "Needs More Evidence",
+      reason: "Most voters were unsure.",
+      totalVotes,
+    };
+  }
+
+  if (trueVotes > fakeVotes && trueVotes / totalVotes >= 0.6) {
+    return {
+      status: "COMMUNITY_TRUE",
+      resultLabel: "Community Says True",
+      reason: "True received at least 60% of total votes.",
+      totalVotes,
+    };
+  }
+
+  if (fakeVotes > trueVotes && fakeVotes / totalVotes >= 0.6) {
+    return {
+      status: "COMMUNITY_FAKE",
+      resultLabel: "Community Says Fake",
+      reason: "Fake received at least 60% of total votes.",
+      totalVotes,
+    };
+  }
+
+  return {
+    status: "NEEDS_MORE_EVIDENCE",
+    resultLabel: "Needs More Evidence",
+    reason: "Vote result was too close.",
+    totalVotes,
+  };
+}
+
 function getEmbeddedProfile(row: ClaimRow): ClaimProfileRow | null {
   if (Array.isArray(row.profiles)) {
     return row.profiles[0] ?? null;
@@ -205,6 +270,8 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   // PHASE 3 STEP 8
   const videoPlatform = videoUrl ? detectVideoPlatform(videoUrl) : null;
   const youtubeThumbnailUrl = videoUrl ? getYouTubeThumbnailUrl(videoUrl) : null;
+  // PHASE 3 STEP 10
+  const totalVotes = row.total_votes ?? (row.votes_true ?? 0) + (row.votes_fake ?? 0) + (row.votes_unsure ?? 0);
 
   return {
     id: row.id,
@@ -229,6 +296,10 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     votesTrue: row.votes_true ?? 0,
     votesFake: row.votes_fake ?? 0,
     votesUnsure: row.votes_unsure ?? 0,
+    // PHASE 3 STEP 10
+    totalVotes,
+    verdictReason: row.verdict_reason ?? null,
+    verdictCalculatedAt: row.verdict_calculated_at ?? null,
     status: mapStatus(row.status),
     createdAt: row.created_at,
     expiresAt: row.expires_at,
@@ -263,6 +334,10 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     votes_true: 0,
     votes_fake: 0,
     votes_unsure: 0,
+    // PHASE 3 STEP 10
+    total_votes: 0,
+    verdict_reason: null,
+    verdict_calculated_at: null,
     status: "OPEN",
     ai_status: "PENDING",
     ai_confidence: null,
@@ -415,6 +490,81 @@ export async function fetchTrendingClaims(limit = 100): Promise<ClaimsResult> {
   return {
     claims,
   };
+}
+
+// PHASE 3 STEP 10
+export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult> {
+  const latestClaimResult = await fetchClaimById(claimId);
+
+  if (latestClaimResult.error || !latestClaimResult.claim) {
+    return latestClaimResult;
+  }
+
+  const latestClaim = latestClaimResult.claim;
+
+  if (latestClaim.status !== "OPEN" || isVotingOpen(latestClaim)) {
+    return latestClaimResult;
+  }
+
+  const verdict = calculateAutomaticVerdict(latestClaim);
+
+  const { error } = await supabase.rpc("finalize_expired_claim", {
+    target_claim_id: claimId,
+  });
+
+  if (error) {
+    return {
+      claim: {
+        ...latestClaim,
+        status: verdict.status,
+        verdictReason: verdict.reason,
+        totalVotes: verdict.totalVotes,
+      },
+      error: getClaimServiceErrorMessage(error.message, "save"),
+    };
+  }
+
+  const refreshedClaim = await fetchClaimById(claimId);
+
+  if (refreshedClaim.error || !refreshedClaim.claim) {
+    return refreshedClaim;
+  }
+
+  return {
+    claim: {
+      ...refreshedClaim.claim,
+      verdictReason: refreshedClaim.claim.verdictReason ?? verdict.reason,
+      totalVotes: refreshedClaim.claim.totalVotes ?? verdict.totalVotes,
+    },
+  };
+}
+
+// PHASE 3 STEP 10
+export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResult> {
+  const finalizedClaims = await Promise.all(
+    claims.map(async (claim) => {
+      if (claim.status !== "OPEN" || isVotingOpen(claim)) {
+        return claim;
+      }
+
+      const result = await finalizeExpiredClaim(claim.id);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      return result.claim ?? claim;
+    }),
+  );
+
+  return {
+    claims: finalizedClaims,
+  };
+}
+
+// PHASE 3 STEP 10
+export async function refreshClaimVerdict(claimId: string): Promise<ClaimResult> {
+  return finalizeExpiredClaim(claimId);
 }
 
 export async function fetchClaimById(id: string): Promise<ClaimResult> {

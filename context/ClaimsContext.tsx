@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
-import { applyCurrentClaimStatus } from "../services/claimVoting";
+import { applyCurrentClaimStatus, isVotingOpen } from "../services/claimVoting";
 import {
   createClaim as createRemoteClaim,
   fetchClaimsByCategory as fetchRemoteClaimsByCategory,
@@ -10,6 +10,8 @@ import {
   fetchClaimById as fetchRemoteClaimById,
   fetchLatestClaims as fetchRemoteLatestClaims,
   fetchTrendingClaims as fetchRemoteTrendingClaims,
+  finalizeExpiredClaims as finalizeRemoteExpiredClaims,
+  refreshClaimVerdict as refreshRemoteClaimVerdict,
   searchClaims as searchRemoteClaims,
 } from "../services/claimService";
 import type { ClaimSearchFilters } from "../services/claimService";
@@ -62,6 +64,8 @@ interface ClaimsContextValue {
   fetchClaimsByStatus: (status: ClaimStatus) => Promise<Claim[]>;
   fetchTrendingClaims: () => Promise<Claim[]>;
   fetchLatestClaims: () => Promise<Claim[]>;
+  // PHASE 3 STEP 10
+  refreshClaimVerdict: (claimId: string) => Promise<Claim | undefined>;
   getClaimById: (claimId: string) => Claim | undefined;
   fetchClaimById: (claimId: string) => Promise<Claim | undefined>;
   now: Date;
@@ -130,7 +134,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error(result.error);
       }
 
-      const claimsWithVotes = await applyUserVotes(result.claims);
+      // PHASE 3 STEP 10
+      const finalizedResult = await finalizeRemoteExpiredClaims(result.claims);
+      const claimsWithVotes = await applyUserVotes(finalizedResult.claims);
 
       setClaims((currentClaimsState) =>
         replace ? claimsWithVotes : mergeClaimLists(currentClaimsState, claimsWithVotes),
@@ -174,23 +180,34 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     void loadClaims();
   }, [loadClaims]);
 
-  // PHASE 2 STEP 3
+  // PHASE 3 STEP 10
   useEffect(() => {
-    setClaims((currentClaimsState) => {
-      let changed = false;
-      const updatedClaims = currentClaimsState.map((claim) => {
-        const updatedClaim = applyCurrentClaimStatus(claim, now);
+    const expiredOpenClaims = claims.filter((claim) => claim.status === "OPEN" && !isVotingOpen(claim, now));
 
-        if (updatedClaim.status !== claim.status) {
-          changed = true;
+    if (expiredOpenClaims.length === 0) {
+      return;
+    }
+
+    let mounted = true;
+
+    finalizeRemoteExpiredClaims(expiredOpenClaims)
+      .then(async (result) => {
+        const claimsWithVotes = await applyUserVotes(result.claims);
+
+        if (mounted) {
+          setClaims((currentClaimsState) => mergeClaimLists(currentClaimsState, claimsWithVotes));
         }
-
-        return updatedClaim;
+      })
+      .catch((finalizeError) => {
+        if (mounted) {
+          setError(finalizeError instanceof Error ? finalizeError.message : "We could not finalize expired claims.");
+        }
       });
 
-      return changed ? updatedClaims : currentClaimsState;
-    });
-  }, [now]);
+    return () => {
+      mounted = false;
+    };
+  }, [applyUserVotes, claims, now]);
 
   const currentClaims = useMemo(
     () =>
@@ -252,9 +269,30 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);
+      // PHASE 3 STEP 10
+      const refreshedClaim = await refreshRemoteClaimVerdict(claimId);
 
-      if (existingClaim && new Date(existingClaim.expiresAt).getTime() <= Date.now()) {
-        throw new Error("Voting is closed for this claim.");
+      if (refreshedClaim.error) {
+        throw new Error(refreshedClaim.error);
+      }
+
+      if (refreshedClaim.claim) {
+        const claimWithVote = {
+          ...mergeLocalClaimState(refreshedClaim.claim, existingClaim),
+          userVote: existingClaim?.userVote ?? refreshedClaim.claim.userVote,
+        };
+
+        setClaims((currentClaimsState) =>
+          mergeClaimLists(currentClaimsState, [claimWithVote]),
+        );
+      }
+
+      if (refreshedClaim.claim && refreshedClaim.claim.status !== "OPEN") {
+        throw new Error("Voting closed. System verdict has been calculated.");
+      }
+
+      if (refreshedClaim.claim && new Date(refreshedClaim.claim.expiresAt).getTime() <= Date.now()) {
+        throw new Error("Voting closed. System verdict has been calculated.");
       }
 
       const result = await voteOnRemoteClaim(claimId, currentUser.id, vote);
@@ -433,6 +471,28 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [applyRemoteClaims],
   );
 
+  // PHASE 3 STEP 10
+  const refreshClaimVerdict = useCallback(
+    async (claimId: string) => {
+      const result = await refreshRemoteClaimVerdict(claimId);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (!result.claim) {
+        return undefined;
+      }
+
+      const [claimWithVote] = await applyUserVotes([result.claim]);
+
+      setClaims((currentClaimsState) => mergeClaimLists(currentClaimsState, [claimWithVote]));
+
+      return claimWithVote;
+    },
+    [applyUserVotes],
+  );
+
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
     [currentClaims],
@@ -455,17 +515,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.claim) {
-        const loadedClaim = (await applyUserVotes([result.claim]))[0];
-        setClaims((currentClaimsState) => [
-          loadedClaim,
-          ...currentClaimsState.filter((claim) => claim.id !== loadedClaim.id),
-        ]);
+        const [loadedClaim] = await applyRemoteClaims({ claims: [result.claim] }, false);
         return loadedClaim;
       }
 
       return undefined;
     },
-    [applyUserVotes, currentClaims],
+    [applyRemoteClaims, currentClaims],
   );
 
   const value = useMemo(
@@ -484,6 +540,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       fetchClaimsByStatus,
       fetchTrendingClaims,
       fetchLatestClaims,
+      refreshClaimVerdict,
       getClaimById,
       fetchClaimById,
       now,
@@ -504,6 +561,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       loading,
       now,
       reportClaim,
+      refreshClaimVerdict,
       searchClaims,
       voteOnClaim,
     ],

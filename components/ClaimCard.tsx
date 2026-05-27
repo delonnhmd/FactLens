@@ -20,6 +20,13 @@ const aiCheckLabels = {
   NEEDS_MORE_EVIDENCE: "Needs More Evidence",
 };
 
+// PHASE 3 STEP 10
+const verdictLabels = {
+  COMMUNITY_TRUE: "Community Says True",
+  COMMUNITY_FAKE: "Community Says Fake",
+  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+};
+
 // PHASE 2 STEP 9
 function getRelativeTime(createdAt: string): string {
   const diffMs = Date.now() - new Date(createdAt).getTime();
@@ -64,7 +71,7 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [voteError, setVoteError] = useState("");
   // PHASE 2 STEP 3
-  const votingOpen = isVotingOpen(claim);
+  const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
   // PHASE 3 STEP 5
@@ -74,6 +81,15 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   const sourceQuality = getSourceQuality(claim.sourceUrl);
   // PHASE 2 STEP 10
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  // PHASE 3 STEP 10
+  const finalTotalVotes = claim.verdictCalculatedAt ? claim.totalVotes : totalVotes;
+  const verdictTitle =
+    claim.status === "COMMUNITY_TRUE" ||
+    claim.status === "COMMUNITY_FAKE" ||
+    claim.status === "NEEDS_MORE_EVIDENCE"
+      ? verdictLabels[claim.status]
+      : automaticVerdict?.resultLabel;
+  const verdictReason = claim.verdictReason ?? automaticVerdict?.reason;
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
@@ -214,11 +230,12 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
         </Text>
       </View>
 
-      {!votingOpen && automaticVerdict ? (
+      {!votingOpen && verdictTitle ? (
         <View style={styles.verdictPanel}>
           <Text style={styles.verdictLabel}>System Verdict</Text>
-          <Text style={styles.verdictTitle}>{automaticVerdict.resultLabel}</Text>
-          <Text style={styles.verdictReason}>{automaticVerdict.reason}</Text>
+          <Text style={styles.verdictTitle}>{verdictTitle}</Text>
+          {verdictReason ? <Text style={styles.verdictReason}>{verdictReason}</Text> : null}
+          <Text style={styles.verdictMeta}>{finalTotalVotes} total votes</Text>
         </View>
       ) : null}
 
@@ -659,6 +676,12 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     lineHeight: theme.typography.small.lineHeight,
+  },
+  verdictMeta: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.sm,
   },
   divider: {
     height: 1,
