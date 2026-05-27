@@ -29,9 +29,9 @@ function getRecencyBonus(createdAt: string, now = new Date()): number {
 
 export function calculateTrendingScore(claim: Claim, now = new Date()): number {
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
-  const evidenceCount = claim.evidence.length;
+  // PHASE 3 STEP 5
+  const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   const openVotingBonus = isVotingOpen(claim, now) ? 10 : 0;
 
   return totalVotes * 3 + evidenceCount * 5 + claim.reportCount * 2 + getRecencyBonus(claim.createdAt, now) + openVotingBonus;
 }
-

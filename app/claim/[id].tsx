@@ -12,8 +12,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { reportReasons } from "../../constants/reportReasons";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
-import { getSourceQuality } from "../../services/sourceQuality";
-import type { EvidenceType, ReportReason, VoteOption } from "../../types/claim";
+import { getSourceQuality, type SourceQuality } from "../../services/sourceQuality";
+import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../types/claim";
 import { theme } from "../../constants/theme";
 
 // PHASE 2 STEP 4
@@ -53,18 +53,37 @@ const aiCheckLabels = {
   NEEDS_MORE_EVIDENCE: "Needs More Evidence",
 };
 
+// PHASE 3 STEP 5
+function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
+  const fallbackQuality = getSourceQuality(evidence.url);
+
+  if (!evidence.sourceQualityLabel) {
+    return fallbackQuality;
+  }
+
+  return {
+    label: evidence.sourceQualityLabel as SourceQuality["label"],
+    score: evidence.sourceQualityScore ?? fallbackQuality.score,
+    reason: evidence.sourceQualityReason ?? fallbackQuality.reason,
+  };
+}
+
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
-  const { getClaimById, fetchClaimById, voteOnClaim, addEvidence, reportClaim } = useClaims();
+  const { getClaimById, fetchClaimById, voteOnClaim, fetchEvidenceForClaim, addEvidence, reportClaim } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
   const [evidenceType, setEvidenceType] = useState<EvidenceType>("ADDS_CONTEXT");
   const [evidenceErrors, setEvidenceErrors] = useState<EvidenceErrors>({});
+  // PHASE 3 STEP 5
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceSubmitLoading, setEvidenceSubmitLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState("");
   // PHASE 2 STEP 6
   const [reportReason, setReportReason] = useState<ReportReason>("Spam");
   const [reportNote, setReportNote] = useState("");
@@ -108,6 +127,33 @@ export default function ClaimDetailScreen() {
     };
   }, [claim, claimId, fetchClaimById]);
 
+  // PHASE 3 STEP 5
+  useEffect(() => {
+    if (!claim?.id) {
+      return;
+    }
+
+    let mounted = true;
+    setEvidenceLoading(true);
+    setEvidenceError("");
+
+    fetchEvidenceForClaim(claim.id)
+      .catch((error) => {
+        if (mounted) {
+          setEvidenceError(error instanceof Error ? error.message : "We could not load evidence right now.");
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setEvidenceLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [claim?.id, fetchEvidenceForClaim]);
+
   const updateEvidenceField = (field: EvidenceFieldName, value: string) => {
     if (field === "url") {
       setEvidenceUrl(value);
@@ -142,11 +188,12 @@ export default function ClaimDetailScreen() {
     return nextErrors;
   };
 
-  const handleAddEvidence = () => {
+  const handleAddEvidence = async () => {
     if (!claim) {
       return;
     }
 
+    setEvidenceError("");
     const nextErrors = validateEvidence();
 
     if (Object.keys(nextErrors).length > 0) {
@@ -154,15 +201,23 @@ export default function ClaimDetailScreen() {
       return;
     }
 
-    addEvidence(claim.id, {
-      url: evidenceUrl,
-      note: evidenceNote,
-      type: evidenceType,
-    });
-    setEvidenceUrl("");
-    setEvidenceNote("");
-    setEvidenceType("ADDS_CONTEXT");
-    setEvidenceErrors({});
+    setEvidenceSubmitLoading(true);
+
+    try {
+      await addEvidence(claim.id, {
+        url: evidenceUrl,
+        note: evidenceNote,
+        type: evidenceType,
+      });
+      setEvidenceUrl("");
+      setEvidenceNote("");
+      setEvidenceType("ADDS_CONTEXT");
+      setEvidenceErrors({});
+    } catch (error) {
+      setEvidenceError(error instanceof Error ? error.message : "We could not save this evidence. Please try again.");
+    } finally {
+      setEvidenceSubmitLoading(false);
+    }
   };
 
   const handleSubmitReport = () => {
@@ -210,6 +265,8 @@ export default function ClaimDetailScreen() {
   const votingOpen = isVotingOpen(claim);
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  // PHASE 3 STEP 5
+  const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   // PHASE 3 STEP 1
   const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
@@ -382,7 +439,7 @@ export default function ClaimDetailScreen() {
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.labelNoMargin}>Evidence</Text>
             <Text style={styles.countBadge}>
-              {claim.evidence.length} {claim.evidence.length === 1 ? "link" : "links"}
+              {evidenceCount} {evidenceCount === 1 ? "link" : "links"}
             </Text>
           </View>
 
@@ -441,15 +498,25 @@ export default function ClaimDetailScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.addEvidenceButton} onPress={handleAddEvidence} activeOpacity={0.8}>
-            <Text style={styles.addEvidenceButtonText}>Add Evidence</Text>
+          {evidenceError ? <Text style={styles.errorText}>{evidenceError}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.addEvidenceButton, evidenceSubmitLoading && styles.disabledButton]}
+            onPress={handleAddEvidence}
+            activeOpacity={0.8}
+            disabled={evidenceSubmitLoading}
+          >
+            <Text style={styles.addEvidenceButtonText}>
+              {evidenceSubmitLoading ? "Saving Evidence..." : "Add Evidence"}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.evidenceList}>
-            {claim.evidence.length > 0 ? (
+            {evidenceLoading ? <Text style={styles.placeholder}>Loading evidence...</Text> : null}
+            {!evidenceLoading && claim.evidence.length > 0 ? (
               claim.evidence.map((item) => {
                 const config = evidenceTypeConfig[item.type];
-                const sourceQuality = getSourceQuality(item.url);
+                const sourceQuality = getEvidenceSourceQuality(item);
 
                 return (
                   <View key={item.id} style={styles.evidenceItem}>
@@ -476,9 +543,10 @@ export default function ClaimDetailScreen() {
                   </View>
                 );
               })
-            ) : (
+            ) : null}
+            {!evidenceLoading && claim.evidence.length === 0 ? (
               <Text style={styles.placeholder}>No evidence links added yet.</Text>
-            )}
+            ) : null}
           </View>
         </View>
 
@@ -898,6 +966,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
     paddingVertical: theme.spacing.md,
+  },
+  disabledButton: {
+    opacity: 0.55,
   },
   addEvidenceButtonText: {
     color: theme.colors.background,

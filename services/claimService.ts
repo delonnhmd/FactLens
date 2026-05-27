@@ -190,6 +190,8 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     expiresAt: row.expires_at,
     userVote: null,
     evidence: [],
+    // PHASE 3 STEP 5
+    evidenceCount: row.evidence_count ?? 0,
     reports: [],
     reportCount: row.report_count ?? 0,
     isFlagged: row.is_flagged ?? false,

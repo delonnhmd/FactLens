@@ -63,8 +63,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   const votingOpen = isVotingOpen(claim);
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
-  // PHASE 2 STEP 4
-  const evidenceLabel = `${claim.evidence.length} evidence ${claim.evidence.length === 1 ? "link" : "links"}`;
+  // PHASE 3 STEP 5
+  const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
+  const evidenceLabel = `${evidenceCount} evidence ${evidenceCount === 1 ? "link" : "links"}`;
   // PHASE 2 STEP 5
   const sourceQuality = getSourceQuality(claim.sourceUrl);
   // PHASE 2 STEP 10

@@ -47,6 +47,8 @@ export const mockClaims: Claim[] = [
         createdAt: openCreatedAt,
       },
     ],
+    // PHASE 3 STEP 5
+    evidenceCount: 1,
     // PHASE 2 STEP 6
     reports: [],
     reportCount: 0,
@@ -106,6 +108,8 @@ export const mockClaims: Claim[] = [
         createdAt: trueClosedCreatedAt,
       },
     ],
+    // PHASE 3 STEP 5
+    evidenceCount: 2,
     reports: [],
     reportCount: 0,
     isFlagged: false,
@@ -148,6 +152,8 @@ export const mockClaims: Claim[] = [
     expiresAt: getExpiresAt(evidenceClosedCreatedAt),
     userVote: null,
     evidence: [],
+    // PHASE 3 STEP 5
+    evidenceCount: 0,
     reports: [],
     reportCount: 0,
     isFlagged: false,

@@ -12,7 +12,11 @@ import {
   fetchUserVoteForClaim,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
-import type { Claim, EvidenceType, ReportReason, VoteOption } from "../types/claim";
+import {
+  addEvidence as addRemoteEvidence,
+  fetchEvidenceForClaim as fetchRemoteEvidenceForClaim,
+} from "../services/evidenceService";
+import type { Claim, Evidence, EvidenceType, ReportReason, VoteOption } from "../types/claim";
 
 export interface CreateClaimInput {
   title: string;
@@ -35,7 +39,9 @@ interface ClaimsContextValue {
   error: string | null;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<void>;
-  addEvidence: (claimId: string, evidenceInput: EvidenceInput) => void;
+  // PHASE 3 STEP 5
+  fetchEvidenceForClaim: (claimId: string) => Promise<Evidence[]>;
+  addEvidence: (claimId: string, evidenceInput: EvidenceInput) => Promise<Evidence[]>;
   reportClaim: (claimId: string, reason: ReportReason, note: string) => void;
   getClaimById: (claimId: string) => Claim | undefined;
   fetchClaimById: (claimId: string) => Promise<Claim | undefined>;
@@ -43,10 +49,6 @@ interface ClaimsContextValue {
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
-
-function createLocalEvidenceId(): string {
-  return `evidence-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function createLocalReportId(): string {
   return `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -60,6 +62,7 @@ function mergeLocalClaimState(remoteClaim: Claim, existingClaim?: Claim): Claim 
   return {
     ...remoteClaim,
     evidence: existingClaim.evidence,
+    evidenceCount: remoteClaim.evidenceCount,
     reports: existingClaim.reports,
     reportCount: existingClaim.reportCount,
     isFlagged: existingClaim.isFlagged,
@@ -220,27 +223,72 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentClaims, currentUser, profile],
   );
 
-  // PHASE 2 STEP 4
-  const addEvidence = useCallback((claimId: string, evidenceInput: EvidenceInput) => {
-    const newEvidence = {
-      id: createLocalEvidenceId(),
-      url: evidenceInput.url.trim(),
-      note: evidenceInput.note.trim(),
-      type: evidenceInput.type,
-      createdAt: new Date().toISOString(),
-    };
+  // PHASE 3 STEP 5
+  const fetchEvidenceForClaim = useCallback(async (claimId: string) => {
+    const result = await fetchRemoteEvidenceForClaim(claimId);
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
 
     setClaims((currentClaimsState) =>
       currentClaimsState.map((claim) =>
         claim.id === claimId
           ? {
               ...claim,
-              evidence: [newEvidence, ...claim.evidence],
+              evidence: result.evidence,
+              evidenceCount: result.evidence.length,
             }
           : claim,
       ),
     );
+
+    return result.evidence;
   }, []);
+
+  // PHASE 3 STEP 5
+  const addEvidence = useCallback(
+    async (claimId: string, evidenceInput: EvidenceInput) => {
+      if (!currentUser) {
+        throw new Error("Log in to add evidence.");
+      }
+
+      if (!currentUser.email_confirmed_at) {
+        throw new Error("Verify your email to add evidence.");
+      }
+
+      if (!profile) {
+        throw new Error("Profile required to add evidence.");
+      }
+
+      const addResult = await addRemoteEvidence(claimId, currentUser.id, evidenceInput);
+
+      if (addResult.error || !addResult.evidence) {
+        throw new Error(addResult.error ?? "We could not save this evidence. Please try again.");
+      }
+
+      const listResult = await fetchRemoteEvidenceForClaim(claimId);
+
+      if (listResult.error) {
+        throw new Error(listResult.error);
+      }
+
+      setClaims((currentClaimsState) =>
+        currentClaimsState.map((claim) =>
+          claim.id === claimId
+            ? {
+                ...claim,
+                evidence: listResult.evidence,
+                evidenceCount: addResult.evidenceCount ?? listResult.evidence.length,
+              }
+            : claim,
+        ),
+      );
+
+      return listResult.evidence;
+    },
+    [currentUser, profile],
+  );
 
   // PHASE 2 STEP 6
   const reportClaim = useCallback((claimId: string, reason: ReportReason, note: string) => {
@@ -313,6 +361,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       error,
       createClaim,
       voteOnClaim,
+      fetchEvidenceForClaim,
       addEvidence,
       reportClaim,
       getClaimById,
@@ -324,6 +373,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       createClaim,
       currentClaims,
       error,
+      fetchEvidenceForClaim,
       fetchClaimById,
       getClaimById,
       loading,

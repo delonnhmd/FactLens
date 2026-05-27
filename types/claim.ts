@@ -20,6 +20,11 @@ export interface Evidence {
   note: string;
   type: EvidenceType;
   createdAt: string;
+  // PHASE 3 STEP 5
+  userId?: string;
+  sourceQualityLabel?: string | null;
+  sourceQualityScore?: number | null;
+  sourceQualityReason?: string | null;
 }
 
 // PHASE 2 STEP 6
@@ -72,6 +77,8 @@ export interface Claim {
   expiresAt: string;
   userVote: VoteOption | null;
   evidence: Evidence[];
+  // PHASE 3 STEP 5
+  evidenceCount: number;
   reports: Report[];
   reportCount: number;
   isFlagged: boolean;
