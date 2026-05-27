@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 import { useEffect, useState } from "react";
-import { Alert, Image, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
+import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -330,6 +330,9 @@ export default function ClaimDetailScreen() {
   const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
+  // PHASE 3 STEP 8
+  const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
+  const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
   const voteStats = [
     { label: "True", value: claim.votesTrue, color: theme.colors.success },
     { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
@@ -434,16 +437,42 @@ export default function ClaimDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Media</Text>
-          {claim.media.youtubeUrl || claim.media.videoUrl || claim.media.imageUrl ? (
+          {mediaUrl || claim.media.imageUrl ? (
             <View style={styles.mediaList}>
               {/* PHASE 3 STEP 7 */}
               {claim.media.imageUrl ? (
                 <Image source={{ uri: claim.media.imageUrl }} style={styles.detailImage} resizeMode="cover" />
               ) : null}
-              {claim.media.youtubeUrl ? (
-                <Text style={styles.mediaText}>YouTube: {claim.media.youtubeUrl}</Text>
+              {/* PHASE 3 STEP 8 */}
+              {mediaUrl && mediaPlatform ? (
+                <View style={styles.videoDetailPanel}>
+                  <Text style={styles.videoPlatformBadge}>{mediaPlatform}</Text>
+                  {claim.media.youtubeThumbnailUrl ? (
+                    <View style={styles.detailThumbnailWrap}>
+                      <Image
+                        source={{ uri: claim.media.youtubeThumbnailUrl }}
+                        style={styles.detailVideoThumbnail}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.detailPlayOverlay}>
+                        <Ionicons name="play" size={24} color={theme.colors.background} />
+                      </View>
+                    </View>
+                  ) : null}
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      Linking.openURL(mediaUrl).catch(() => {
+                        Alert.alert("We could not open this link.");
+                      });
+                    }}
+                  >
+                    <Text style={styles.mediaLinkText} selectable>
+                      {mediaUrl}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               ) : null}
-              {claim.media.videoUrl ? <Text style={styles.mediaText}>Video: {claim.media.videoUrl}</Text> : null}
             </View>
           ) : (
             <Text style={styles.placeholder}>No image or video attached yet.</Text>
@@ -896,15 +925,59 @@ const styles = StyleSheet.create({
   mediaList: {
     gap: theme.spacing.sm,
   },
-  mediaText: {
+  mediaLinkText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
+    lineHeight: theme.typography.small.lineHeight,
   },
   detailImage: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.sm,
     height: 260,
     width: "100%",
+  },
+  videoDetailPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    overflow: "hidden",
+    padding: theme.spacing.md,
+  },
+  videoPlatformBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#E0E7FF",
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  detailThumbnailWrap: {
+    position: "relative",
+  },
+  detailVideoThumbnail: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.sm,
+    height: 210,
+    width: "100%",
+  },
+  detailPlayOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    borderRadius: 26,
+    height: 52,
+    justifyContent: "center",
+    left: "50%",
+    marginLeft: -26,
+    marginTop: -26,
+    position: "absolute",
+    top: "50%",
+    width: 52,
   },
   mediaNote: {
     color: theme.colors.subtext,

@@ -74,6 +74,9 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
   const sourceQuality = getSourceQuality(claim.sourceUrl);
   // PHASE 2 STEP 10
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  // PHASE 3 STEP 8
+  const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
+  const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
 
   // PHASE 3 STEP 6
   const handleSubmitReport = async () => {
@@ -151,6 +154,34 @@ export function ClaimCard({ claim, onPress, onVote, onReport }: ClaimCardProps) 
         {/* PHASE 3 STEP 7 */}
         {claim.media.imageUrl ? (
           <Image source={{ uri: claim.media.imageUrl }} style={styles.claimImage} resizeMode="cover" />
+        ) : null}
+        {/* PHASE 3 STEP 8 */}
+        {mediaUrl && mediaPlatform ? (
+          <View style={styles.videoPreview}>
+            <View style={styles.videoPreviewHeader}>
+              <Text style={styles.videoPlatformBadge}>{mediaPlatform}</Text>
+              <Text style={styles.videoPreviewText} numberOfLines={1}>
+                {mediaUrl}
+              </Text>
+            </View>
+            {claim.media.youtubeThumbnailUrl ? (
+              <View style={styles.thumbnailWrap}>
+                <Image
+                  source={{ uri: claim.media.youtubeThumbnailUrl }}
+                  style={styles.videoThumbnail}
+                  resizeMode="cover"
+                />
+                <View style={styles.playOverlay}>
+                  <Ionicons name="play" size={22} color={theme.colors.background} />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.videoLinkBox}>
+                <Ionicons name="play-circle-outline" size={22} color={theme.colors.primary} />
+                <Text style={styles.videoLinkBoxText}>{mediaPlatform} attached</Text>
+              </View>
+            )}
+          </View>
         ) : null}
         {/* PHASE 2 STEP 2 */}
         {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
@@ -375,6 +406,70 @@ const styles = StyleSheet.create({
     height: 180,
     marginBottom: theme.spacing.md,
     width: "100%",
+  },
+  videoPreview: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    overflow: "hidden",
+  },
+  videoPreviewHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+  },
+  videoPlatformBadge: {
+    backgroundColor: "#E0E7FF",
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  videoPreviewText: {
+    color: theme.colors.subtext,
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+  },
+  thumbnailWrap: {
+    position: "relative",
+  },
+  videoThumbnail: {
+    backgroundColor: theme.colors.background,
+    height: 150,
+    width: "100%",
+  },
+  playOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    borderRadius: 24,
+    height: 48,
+    justifyContent: "center",
+    left: "50%",
+    marginLeft: -24,
+    marginTop: -24,
+    position: "absolute",
+    top: "50%",
+    width: 48,
+  },
+  videoLinkBox: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  videoLinkBoxText: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   source: {
     fontSize: theme.typography.small.fontSize,

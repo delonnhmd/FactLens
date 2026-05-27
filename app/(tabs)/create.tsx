@@ -4,19 +4,19 @@ import { Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacit
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { claimCategories } from "../../constants/claimCategories";
-import { PROHIBITED_CONTENT } from "../../constants/contentRules";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { pickClaimImage, uploadClaimImage, type PickedClaimImage } from "../../services/imageUploadService";
-import { containsProhibitedContent, isValidHttpUrl, isValidVideoUrl } from "../../services/urlValidation";
+import { validateClaimContent } from "../../utils/contentValidation";
+import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
 const DESCRIPTION_MAX_LENGTH = 1000;
 
 type FieldName = "title" | "description" | "sourceUrl" | "videoUrl";
-type FormErrors = Partial<Record<FieldName | "general", string>>;
+type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
 
 export default function CreateScreen() {
   const router = useRouter();
@@ -36,7 +36,12 @@ export default function CreateScreen() {
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
-  const submitDisabled = titleOverLimit || descriptionOverLimit || isSubmitting;
+  // PHASE 3 STEP 8
+  const trimmedVideoUrl = videoUrl.trim();
+  const videoPlatform = trimmedVideoUrl ? detectVideoPlatform(trimmedVideoUrl) : null;
+  const youtubeThumbnailUrl = trimmedVideoUrl ? getYouTubeThumbnailUrl(trimmedVideoUrl) : null;
+  const videoUrlInvalid = trimmedVideoUrl.length > 0 && !isSupportedVideoUrl(trimmedVideoUrl);
+  const submitDisabled = titleOverLimit || descriptionOverLimit || videoUrlInvalid || isSubmitting;
 
   const titleCounterStyle = useMemo(
     () => [styles.counterText, titleOverLimit && styles.counterTextError],
@@ -71,10 +76,6 @@ export default function CreateScreen() {
 
   const validateForm = (): FormErrors => {
     const nextErrors: FormErrors = {};
-    const trimmedTitle = title.trim();
-    const trimmedDescription = description.trim();
-    const trimmedSourceUrl = sourceUrl.trim();
-    const trimmedVideoUrl = videoUrl.trim();
 
     if (!isAuthenticated) {
       nextErrors.general = "You need an account to post.";
@@ -86,35 +87,17 @@ export default function CreateScreen() {
       return nextErrors;
     }
 
-    if (containsProhibitedContent(`${trimmedTitle} ${trimmedDescription}`, PROHIBITED_CONTENT)) {
-      nextErrors.general = "This content is not allowed on FactLens.";
-      return nextErrors;
-    }
+    // PHASE 3 STEP 8
+    const validation = validateClaimContent({
+      title,
+      description,
+      sourceUrl,
+      videoUrl,
+      category,
+    });
 
-    if (!trimmedTitle) {
-      nextErrors.title = "Title is required.";
-    } else if (trimmedTitle.length < 10) {
-      nextErrors.title = "Title must be at least 10 characters.";
-    } else if (title.length > TITLE_MAX_LENGTH) {
-      nextErrors.title = "Title must be 160 characters or fewer.";
-    }
-
-    if (!trimmedDescription) {
-      nextErrors.description = "Description is required.";
-    } else if (trimmedDescription.length < 20) {
-      nextErrors.description = "Description must be at least 20 characters.";
-    } else if (description.length > DESCRIPTION_MAX_LENGTH) {
-      nextErrors.description = "Description must be 1000 characters or fewer.";
-    }
-
-    if (!trimmedSourceUrl) {
-      nextErrors.sourceUrl = "Source URL is required.";
-    } else if (!isValidHttpUrl(trimmedSourceUrl)) {
-      nextErrors.sourceUrl = "Source URL must start with http:// or https://.";
-    }
-
-    if (trimmedVideoUrl && !isValidVideoUrl(trimmedVideoUrl)) {
-      nextErrors.videoUrl = "Video URL must be YouTube, TikTok, X/Twitter, Facebook, Instagram, or a direct video link.";
+    if (!validation.ok) {
+      nextErrors.general = validation.errors.join("\n");
     }
 
     return nextErrors;
@@ -144,6 +127,7 @@ export default function CreateScreen() {
         description: descriptionOverLimit
           ? "Description must be 1000 characters or fewer."
           : currentErrors.description,
+        videoUrl: videoUrlInvalid ? "Video URL must start with http:// or https://." : currentErrors.videoUrl,
       }));
       return;
     }
@@ -284,7 +268,8 @@ export default function CreateScreen() {
 
           <View style={styles.warningPanel}>
             <Text style={styles.warningText}>
-              Nude, porn, sexually explicit, and harmful images are not allowed.
+              FactLens blocks nude, porn, sexually explicit, abusive, and harmful content. Images/videos may be
+              reviewed by automated systems later.
             </Text>
           </View>
 
@@ -359,11 +344,25 @@ export default function CreateScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {errors.videoUrl ? <Text style={styles.errorText}>{errors.videoUrl}</Text> : null}
+            {errors.videoUrl || videoUrlInvalid ? (
+              <Text style={styles.errorText}>
+                {errors.videoUrl ?? "Video URL must start with http:// or https://."}
+              </Text>
+            ) : null}
+            {trimmedVideoUrl && videoPlatform ? (
+              <View style={styles.videoPreviewPanel}>
+                <Text style={styles.videoDetectedText}>Detected: {videoPlatform}</Text>
+                {youtubeThumbnailUrl ? (
+                  <Image source={{ uri: youtubeThumbnailUrl }} style={styles.videoThumbnail} resizeMode="cover" />
+                ) : (
+                  <Text style={styles.helperText}>A {videoPlatform} link preview will appear on the claim.</Text>
+                )}
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Category (Optional)</Text>
+            <Text style={styles.label}>Category</Text>
             <View style={styles.categoryGrid}>
               {claimCategories.map((option) => {
                 const selected = category === option;
@@ -373,7 +372,12 @@ export default function CreateScreen() {
                     key={option}
                     style={[styles.categoryButton, selected && styles.categoryButtonSelected]}
                     activeOpacity={0.8}
-                    onPress={() => setCategory((currentCategory) => (currentCategory === option ? "" : option))}
+                    onPress={() => {
+                      setCategory((currentCategory) => (currentCategory === option ? "" : option));
+                      if (errors.category || errors.general) {
+                        setErrors((currentErrors) => ({ ...currentErrors, category: undefined, general: undefined }));
+                      }
+                    }}
                   >
                     <Text style={[styles.categoryButtonText, selected && styles.categoryButtonTextSelected]}>
                       {option}
@@ -382,6 +386,7 @@ export default function CreateScreen() {
                 );
               })}
             </View>
+            {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
           </View>
 
           <View style={styles.fieldGroup}>
@@ -656,6 +661,26 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "700",
+  },
+  videoPreviewPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  videoDetectedText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  videoThumbnail: {
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.sm,
+    height: 160,
+    width: "100%",
   },
   helperText: {
     color: theme.colors.subtext,

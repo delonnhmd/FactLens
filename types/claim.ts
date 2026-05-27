@@ -53,6 +53,9 @@ export interface ClaimMedia {
   imageUrl?: string | null;
   videoUrl?: string | null;
   youtubeUrl?: string | null;
+  // PHASE 3 STEP 8
+  videoPlatform?: string | null;
+  youtubeThumbnailUrl?: string | null;
 }
 
 export interface AiCheck {

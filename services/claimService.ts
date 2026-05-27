@@ -1,7 +1,8 @@
 // PHASE 3 STEP 3
 import { supabase } from "../lib/supabase";
-import { generateClaimShareUrl, generateClaimSlug, isYouTubeUrl } from "./claimLinks";
+import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { getExpiresAt } from "./claimVoting";
+import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
 import type { User as AppUser } from "../types/user";
 import type { Profile } from "./profileService";
@@ -163,6 +164,9 @@ function mapAuthor(row: ClaimRow): AppUser {
 export function mapClaimRowToClaim(row: ClaimRow): Claim {
   const author = mapAuthor(row);
   const videoUrl = row.video_url ?? "";
+  // PHASE 3 STEP 8
+  const videoPlatform = videoUrl ? detectVideoPlatform(videoUrl) : null;
+  const youtubeThumbnailUrl = videoUrl ? getYouTubeThumbnailUrl(videoUrl) : null;
 
   return {
     id: row.id,
@@ -173,8 +177,10 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     sourceUrl: row.source_url,
     media: {
       imageUrl: row.image_url,
-      videoUrl: videoUrl && !isYouTubeUrl(videoUrl) ? videoUrl : null,
-      youtubeUrl: videoUrl && isYouTubeUrl(videoUrl) ? videoUrl : null,
+      videoUrl: videoUrl && videoPlatform !== "YouTube" ? videoUrl : null,
+      youtubeUrl: videoUrl && videoPlatform === "YouTube" ? videoUrl : null,
+      videoPlatform,
+      youtubeThumbnailUrl,
     },
     aiCheck: {
       status: mapAiStatus(row.ai_status),
