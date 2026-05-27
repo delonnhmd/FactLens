@@ -19,7 +19,8 @@ type FormErrors = Partial<Record<FieldName | "general", string>>;
 
 export default function CreateScreen() {
   const router = useRouter();
-  const { currentUser, isAuthenticated, isVerified, loginPlaceholder } = useAuth();
+  // PHASE 3 STEP 1
+  const { currentUser, isAuthenticated, isVerified, loading, refreshUser } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -76,7 +77,7 @@ export default function CreateScreen() {
     }
 
     if (!isVerified) {
-      nextErrors.general = "Verify your account before posting.";
+      nextErrors.general = "Please verify your email before posting.";
       return nextErrors;
     }
 
@@ -150,12 +151,24 @@ export default function CreateScreen() {
     router.replace({ pathname: "/", params: { claimPosted: "1" } });
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header title="Create Claim" subtitle="Draft a new news claim" />
+        <View style={styles.content}>
+          <View style={styles.gateCard}>
+            <Text style={styles.gateTitle}>Checking account...</Text>
+            <Text style={styles.gateText}>Please wait while FactLens checks your login session.</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!isAuthenticated || !isVerified) {
-    const gateTitle = isAuthenticated ? "Verify your account before posting." : "You need an account to post.";
-    const buttonLabel = isAuthenticated ? "Verify Account" : "Create Account";
-    const buttonAction = isAuthenticated
-      ? () => Alert.alert("Account verification will be added later.")
-      : loginPlaceholder;
+    const gateTitle = isAuthenticated ? "Please verify your email before posting." : "You need an account to post.";
+    const buttonLabel = isAuthenticated ? "I verified my email" : "Log in or Create Account";
+    const buttonAction = isAuthenticated ? refreshUser : () => router.push("/auth");
 
     return (
       <SafeAreaView style={styles.container}>
@@ -164,7 +177,9 @@ export default function CreateScreen() {
           <View style={styles.gateCard}>
             <Text style={styles.gateTitle}>{gateTitle}</Text>
             <Text style={styles.gateText}>
-              Account-required posting is a local placeholder until real authentication is added.
+              {isAuthenticated
+                ? "Open the verification link from your email, then refresh your account status here."
+                : "FactLens requires a verified account before posting a news claim."}
             </Text>
             <TouchableOpacity style={styles.button} onPress={buttonAction} activeOpacity={0.8}>
               <Text style={styles.buttonText}>{buttonLabel}</Text>
@@ -175,6 +190,16 @@ export default function CreateScreen() {
     );
   }
 
+  const username =
+    typeof currentUser?.user_metadata?.username === "string" && currentUser.user_metadata.username.trim()
+      ? currentUser.user_metadata.username.trim()
+      : currentUser?.email?.split("@")[0] ?? "user";
+  const displayName =
+    typeof currentUser?.user_metadata?.displayName === "string" && currentUser.user_metadata.displayName.trim()
+      ? currentUser.user_metadata.displayName.trim()
+      : username;
+  const initial = displayName.slice(0, 1).toUpperCase() || "U";
+
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Create Claim" subtitle="Draft a new news claim" />
@@ -182,14 +207,14 @@ export default function CreateScreen() {
         <View style={styles.composeCard}>
           <View style={styles.accountRow}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{currentUser.displayName.slice(0, 1).toUpperCase()}</Text>
+              <Text style={styles.avatarText}>{initial}</Text>
             </View>
             <View style={styles.accountTextWrap}>
               <View style={styles.accountNameRow}>
-                <Text style={styles.accountName}>{currentUser.displayName}</Text>
-                {currentUser.verified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
+                <Text style={styles.accountName}>{displayName}</Text>
+                {isVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
               </View>
-              <Text style={styles.accountMeta}>@{currentUser.username}</Text>
+              <Text style={styles.accountMeta}>@{username}</Text>
             </View>
           </View>
 

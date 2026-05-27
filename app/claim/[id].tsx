@@ -160,7 +160,8 @@ export default function ClaimDetailScreen() {
   const votingOpen = isVotingOpen(claim);
   const userCanVote = canUserVote(claim);
   const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
-  const isOwner = currentUser.id === claim.authorId;
+  // PHASE 3 STEP 1
+  const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
   const voteStats = [

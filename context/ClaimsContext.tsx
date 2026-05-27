@@ -3,9 +3,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { mockClaims } from "../constants/mockData";
 import { mockUser } from "../constants/mockUser";
+import { useAuth } from "./AuthContext";
 import { generateClaimShareUrl, generateClaimSlug, isYouTubeUrl } from "../services/claimLinks";
 import { applyCurrentClaimStatus, canUserVote, getExpiresAt } from "../services/claimVoting";
+import { getAuthProfile } from "../services/authProfile";
 import type { Claim, EvidenceType, ReportReason, VoteOption } from "../types/claim";
+import type { User as AppUser } from "../types/user";
 
 export interface CreateClaimInput {
   title: string;
@@ -59,6 +62,8 @@ function incrementVote(claim: Claim, vote: VoteOption): Claim {
 }
 
 export function ClaimsProvider({ children }: { children: ReactNode }) {
+  // PHASE 3 STEP 1
+  const { currentUser } = useAuth();
   const [claims, setClaims] = useState<Claim[]>(() => mockClaims);
   const [now, setNow] = useState(() => new Date());
 
@@ -100,6 +105,18 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     const createdAt = new Date().toISOString();
     const id = createLocalClaimId();
     const trimmedVideoUrl = input.videoUrl?.trim() || "";
+    const authProfile = getAuthProfile(currentUser);
+    const localAuthor: AppUser = currentUser
+      ? {
+          id: currentUser.id,
+          username: authProfile.username,
+          displayName: authProfile.displayName,
+          avatar: authProfile.avatar,
+          verified: !!currentUser.email_confirmed_at,
+          reputationScore: 0,
+          joinedAt: currentUser.created_at ?? createdAt,
+        }
+      : mockUser;
     const newClaim: Claim = {
       // PHASE 2 STEP 8
       id,
@@ -130,17 +147,17 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       reports: [],
       reportCount: 0,
       isFlagged: false,
-      // PHASE 2 STEP 9
-      authorId: mockUser.id,
-      authorUsername: mockUser.username,
-      authorDisplayName: mockUser.displayName,
-      authorVerified: mockUser.verified,
-      author: mockUser,
+      // PHASE 3 STEP 1
+      authorId: localAuthor.id,
+      authorUsername: localAuthor.username,
+      authorDisplayName: localAuthor.displayName,
+      authorVerified: localAuthor.verified,
+      author: localAuthor,
     };
 
     setClaims((currentClaimsState) => [newClaim, ...currentClaimsState]);
     return newClaim;
-  }, []);
+  }, [currentUser]);
 
   const voteOnClaim = useCallback((claimId: string, vote: VoteOption) => {
     const voteTime = new Date();
