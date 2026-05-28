@@ -9,7 +9,7 @@ import { VoteButtons } from "./VoteButtons";
 import { reportReasons } from "../constants/reportReasons";
 import { theme } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
-import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
+import { calculateAutomaticVerdict, getTimeRemaining, getVoteWindowClosesAt, isVotingOpen } from "../services/claimVoting";
 import { getSourceQuality } from "../services/sourceQuality";
 
 // PHASE 2 STEP 8
@@ -72,8 +72,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const [voteError, setVoteError] = useState("");
   // PHASE 2 STEP 3
   const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
-  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
-  const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  const voteWindowClosesAt = getVoteWindowClosesAt(claim.createdAt);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
+  const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   const evidenceLabel = `${evidenceCount} evidence ${evidenceCount === 1 ? "link" : "links"}`;
@@ -143,7 +144,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       : !isVerified
         ? "Verify your email to vote."
         : claim.userVote
-          ? "Your vote is recorded. You can change it until voting closes."
+          ? "Your vote is recorded. Vote changes are not allowed."
           : "Choose one option before voting closes.";
 
   return (
@@ -226,7 +227,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
       <View style={styles.windowRow}>
         <Text style={[styles.windowText, !votingOpen && styles.closedText]}>
-          {votingOpen ? `${getTimeRemaining(claim.expiresAt)} remaining` : "Voting closed"}
+          {votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed"}
         </Text>
       </View>
 

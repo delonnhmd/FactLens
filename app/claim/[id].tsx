@@ -11,7 +11,7 @@ import { VoteButtons } from "../../components/VoteButtons";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { reportReasons } from "../../constants/reportReasons";
-import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
+import { calculateAutomaticVerdict, getTimeRemaining, getVoteWindowClosesAt, isVotingOpen } from "../../services/claimVoting";
 import { getSourceQuality, type SourceQuality } from "../../services/sourceQuality";
 import {
   subscribeToClaimById,
@@ -430,8 +430,9 @@ export default function ClaimDetailScreen() {
   const currentVoteTotal = claim.votesTrue + claim.votesFake + claim.votesUnsure;
   const totalVotes = claim.verdictCalculatedAt ? claim.totalVotes : currentVoteTotal;
   const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
-  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified;
-  const automaticVerdict = votingOpen ? undefined : calculateAutomaticVerdict(claim);
+  const voteWindowClosesAt = getVoteWindowClosesAt(claim.createdAt);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
+  const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
   // PHASE 3 STEP 10
   const verdictTitle =
     claim.status === "COMMUNITY_TRUE" ||
@@ -464,7 +465,7 @@ export default function ClaimDetailScreen() {
       : !isVerified
         ? "Verify your email to vote."
         : claim.userVote
-          ? "Your vote is recorded. You can change it until voting closes."
+          ? "Your vote is recorded. Vote changes are not allowed."
           : "Choose one option before voting closes.";
 
   return (
@@ -775,18 +776,19 @@ export default function ClaimDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>24-hour voting window</Text>
+          <Text style={styles.label}>Test voting window</Text>
           <View style={styles.windowPanel}>
             <View>
               <Text style={styles.windowCaption}>{votingOpen ? "Time remaining" : "Voting closed"}</Text>
               <Text style={[styles.windowValue, !votingOpen && styles.closedValue]}>
-                {votingOpen ? getTimeRemaining(claim.expiresAt) : "Voting closed"}
+                {votingOpen ? getTimeRemaining(voteWindowClosesAt) : "Voting closed"}
               </Text>
             </View>
             <StatusBadge status={votingOpen ? "OPEN" : claim.status} />
           </View>
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
-          <Text style={styles.date}>Closes {new Date(claim.expiresAt).toLocaleString()}</Text>
+          <Text style={styles.date}>Voting closes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
+          <Text style={styles.date}>Verdict locks {new Date(claim.expiresAt).toLocaleString()}</Text>
         </View>
 
         {votingOpen ? (

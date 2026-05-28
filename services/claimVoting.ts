@@ -1,9 +1,16 @@
 // PHASE 2 STEP 3
 import type { Claim, ClaimStatus } from "../types/claim";
+import type { VerificationMode } from "../types/verification";
+import {
+  calculateClaimVerificationResult,
+  canAcceptVerificationVote,
+  getVerdictPublishesAt,
+  getVerificationVerdictReason,
+  getVotingClosesAt,
+  mapVerificationVerdictToStatus,
+} from "./verificationEngine";
 
-const VOTING_WINDOW_MS = 24 * 60 * 60 * 1000;
-const MIN_VERDICT_VOTES = 5;
-const CLEAR_MAJORITY_PERCENT = 0.6;
+const DEFAULT_VERIFICATION_MODE: VerificationMode = "test";
 
 export type AutomaticVerdictStatus = "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE";
 
@@ -11,13 +18,29 @@ export interface AutomaticVerdict {
   status: AutomaticVerdictStatus;
   resultLabel: string;
   reason: string;
+  // PHASE 3 VERIFICATION ENGINE
+  finalScore?: number;
+  weightedCommunityScore?: number;
 }
 
-export function getExpiresAt(createdAt: string): string {
-  return new Date(new Date(createdAt).getTime() + VOTING_WINDOW_MS).toISOString();
+export function getExpiresAt(createdAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE): string {
+  return getVerdictPublishesAt(createdAt, mode);
 }
 
-export function isVotingOpen(claim: Pick<Claim, "expiresAt">, now = new Date()): boolean {
+// PHASE 3 VERIFICATION ENGINE
+export function getVoteWindowClosesAt(createdAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE): string {
+  return getVotingClosesAt(createdAt, mode);
+}
+
+export function isVotingOpen(
+  claim: Pick<Claim, "expiresAt"> & Partial<Pick<Claim, "createdAt">>,
+  now = new Date(),
+  mode: VerificationMode = DEFAULT_VERIFICATION_MODE,
+): boolean {
+  if (claim.createdAt) {
+    return canAcceptVerificationVote(claim.createdAt, mode, now);
+  }
+
   return new Date(claim.expiresAt).getTime() > now.getTime();
 }
 
@@ -40,53 +63,31 @@ export function getTimeRemaining(expiresAt: string, now = new Date()): string {
 }
 
 export function calculateAutomaticVerdict(
-  claim: Pick<Claim, "votesTrue" | "votesFake" | "votesUnsure">,
+  claim: Pick<Claim, "id" | "createdAt" | "aiCheck" | "votesTrue" | "votesFake" | "votesUnsure">,
+  mode: VerificationMode = DEFAULT_VERIFICATION_MODE,
+  now = new Date(),
 ): AutomaticVerdict {
-  const trueVotes = claim.votesTrue;
-  const fakeVotes = claim.votesFake;
-  const unsureVotes = claim.votesUnsure;
-  const totalVotes = trueVotes + fakeVotes + unsureVotes;
-
-  if (totalVotes < MIN_VERDICT_VOTES) {
-    return {
-      status: "NEEDS_MORE_EVIDENCE",
-      resultLabel: "Needs More Evidence",
-      reason: "Not enough community votes.",
-    };
-  }
-
-  if (unsureVotes > trueVotes && unsureVotes > fakeVotes) {
-    return {
-      status: "NEEDS_MORE_EVIDENCE",
-      resultLabel: "Needs More Evidence",
-      reason: "Most voters were unsure.",
-    };
-  }
-
-  if (trueVotes > fakeVotes && trueVotes / totalVotes >= CLEAR_MAJORITY_PERCENT) {
-    return {
-      status: "COMMUNITY_TRUE",
-      resultLabel: "Community Says True",
-      reason: "True received at least 60% of total votes.",
-    };
-  }
-
-  if (fakeVotes > trueVotes && fakeVotes / totalVotes >= CLEAR_MAJORITY_PERCENT) {
-    return {
-      status: "COMMUNITY_FAKE",
-      resultLabel: "Community Says Fake",
-      reason: "Fake received at least 60% of total votes.",
-    };
-  }
+  const result = calculateClaimVerificationResult(claim, mode, now);
+  const status = mapVerificationVerdictToStatus(result.verdict);
+  const labels: Record<AutomaticVerdictStatus, string> = {
+    COMMUNITY_TRUE: "Community Says True",
+    COMMUNITY_FAKE: "Community Says Fake",
+    NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+  };
 
   return {
-    status: "NEEDS_MORE_EVIDENCE",
-    resultLabel: "Needs More Evidence",
-    reason: "Vote result was too close.",
+    status,
+    resultLabel: labels[status],
+    reason: getVerificationVerdictReason(result),
+    finalScore: result.final_score,
+    weightedCommunityScore: result.weighted_community_score,
   };
 }
 
-export function canUserVote(claim: Pick<Claim, "expiresAt" | "userVote">, now = new Date()): boolean {
+export function canUserVote(
+  claim: Pick<Claim, "expiresAt" | "userVote"> & Partial<Pick<Claim, "createdAt">>,
+  now = new Date(),
+): boolean {
   return isVotingOpen(claim, now) && !claim.userVote;
 }
 
@@ -98,6 +99,10 @@ export function getCurrentClaimStatus(claim: Claim, now = new Date()): ClaimStat
 
   if (isVotingOpen(claim, now)) {
     return "OPEN";
+  }
+
+  if (new Date(claim.expiresAt).getTime() > now.getTime()) {
+    return "VOTING_CLOSED";
   }
 
   return calculateAutomaticVerdict(claim).status;

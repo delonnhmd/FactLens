@@ -341,7 +341,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 10
   useEffect(() => {
-    const expiredOpenClaims = claims.filter((claim) => claim.status === "OPEN" && !isVotingOpen(claim, now));
+    const expiredOpenClaims = claims.filter(
+      (claim) => claim.status === "OPEN" && new Date(claim.expiresAt).getTime() <= now.getTime(),
+    );
 
     if (expiredOpenClaims.length === 0) {
       return;

@@ -1,9 +1,14 @@
 // PHASE 3 STEP 3
 import { supabase } from "../lib/supabase";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
-import { getExpiresAt, isVotingOpen } from "./claimVoting";
+import { getExpiresAt } from "./claimVoting";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
+import {
+  calculateClaimVerificationResult,
+  getVerificationVerdictReason,
+  mapVerificationVerdictToStatus,
+} from "./verificationEngine";
 import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
 import type { User as AppUser } from "../types/user";
 import type { Profile } from "./profileService";
@@ -191,54 +196,21 @@ function getSearchExpression(query: string): string {
 
 // PHASE 3 STEP 10
 export function calculateAutomaticVerdict(
-  claim: Pick<Claim, "votesTrue" | "votesFake" | "votesUnsure">,
+  claim: Pick<Claim, "id" | "createdAt" | "aiCheck" | "votesTrue" | "votesFake" | "votesUnsure">,
 ): AutomaticVerdictResult {
-  const trueVotes = claim.votesTrue;
-  const fakeVotes = claim.votesFake;
-  const unsureVotes = claim.votesUnsure;
-  const totalVotes = trueVotes + fakeVotes + unsureVotes;
-
-  if (totalVotes < 5) {
-    return {
-      status: "NEEDS_MORE_EVIDENCE",
-      resultLabel: "Needs More Evidence",
-      reason: "Not enough community votes.",
-      totalVotes,
-    };
-  }
-
-  if (unsureVotes > trueVotes && unsureVotes > fakeVotes) {
-    return {
-      status: "NEEDS_MORE_EVIDENCE",
-      resultLabel: "Needs More Evidence",
-      reason: "Most voters were unsure.",
-      totalVotes,
-    };
-  }
-
-  if (trueVotes > fakeVotes && trueVotes / totalVotes >= 0.6) {
-    return {
-      status: "COMMUNITY_TRUE",
-      resultLabel: "Community Says True",
-      reason: "True received at least 60% of total votes.",
-      totalVotes,
-    };
-  }
-
-  if (fakeVotes > trueVotes && fakeVotes / totalVotes >= 0.6) {
-    return {
-      status: "COMMUNITY_FAKE",
-      resultLabel: "Community Says Fake",
-      reason: "Fake received at least 60% of total votes.",
-      totalVotes,
-    };
-  }
+  const verificationResult = calculateClaimVerificationResult(claim);
+  const status = mapVerificationVerdictToStatus(verificationResult.verdict);
+  const labels: Record<AutomaticVerdictResult["status"], string> = {
+    COMMUNITY_TRUE: "Community Says True",
+    COMMUNITY_FAKE: "Community Says Fake",
+    NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+  };
 
   return {
-    status: "NEEDS_MORE_EVIDENCE",
-    resultLabel: "Needs More Evidence",
-    reason: "Vote result was too close.",
-    totalVotes,
+    status,
+    resultLabel: labels[status],
+    reason: getVerificationVerdictReason(verificationResult),
+    totalVotes: claim.votesTrue + claim.votesFake + claim.votesUnsure,
   };
 }
 
@@ -533,7 +505,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 
   const latestClaim = latestClaimResult.claim;
 
-  if (latestClaim.status !== "OPEN" || isVotingOpen(latestClaim)) {
+  if (latestClaim.status !== "OPEN" || new Date(latestClaim.expiresAt).getTime() > Date.now()) {
     return latestClaimResult;
   }
 
@@ -574,7 +546,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResult> {
   const finalizedClaims = await Promise.all(
     claims.map(async (claim) => {
-      if (claim.status !== "OPEN" || isVotingOpen(claim)) {
+      if (claim.status !== "OPEN" || new Date(claim.expiresAt).getTime() > Date.now()) {
         return claim;
       }
 

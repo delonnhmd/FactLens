@@ -1,6 +1,7 @@
 // PHASE 3 STEP 4
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
+import { isVotingOpen } from "./claimVoting";
 import type { Claim, VoteOption } from "../types/claim";
 
 export type VoteType = "TRUE" | "FAKE" | "UNSURE";
@@ -149,7 +150,13 @@ export async function voteOnClaim(
     };
   }
 
-  if (new Date(claimResult.claim.expiresAt).getTime() <= Date.now()) {
+  if (!isVotingOpen(claimResult.claim)) {
+    if (new Date(claimResult.claim.expiresAt).getTime() > Date.now()) {
+      return {
+        claim: claimResult.claim,
+      };
+    }
+
     // PHASE 3 STEP 10
     const finalizedClaim = await finalizeExpiredClaim(claimId);
 
@@ -170,18 +177,13 @@ export async function voteOnClaim(
   }
 
   if (existingVote.vote) {
-    const { error } = await supabase
-      .from("votes")
-      .update({ vote_type: dbVoteType })
-      .eq("claim_id", claimId)
-      .eq("user_id", userId);
-
-    if (error) {
-      return {
-        claim: claimResult.claim,
-        error: getVoteErrorMessage(error.message),
-      };
-    }
+    return {
+      claim: {
+        ...claimResult.claim,
+        userVote: toAppVoteOption(existingVote.vote.vote_type),
+      },
+      error: "You have already voted on this claim.",
+    };
   } else {
     const { error } = await supabase.from("votes").insert({
       claim_id: claimId,
