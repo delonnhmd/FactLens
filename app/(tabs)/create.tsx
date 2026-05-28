@@ -21,7 +21,7 @@ type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
 export default function CreateScreen() {
   const router = useRouter();
   // PHASE 3 STEP 2
-  const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, refreshProfile } = useAuth();
+  const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -33,6 +33,9 @@ export default function CreateScreen() {
   const [imageError, setImageError] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // PHASE 3 STEP 15
+  const [profileGateError, setProfileGateError] = useState("");
+  const [profileGateMessage, setProfileGateMessage] = useState("");
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
@@ -178,6 +181,21 @@ export default function CreateScreen() {
     }
   };
 
+  // PHASE 3 STEP 15
+  const handleFixProfile = async () => {
+    setProfileGateError("");
+    setProfileGateMessage("");
+
+    const result = await ensureProfile();
+
+    if (result.error) {
+      setProfileGateError(result.error);
+      return;
+    }
+
+    setProfileGateMessage(result.message ?? "Profile ready.");
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -225,10 +243,13 @@ export default function CreateScreen() {
           <View style={styles.gateCard}>
             <Text style={styles.gateTitle}>Profile required to post.</Text>
             <Text style={styles.gateText}>
-              {profileError ?? "Your account profile is still syncing. Refresh your profile before posting."}
+              {profileGateError ||
+                profileError ||
+                "Your account profile is still syncing. Fix your profile before posting."}
             </Text>
-            <TouchableOpacity style={styles.button} onPress={refreshProfile} activeOpacity={0.8}>
-              <Text style={styles.buttonText}>Refresh Profile</Text>
+            {profileGateMessage ? <Text style={styles.profileGateMessage}>{profileGateMessage}</Text> : null}
+            <TouchableOpacity style={styles.button} onPress={handleFixProfile} activeOpacity={0.8}>
+              <Text style={styles.buttonText}>Fix Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -686,6 +707,12 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     marginTop: theme.spacing.sm,
+  },
+  profileGateMessage: {
+    color: theme.colors.success,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.md,
   },
   button: {
     alignItems: "center",

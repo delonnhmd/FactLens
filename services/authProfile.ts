@@ -1,5 +1,6 @@
 // PHASE 3 STEP 1
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { normalizeUsername } from "../utils/username";
 
 interface AuthProfile {
   email: string;
@@ -17,8 +18,9 @@ function readMetadataString(user: SupabaseUser | null, key: string): string | un
 export function getAuthProfile(user: SupabaseUser | null): AuthProfile {
   const email = user?.email ?? "";
   const emailName = email.split("@")[0] || "user";
-  const username = readMetadataString(user, "username") ?? emailName;
-  const displayName = readMetadataString(user, "displayName") ?? readMetadataString(user, "full_name") ?? username;
+  const rawUsername = readMetadataString(user, "username") ?? emailName;
+  const username = normalizeUsername(rawUsername) || normalizeUsername(emailName) || "user";
+  const displayName = readMetadataString(user, "displayName") ?? readMetadataString(user, "full_name") ?? rawUsername;
   const avatar = readMetadataString(user, "avatar_url") ?? readMetadataString(user, "avatar") ?? null;
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
 

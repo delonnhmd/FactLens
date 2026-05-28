@@ -6,7 +6,6 @@ import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthProfile } from "../../services/authProfile";
-import { createProfile } from "../../services/profileService";
 
 export default function ProfileScreen() {
   // PHASE 3 STEP 2
@@ -19,7 +18,7 @@ export default function ProfileScreen() {
     isVerified,
     loading,
     signOut,
-    refreshProfile,
+    ensureProfile,
   } = useAuth();
   const fallbackProfile = getAuthProfile(currentUser);
   const [actionMessage, setActionMessage] = useState("");
@@ -42,15 +41,14 @@ export default function ProfileScreen() {
 
     setActionError("");
     setActionMessage("");
-    const result = await createProfile(currentUser.id, fallbackProfile.username, fallbackProfile.displayName);
+    const result = await ensureProfile();
 
     if (result.error) {
       setActionError(result.error);
       return;
     }
 
-    setActionMessage("Profile created.");
-    await refreshProfile();
+    setActionMessage(result.message ?? "Profile ready.");
   };
 
   return (
