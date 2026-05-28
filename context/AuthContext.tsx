@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import { supabase, supabaseConfigError } from "../lib/supabase";
 import { getAuthProfile } from "../services/authProfile";
 import { createProfile, getProfile } from "../services/profileService";
 import type { Profile } from "../services/profileService";
@@ -38,29 +38,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 13
   const loadProfile = useCallback(async (user: SupabaseUser): Promise<AuthActionResult> => {
-    const result = await getProfile(user.id);
+    try {
+      const result = await getProfile(user.id);
 
-    if (result.profile || result.error) {
-      setProfile(result.profile);
-      setProfileError(result.error ?? null);
+      if (result.profile || result.error) {
+        setProfile(result.profile);
+        setProfileError(result.error ?? null);
 
-      if (result.error) {
-        return { error: result.error };
+        if (result.error) {
+          return { error: result.error };
+        }
+
+        return {};
+      }
+
+      const fallbackProfile = getAuthProfile(user);
+      const createResult = await createProfile(user.id, fallbackProfile.username, fallbackProfile.displayName);
+      setProfile(createResult.profile);
+      setProfileError(createResult.error ?? null);
+
+      if (createResult.error) {
+        return { error: createResult.error };
       }
 
       return {};
+    } catch {
+      const message = "We could not load your profile. Please try again.";
+      setProfile(null);
+      setProfileError(message);
+      return { error: message };
     }
-
-    const fallbackProfile = getAuthProfile(user);
-    const createResult = await createProfile(user.id, fallbackProfile.username, fallbackProfile.displayName);
-    setProfile(createResult.profile);
-    setProfileError(createResult.error ?? null);
-
-    if (createResult.error) {
-      return { error: createResult.error };
-    }
-
-    return {};
   }, []);
 
   const applySession = useCallback(
@@ -81,6 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (supabaseConfigError) {
+      setProfileError(supabaseConfigError);
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
 
     supabase.auth
@@ -91,6 +104,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         await applySession(data.session);
+      })
+      .catch(() => {
+        if (mounted) {
+          setProfileError("We could not load your session. Please try again.");
+        }
       })
       .finally(() => {
         if (mounted) {
@@ -119,6 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [currentUser, loadProfile]);
 
   const refreshUser = useCallback(async (): Promise<AuthActionResult> => {
+    if (supabaseConfigError) {
+      return { error: supabaseConfigError };
+    }
+
     const { data, error } = await supabase.auth.getUser();
 
     if (error) {
@@ -133,6 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile]);
 
   const signUp = useCallback(async (email: string, password: string, username: string): Promise<AuthActionResult> => {
+    if (supabaseConfigError) {
+      return { error: supabaseConfigError };
+    }
+
     const trimmedUsername = username.trim();
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
@@ -173,6 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthActionResult> => {
+      if (supabaseConfigError) {
+        return { error: supabaseConfigError };
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
@@ -191,6 +221,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async (): Promise<AuthActionResult> => {
+    if (supabaseConfigError) {
+      setSession(null);
+      setCurrentUser(null);
+      setProfile(null);
+      setProfileError(supabaseConfigError);
+      return {};
+    }
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {

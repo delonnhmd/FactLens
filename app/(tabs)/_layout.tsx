@@ -3,6 +3,7 @@
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { ColorValue } from 'react-native';
 
 type IoniconName =
   | 'home-outline'
@@ -17,7 +18,7 @@ function TabIcon({
   size,
 }: {
   name: IoniconName;
-  color: string;
+  color: ColorValue;
   size: number;
 }) {
   return <Ionicons name={name} size={size} color={color} />;

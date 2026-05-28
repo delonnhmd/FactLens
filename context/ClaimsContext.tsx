@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
+import { supabaseConfigError } from "../lib/supabase";
 import { applyCurrentClaimStatus, isVotingOpen } from "../services/claimVoting";
 import {
   createClaim as createRemoteClaim,
@@ -216,6 +217,15 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
 
+    if (supabaseConfigError) {
+      setClaims([]);
+      setClaimOffset(0);
+      setHasMoreClaims(false);
+      setError(supabaseConfigError);
+      setLoading(false);
+      return;
+    }
+
     try {
       await fetchLatestClaims();
     } catch (loadError) {
@@ -267,6 +277,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 12
   useEffect(() => {
+    if (supabaseConfigError) {
+      setLiveUpdatesEnabled(false);
+      return;
+    }
+
     let mounted = true;
 
     const channel = subscribeToClaims(
