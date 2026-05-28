@@ -10,7 +10,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "backend": "python -m uvicorn backend.main:app --reload",
-    "seed:test-users": "node scripts/seed-test-users.mjs"
+    "seed:test-users": "node scripts/seed-test-users.mjs",
+    "seed:delete-test-users": "node scripts/delete-test-users.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.12",
