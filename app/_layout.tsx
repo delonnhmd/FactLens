@@ -4,6 +4,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View, StyleSheet } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../context/AuthContext";
 import { ClaimsProvider } from "../context/ClaimsContext";
 
@@ -16,15 +17,18 @@ export default function Layout() {
     return null;
   }
 
+  // PHASE 3 STEP 20
   return (
-    <AuthProvider>
-      <ClaimsProvider>
-        <View style={styles.root}>
-          <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false }} />
-        </View>
-      </ClaimsProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <ClaimsProvider>
+          <View style={styles.root}>
+            <StatusBar style="auto" />
+            <Stack screenOptions={{ headerShown: false }} />
+          </View>
+        </ClaimsProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 

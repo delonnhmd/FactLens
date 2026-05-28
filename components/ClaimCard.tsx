@@ -76,6 +76,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const [reportError, setReportError] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [voteError, setVoteError] = useState("");
+  // PHASE 3 STEP 20
+  const [voteSuccess, setVoteSuccess] = useState("");
   // PHASE 2 STEP 3
   const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
   const voteWindowClosesAt = getVoteWindowClosesAt(claim.createdAt);
@@ -122,9 +124,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
   const handleVote = useCallback(async (vote: VoteOption) => {
     setVoteError("");
+    setVoteSuccess("");
 
     try {
       await onVote(claim.id, vote);
+      setVoteSuccess("Vote saved.");
     } catch (error) {
       setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
     }
@@ -147,9 +151,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const voteMessage = !votingOpen
     ? ""
     : !isAuthenticated
-      ? "Log in to vote."
+      ? "Please log in to vote."
       : !isVerified
-        ? "Verify your email to vote."
+        ? "Please verify your email to vote."
         : claim.userVote
           ? "Your vote is recorded. Vote changes are not allowed."
           : "Choose one option before voting closes.";
@@ -290,6 +294,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         <View style={styles.buttonWrap}>
           <VoteButtons disabled={voteDisabled} userVote={claim.userVote} onVote={handleVote} />
           {voteMessage ? <Text style={styles.voteMessage}>{voteMessage}</Text> : null}
+          {voteSuccess ? <Text style={styles.voteSuccess}>{voteSuccess}</Text> : null}
           {voteError ? <Text style={styles.voteError}>{voteError}</Text> : null}
         </View>
       ) : null}
@@ -781,6 +786,12 @@ const styles = StyleSheet.create({
   },
   voteError: {
     color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginTop: theme.spacing.sm,
+  },
+  voteSuccess: {
+    color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "700",
     marginTop: theme.spacing.sm,

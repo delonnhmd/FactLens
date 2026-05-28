@@ -1,7 +1,6 @@
 // PHASE 3 STEP 4
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
-import { isVotingOpen } from "./claimVoting";
 import {
   buildVerificationResponse,
   getUserTrustWeight,
@@ -42,6 +41,7 @@ interface UserVoteResult {
 interface ClaimVoteResult {
   claim: Claim | null;
   error?: string;
+  message?: string;
 }
 
 function toDbVoteType(vote: VoteOption): VoteType {
@@ -89,6 +89,11 @@ function mapVoteRowToVerificationVote(row: VoteRow): VerificationVote {
 }
 
 function getProfileTrustWeight(profile: Profile | null | undefined, mode: Claim["mode"]): number {
+  // PHASE 3 STEP 20
+  if (mode === "test" && !profile) {
+    return 1;
+  }
+
   return getUserTrustWeight(
     {
       verified: profile?.verified ?? false,
@@ -109,10 +114,39 @@ function getVoteErrorMessage(message: string): string {
   }
 
   if (normalizedMessage.includes("duplicate")) {
-    return "You have already voted on this claim.";
+    return "You already voted on this claim.";
   }
 
   return "We could not save your vote. Please try again.";
+}
+
+// PHASE 3 STEP 20
+function logVoteSupabaseError({
+  claimId,
+  userId,
+  voteType,
+  action,
+  error,
+}: {
+  claimId: string;
+  userId: string;
+  voteType?: VoteType;
+  action: string;
+  error: { code?: string; message?: string; details?: string | null } | null;
+}) {
+  console.log("[vote] Supabase vote error", {
+    action,
+    claimId,
+    userId,
+    voteType,
+    code: error?.code,
+    message: error?.message,
+    details: error?.details,
+  });
+}
+
+function hasVoteWindowClosed(claim: Claim): boolean {
+  return new Date(claim.voteAcceptUntil).getTime() <= Date.now();
 }
 
 async function fetchVoteRowForClaim(claimId: string, userId: string): Promise<{ vote: VoteRow | null; error?: string }> {
@@ -217,11 +251,68 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
   };
 
   const { error } = await supabase.from("claims").update(updateRow).eq("id", claimId);
+  const locallyUpdatedClaim = {
+    ...claimResult.claim,
+    votesTrue,
+    votesFake,
+    votesUnsure,
+    totalVotes,
+    currentPhase: verificationResponse.current_phase,
+    weightedCommunityScore: verificationResponse.weighted_community_score,
+    finalScore: verificationResponse.final_score,
+    phase4Locked: verificationResponse.phase4_locked,
+    earlyVerdictFired: verificationResponse.early_verdict_fired,
+    suspiciousActivity: verificationResponse.suspicious_activity,
+    ...(earlyStatus
+      ? {
+          status: earlyStatus,
+          verdictReason: getVerificationVerdictReason(verificationResponse),
+          verdictCalculatedAt: new Date().toISOString(),
+          publishedAt: new Date().toISOString(),
+        }
+      : {}),
+  };
 
   if (error) {
+    console.log("[vote] Claim aggregate update failed after vote was saved", {
+      claimId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+
+    const rpcResult = await supabase.rpc("recalculate_claim_vote_counts", {
+      target_claim_id: claimId,
+    });
+
+    if (rpcResult.error) {
+      console.log("[vote] Vote count RPC refresh failed after vote was saved", {
+        claimId,
+        code: rpcResult.error.code,
+        message: rpcResult.error.message,
+        details: rpcResult.error.details,
+      });
+    }
+
+    const refreshedClaim = await fetchClaimById(claimId);
+
     return {
-      claim: claimResult.claim,
-      error: getVoteErrorMessage(error.message),
+      claim: refreshedClaim.claim
+        ? {
+            ...refreshedClaim.claim,
+            votesTrue,
+            votesFake,
+            votesUnsure,
+            totalVotes,
+            currentPhase: verificationResponse.current_phase,
+            weightedCommunityScore: verificationResponse.weighted_community_score,
+            finalScore: verificationResponse.final_score,
+            phase4Locked: verificationResponse.phase4_locked,
+            earlyVerdictFired: verificationResponse.early_verdict_fired,
+            suspiciousActivity: verificationResponse.suspicious_activity,
+          }
+        : locallyUpdatedClaim,
+      message: "Vote saved.",
     };
   }
 
@@ -236,6 +327,7 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
 
   return {
     claim: result.claim,
+    message: "Vote saved.",
   };
 }
 
@@ -256,6 +348,7 @@ export async function voteOnClaim(
 
   if (
     claimResult.claim.publishedAt ||
+    claimResult.claim.phase4Locked ||
     claimResult.claim.status === "COMMUNITY_TRUE" ||
     claimResult.claim.status === "COMMUNITY_FAKE" ||
     claimResult.claim.status === "NEEDS_MORE_EVIDENCE"
@@ -273,7 +366,7 @@ export async function voteOnClaim(
     };
   }
 
-  if (!isVotingOpen(claimResult.claim)) {
+  if (hasVoteWindowClosed(claimResult.claim)) {
     // PHASE 3 STEP 10
     const finalizedClaim =
       new Date(claimResult.claim.scoreLockAt).getTime() <= Date.now()
@@ -293,6 +386,14 @@ export async function voteOnClaim(
   const existingVote = await fetchVoteRowForClaim(claimId, userId);
 
   if (existingVote.error) {
+    logVoteSupabaseError({
+      action: "existing-vote-check",
+      claimId,
+      userId,
+      voteType: dbVoteType,
+      error: { message: existingVote.error },
+    });
+
     return {
       claim: claimResult.claim,
       error: existingVote.error,
@@ -305,7 +406,7 @@ export async function voteOnClaim(
         ...claimResult.claim,
         userVote: toAppVoteOption(existingVote.vote.vote_type),
       },
-      error: "You have already voted on this claim.",
+      error: "You already voted on this claim.",
     };
   } else {
     const voteValue = getVoteValue(voteType);
@@ -322,6 +423,14 @@ export async function voteOnClaim(
     });
 
     if (error) {
+      logVoteSupabaseError({
+        action: "insert",
+        claimId,
+        userId,
+        voteType: dbVoteType,
+        error,
+      });
+
       return {
         claim: claimResult.claim,
         error: getVoteErrorMessage(error.message),
@@ -342,7 +451,20 @@ export async function voteOnClaim(
   const updatedClaim = await recalculateVoteCounts(claimId);
 
   if (updatedClaim.error || !updatedClaim.claim) {
-    return updatedClaim;
+    console.log("[vote] Vote was inserted but recalculation failed", {
+      claimId,
+      userId,
+      voteType: dbVoteType,
+      error: updatedClaim.error,
+    });
+
+    return {
+      claim: {
+        ...claimResult.claim,
+        userVote: voteType,
+      },
+      message: "Vote saved.",
+    };
   }
 
   return {
@@ -350,6 +472,7 @@ export async function voteOnClaim(
       ...updatedClaim.claim,
       userVote: voteType,
     },
+    message: updatedClaim.message ?? "Vote saved.",
   };
 }
 

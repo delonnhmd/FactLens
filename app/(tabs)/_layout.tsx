@@ -4,6 +4,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type IoniconName =
   | 'home-outline'
@@ -25,6 +26,10 @@ function TabIcon({
 }
 
 export default function TabLayout() {
+  // PHASE 3 STEP 20
+  const insets = useSafeAreaInsets();
+  const tabBarBottomPadding = Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
@@ -32,8 +37,8 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
-          height: 72,
-          paddingBottom: 10,
+          height: 64 + tabBarBottomPadding,
+          paddingBottom: tabBarBottomPadding,
           paddingTop: 8,
           borderTopColor: '#E5E7EB',
         },

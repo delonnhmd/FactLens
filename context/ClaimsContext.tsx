@@ -422,15 +422,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const voteOnClaim = useCallback(
     async (claimId: string, vote: VoteOption) => {
       if (!currentUser) {
-        throw new Error("Log in to vote.");
+        // PHASE 3 STEP 20
+        throw new Error("Please log in to vote.");
       }
 
       if (!currentUser.email_confirmed_at) {
-        throw new Error("Verify your email to vote.");
-      }
-
-      if (!profile) {
-        throw new Error("Profile required to vote.");
+        // PHASE 3 STEP 20
+        throw new Error("Please verify your email to vote.");
       }
 
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);
@@ -453,23 +451,29 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       if (refreshedClaim.claim && refreshedClaim.claim.status !== "OPEN") {
-        throw new Error("Voting closed. System verdict has been calculated.");
+        // PHASE 3 STEP 20
+        throw new Error("Voting is closed.");
       }
 
-      if (refreshedClaim.claim && new Date(refreshedClaim.claim.expiresAt).getTime() <= Date.now()) {
-        throw new Error("Voting closed. System verdict has been calculated.");
+      if (refreshedClaim.claim && new Date(refreshedClaim.claim.voteAcceptUntil).getTime() <= Date.now()) {
+        // PHASE 3 STEP 20
+        throw new Error("Voting is closed. Final score is being locked.");
       }
 
       const result = await voteOnRemoteClaim(claimId, currentUser.id, vote, profile);
+
+      // PHASE 3 STEP 20
+      if (result.claim) {
+        const updatedClaim = mergeLocalClaimState(result.claim, existingClaim);
+        setClaims((currentClaimsState) =>
+          currentClaimsState.map((claim) => (claim.id === claimId ? updatedClaim : claim)),
+        );
+      }
 
       if (result.error || !result.claim) {
         throw new Error(result.error ?? "We could not save your vote. Please try again.");
       }
 
-      const updatedClaim = mergeLocalClaimState(result.claim, existingClaim);
-      setClaims((currentClaimsState) =>
-        currentClaimsState.map((claim) => (claim.id === claimId ? updatedClaim : claim)),
-      );
     },
     [currentClaims, currentUser, profile],
   );
