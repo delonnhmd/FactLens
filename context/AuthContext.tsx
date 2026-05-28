@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase, supabaseConfigError } from "../lib/supabase";
-import { ensureProfileForUser } from "../services/profileService";
+import { ensureProfileForUser, getProfile } from "../services/profileService";
 import type { Profile } from "../services/profileService";
 import { normalizeUsername } from "../utils/username";
 
@@ -40,12 +40,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 13
   // PHASE 3 STEP 15
+  // PHASE 3 STEP 18C
   const loadProfile = useCallback(async (user: SupabaseUser): Promise<AuthActionResult> => {
     try {
+      console.log("[auth] current user id:", user.id);
+
+      const existingProfile = await getProfile(user.id);
+      console.log("[profile] loaded by id:", existingProfile.profile);
+
+      if (existingProfile.profile) {
+        setProfile(existingProfile.profile);
+        setProfileError(null);
+        console.log("[profile] setting profile state:", existingProfile.profile.id);
+        return {};
+      }
+
+      if (existingProfile.error) {
+        setProfile(null);
+        setProfileError(existingProfile.error);
+        return { error: existingProfile.error };
+      }
+
       const result = await ensureProfileForUser(user);
 
       setProfile(result.profile);
       setProfileError(result.error ?? null);
+      console.log("[profile] setting profile state:", result.profile?.id);
 
       if (result.error) {
         return { error: result.error };
@@ -86,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let mounted = true;
 
+    // PHASE 3 STEP 18C
     supabase.auth
       .getSession()
       .then(async ({ data }) => {
@@ -108,7 +129,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setCurrentUser(null);
+        setProfile(null);
+        setProfileError(null);
+        setLoading(false);
+        return;
+      }
+
       void applySession(nextSession).finally(() => setLoading(false));
     });
 
@@ -123,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: "You must be signed in to load a profile." };
     }
 
+    // PHASE 3 STEP 18C
     return loadProfile(currentUser);
   }, [currentUser, loadProfile]);
 

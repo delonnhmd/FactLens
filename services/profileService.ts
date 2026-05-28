@@ -21,6 +21,21 @@ export interface Profile {
   updated_at: string;
 }
 
+type ProfileRow = {
+  id: string;
+  username: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  verified?: boolean | null;
+  reputation_score?: number | null;
+  votes_cast?: number | null;
+  accuracy_rate?: number | null;
+  trust_tier?: VerificationUserRole | null;
+  trust_weight_override?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ProfileUpdates = Partial<Pick<Profile, "username" | "display_name" | "avatar_url">>;
 
 export interface ProfileResult {
@@ -62,6 +77,28 @@ function getProfileErrorMessage(message: string, code?: string): string {
   }
 
   return "We could not load your profile. Please try again.";
+}
+
+function getProfileLoadErrorMessage(): string {
+  return "We could not load your profile. Please try again.";
+}
+
+// PHASE 3 STEP 18C
+function mapProfileRowToProfile(row: ProfileRow): Profile {
+  return {
+    id: row.id,
+    username: row.username,
+    display_name: row.display_name ?? null,
+    avatar_url: row.avatar_url ?? null,
+    verified: Boolean(row.verified),
+    reputation_score: row.reputation_score ?? 0,
+    votes_cast: row.votes_cast ?? 0,
+    accuracy_rate: row.accuracy_rate ?? null,
+    trust_tier: row.trust_tier ?? "new",
+    trust_weight_override: row.trust_weight_override ?? null,
+    created_at: row.created_at ?? "",
+    updated_at: row.updated_at ?? "",
+  };
 }
 
 function getEmailPrefix(user: SupabaseUser): string {
@@ -140,7 +177,7 @@ async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise
     return { profile, error: getProfileErrorMessage(error.message, error.code) };
   }
 
-  return { profile: data as Profile, message };
+  return { profile: mapProfileRowToProfile(data as ProfileRow), message };
 }
 
 async function insertProfileForUser(
@@ -188,7 +225,7 @@ async function insertProfileForUser(
   console.log("PHASE 3 STEP 15 profile created", { userId: user.id, username: finalUsername });
 
   return {
-    profile: data as Profile,
+    profile: mapProfileRowToProfile(data as ProfileRow),
   };
 }
 
@@ -225,22 +262,23 @@ export async function createProfile(
   }
 
   return {
-    profile: data as Profile,
+    profile: mapProfileRowToProfile(data as ProfileRow),
   };
 }
 
 export async function getProfile(userId: string): Promise<ProfileResult> {
+  // PHASE 3 STEP 18C
   const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
 
   if (error) {
     return {
       profile: null,
-      error: getProfileErrorMessage(error.message, error.code),
+      error: getProfileLoadErrorMessage(),
     };
   }
 
   return {
-    profile: (data as Profile | null) ?? null,
+    profile: data ? mapProfileRowToProfile(data as ProfileRow) : null,
   };
 }
 
@@ -260,12 +298,12 @@ export async function getProfileByUsername(username: string): Promise<ProfileRes
   if (error) {
     return {
       profile: null,
-      error: getProfileErrorMessage(error.message, error.code),
+      error: getProfileLoadErrorMessage(),
     };
   }
 
   return {
-    profile: (data as Profile | null) ?? null,
+    profile: data ? mapProfileRowToProfile(data as ProfileRow) : null,
   };
 }
 
@@ -355,6 +393,6 @@ export async function updateProfile(userId: string, updates: ProfileUpdates): Pr
   }
 
   return {
-    profile: data as Profile,
+    profile: mapProfileRowToProfile(data as ProfileRow),
   };
 }

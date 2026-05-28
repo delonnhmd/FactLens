@@ -28,6 +28,9 @@ export default function ProfileScreen() {
   const username = profile?.username ?? fallbackProfile.username;
   const createdAt = profile?.created_at ?? currentUser?.created_at;
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
+  // PHASE 3 STEP 18C
+  const visibleProfileError = profile ? "" : profileError;
+  const visibleActionError = profile ? "" : actionError;
 
   const handleSignOut = async () => {
     await signOut();
@@ -87,8 +90,8 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
-            {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+            {visibleProfileError ? <Text style={styles.errorText}>{visibleProfileError}</Text> : null}
+            {visibleActionError ? <Text style={styles.errorText}>{visibleActionError}</Text> : null}
             {actionMessage ? <Text style={styles.messageText}>{actionMessage}</Text> : null}
 
             {!profile ? (
