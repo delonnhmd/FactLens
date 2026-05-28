@@ -342,7 +342,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 10
   useEffect(() => {
     const expiredOpenClaims = claims.filter(
-      (claim) => claim.status === "OPEN" && new Date(claim.expiresAt).getTime() <= now.getTime(),
+      (claim) =>
+        (claim.status === "OPEN" || claim.status === "VOTING_CLOSED") &&
+        new Date(claim.voteAcceptUntil).getTime() <= now.getTime(),
     );
 
     if (expiredOpenClaims.length === 0) {
@@ -458,7 +460,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Voting closed. System verdict has been calculated.");
       }
 
-      const result = await voteOnRemoteClaim(claimId, currentUser.id, vote);
+      const result = await voteOnRemoteClaim(claimId, currentUser.id, vote, profile);
 
       if (result.error || !result.claim) {
         throw new Error(result.error ?? "We could not save your vote. Please try again.");

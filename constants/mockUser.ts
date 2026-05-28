@@ -9,4 +9,9 @@ export const mockUser: User = {
   verified: true,
   reputationScore: 100,
   joinedAt: "2026-05-26T00:00:00.000Z",
+  // PHASE 3 STEP 17
+  votesCast: 0,
+  accuracyRate: null,
+  trustTier: "new",
+  trustWeightOverride: null,
 };

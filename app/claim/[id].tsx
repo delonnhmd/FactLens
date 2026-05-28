@@ -82,6 +82,12 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
   };
 }
 
+// PHASE 3 STEP 17
+function formatPercent(value: number | null | undefined): string {
+  const normalized = value === null || value === undefined ? 0.5 : value > 1 ? value / 100 : value;
+  return `${Math.round(normalized * 100)}%`;
+}
+
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -444,6 +450,7 @@ export default function ClaimDetailScreen() {
   const verdictCalculatedText = claim.verdictCalculatedAt
     ? new Date(claim.verdictCalculatedAt).toLocaleString()
     : "Pending save";
+  const engineVerdict = verdictTitle ?? (claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   // PHASE 3 STEP 1
@@ -789,6 +796,54 @@ export default function ClaimDetailScreen() {
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
           <Text style={styles.date}>Voting closes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
           <Text style={styles.date}>Verdict locks {new Date(claim.expiresAt).toLocaleString()}</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Verification Engine</Text>
+          <View style={styles.engineGrid}>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Mode</Text>
+              <Text style={styles.engineValue}>{claim.mode === "test" ? "Test" : "Production"}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Current phase</Text>
+              <Text style={styles.engineValue}>{claim.currentPhase}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Vote count / minimum</Text>
+              <Text style={styles.engineValue}>
+                {totalVotes}/{claim.minVotesRequired}
+              </Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>AI confidence</Text>
+              <Text style={styles.engineValue}>{formatPercent(claim.aiCheck.confidence)}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Weighted community</Text>
+              <Text style={styles.engineValue}>{formatPercent(claim.weightedCommunityScore)}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Final score</Text>
+              <Text style={styles.engineValue}>{formatPercent(claim.finalScore)}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Early verdict</Text>
+              <Text style={styles.engineValue}>{claim.earlyVerdictFired ? "Fired" : "No"}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Phase 4 lock</Text>
+              <Text style={styles.engineValue}>{claim.phase4Locked ? "Locked" : "Open"}</Text>
+            </View>
+            <View style={styles.engineItem}>
+              <Text style={styles.engineLabel}>Suspicious activity</Text>
+              <Text style={styles.engineValue}>{claim.suspiciousActivity ? "Flagged" : "No"}</Text>
+            </View>
+            <View style={styles.engineItemWide}>
+              <Text style={styles.engineLabel}>Verdict</Text>
+              <Text style={styles.engineValue}>{engineVerdict}</Text>
+            </View>
+          </View>
         </View>
 
         {votingOpen ? (
@@ -1375,6 +1430,41 @@ const styles = StyleSheet.create({
   voteBar: {
     height: 6,
     borderRadius: 3,
+  },
+  // PHASE 3 STEP 17
+  engineGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  engineItem: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexBasis: "48%",
+    flexGrow: 1,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+  },
+  engineItemWide: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexBasis: "100%",
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+  },
+  engineLabel: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  engineValue: {
+    color: theme.colors.text,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
   },
   verdictTitle: {
     color: theme.colors.text,

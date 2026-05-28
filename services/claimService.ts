@@ -1,15 +1,19 @@
 // PHASE 3 STEP 3
 import { supabase } from "../lib/supabase";
+import { DEFAULT_VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
-import { getExpiresAt } from "./claimVoting";
+import { getExpiresAt, getVoteWindowClosesAt } from "./claimVoting";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import {
+  buildVerificationResponse,
   calculateClaimVerificationResult,
   getVerificationVerdictReason,
+  getVerdictPublishesAt,
   mapVerificationVerdictToStatus,
 } from "./verificationEngine";
 import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
+import type { SourceQuality, VerificationMode, VerificationVote } from "../types/verification";
 import type { User as AppUser } from "../types/user";
 import type { Profile } from "./profileService";
 
@@ -47,6 +51,10 @@ interface ClaimProfileRow {
   avatar_url: string | null;
   verified: boolean;
   reputation_score: number;
+  votes_cast?: number | null;
+  accuracy_rate?: number | null;
+  trust_tier?: string | null;
+  trust_weight_override?: number | null;
   created_at: string;
 }
 
@@ -75,10 +83,39 @@ export interface ClaimRow {
   verdict_reason: string | null;
   verdict_calculated_at: string | null;
   total_votes: number | null;
+  // PHASE 3 STEP 17
+  mode?: string | null;
+  current_phase?: number | null;
+  vote_accept_until?: string | null;
+  score_lock_at?: string | null;
+  published_at?: string | null;
+  phase4_locked?: boolean | null;
+  early_verdict_fired?: boolean | null;
+  suspicious_activity?: boolean | null;
+  weighted_community_score?: number | null;
+  final_score?: number | null;
+  min_votes_required?: number | null;
+  expected_participation?: number | null;
+  source_count?: number | null;
+  source_quality?: string | null;
+  red_flags?: string[] | null;
+  ai_summary?: string | null;
   created_at: string;
   expires_at: string;
   updated_at: string;
   profiles?: ClaimProfileRow | ClaimProfileRow[] | null;
+}
+
+interface VerificationVoteRow {
+  id: string;
+  user_id: string;
+  vote_type: string;
+  vote_value: number | null;
+  trust_weight: number | null;
+  accepted: boolean | null;
+  suspicious: boolean | null;
+  rejected_reason: string | null;
+  created_at: string;
 }
 
 export interface CreateClaimInput {
@@ -127,6 +164,10 @@ const CLAIM_SELECT = `
     avatar_url,
     verified,
     reputation_score,
+    votes_cast,
+    accuracy_rate,
+    trust_tier,
+    trust_weight_override,
     created_at
   )
 `;
@@ -174,6 +215,38 @@ function mapAiStatus(status: string | null): ClaimAiStatus {
   }
 
   return "PENDING";
+}
+
+// PHASE 3 STEP 17
+function mapVerificationMode(mode: string | null | undefined): VerificationMode {
+  return mode === "production" ? "production" : "test";
+}
+
+function mapSourceQuality(sourceQuality: string | null | undefined): SourceQuality {
+  if (
+    sourceQuality === "official" ||
+    sourceQuality === "mainstream" ||
+    sourceQuality === "blog" ||
+    sourceQuality === "unknown"
+  ) {
+    return sourceQuality;
+  }
+
+  return "unknown";
+}
+
+function mapTrustTier(tier: string | null | undefined): AppUser["trustTier"] {
+  if (
+    tier === "new" ||
+    tier === "regular" ||
+    tier === "verified" ||
+    tier === "high_accuracy" ||
+    tier === "expert"
+  ) {
+    return tier;
+  }
+
+  return "new";
 }
 
 // PHASE 3 STEP 9
@@ -235,6 +308,10 @@ function mapAuthor(row: ClaimRow): AppUser {
     verified: profile?.verified ?? false,
     reputationScore: profile?.reputation_score ?? 0,
     joinedAt: profile?.created_at ?? row.created_at,
+    votesCast: profile?.votes_cast ?? 0,
+    accuracyRate: profile?.accuracy_rate ?? null,
+    trustTier: mapTrustTier(profile?.trust_tier),
+    trustWeightOverride: profile?.trust_weight_override ?? null,
   };
 }
 
@@ -246,6 +323,27 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   const youtubeThumbnailUrl = videoUrl ? getYouTubeThumbnailUrl(videoUrl) : null;
   // PHASE 3 STEP 10
   const totalVotes = row.total_votes ?? (row.votes_true ?? 0) + (row.votes_fake ?? 0) + (row.votes_unsure ?? 0);
+  // PHASE 3 STEP 17
+  const mode = mapVerificationMode(row.mode);
+  const modeConfig = getVerificationModeConfig(mode);
+  const voteAcceptUntil = row.vote_accept_until ?? getVoteWindowClosesAt(row.created_at, mode);
+  const scoreLockAt = row.score_lock_at ?? row.expires_at ?? getVerdictPublishesAt(row.created_at, mode);
+  const aiCheck = {
+    status: mapAiStatus(row.ai_status),
+    confidence: row.ai_confidence,
+    reason: row.ai_reason,
+  };
+  const engineResult = calculateClaimVerificationResult(
+    {
+      id: row.id,
+      createdAt: row.created_at,
+      aiCheck,
+      votesTrue: row.votes_true ?? 0,
+      votesFake: row.votes_fake ?? 0,
+      votesUnsure: row.votes_unsure ?? 0,
+    },
+    mode,
+  );
 
   return {
     id: row.id,
@@ -261,11 +359,7 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
       videoPlatform,
       youtubeThumbnailUrl,
     },
-    aiCheck: {
-      status: mapAiStatus(row.ai_status),
-      confidence: row.ai_confidence,
-      reason: row.ai_reason,
-    },
+    aiCheck,
     category: row.category ?? "Other",
     votesTrue: row.votes_true ?? 0,
     votesFake: row.votes_fake ?? 0,
@@ -274,6 +368,22 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     totalVotes,
     verdictReason: row.verdict_reason ?? null,
     verdictCalculatedAt: row.verdict_calculated_at ?? null,
+    mode,
+    currentPhase: row.current_phase ?? engineResult.current_phase,
+    voteAcceptUntil,
+    scoreLockAt,
+    publishedAt: row.published_at ?? null,
+    phase4Locked: row.phase4_locked ?? engineResult.phase4_locked,
+    earlyVerdictFired: row.early_verdict_fired ?? engineResult.early_verdict_fired,
+    suspiciousActivity: row.suspicious_activity ?? engineResult.suspicious_activity,
+    weightedCommunityScore: row.weighted_community_score ?? engineResult.weighted_community_score,
+    finalScore: row.final_score ?? engineResult.final_score,
+    minVotesRequired: row.min_votes_required ?? modeConfig.minVotes,
+    expectedParticipation: row.expected_participation ?? modeConfig.expectedParticipation,
+    sourceCount: row.source_count ?? 0,
+    sourceQuality: mapSourceQuality(row.source_quality),
+    redFlags: row.red_flags ?? [],
+    aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status),
     createdAt: row.created_at,
     expiresAt: row.expires_at,
@@ -295,9 +405,14 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
 export function mapClaimToInsert(input: CreateClaimInput) {
   const createdAt = new Date().toISOString();
   const trimmedVideoUrl = input.videoUrl?.trim() || null;
+  // PHASE 3 STEP 17
+  const mode = DEFAULT_VERIFICATION_MODE;
+  const modeConfig = getVerificationModeConfig(mode);
+  const scoreLockAt = getExpiresAt(createdAt, mode);
 
   return {
     author_id: input.authorId,
+    created_at: createdAt,
     title: input.title.trim(),
     description: input.description.trim(),
     source_url: input.sourceUrl.trim(),
@@ -319,7 +434,59 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     report_count: 0,
     evidence_count: 0,
     is_flagged: false,
-    expires_at: getExpiresAt(createdAt),
+    mode,
+    current_phase: 0,
+    vote_accept_until: getVoteWindowClosesAt(createdAt, mode),
+    score_lock_at: scoreLockAt,
+    published_at: null,
+    phase4_locked: false,
+    early_verdict_fired: false,
+    suspicious_activity: false,
+    weighted_community_score: 0.5,
+    final_score: 0.5,
+    min_votes_required: modeConfig.minVotes,
+    expected_participation: modeConfig.expectedParticipation,
+    source_count: 0,
+    source_quality: "unknown",
+    red_flags: [],
+    ai_summary: null,
+    expires_at: scoreLockAt,
+  };
+}
+
+// PHASE 3 STEP 17
+function mapVoteRowToVerificationVote(row: VerificationVoteRow): VerificationVote {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    vote: row.vote_type === "TRUE" ? "TRUE" : row.vote_type === "FAKE" ? "FAKE" : "NOT_SURE",
+    createdAt: row.created_at,
+    voteValue: row.vote_value,
+    trustWeight: row.trust_weight ?? 1,
+    manualTrustWeight: row.trust_weight ?? 1,
+    accepted: row.accepted ?? true,
+    suspicious: row.suspicious ?? false,
+    rejectedReason: row.rejected_reason,
+  };
+}
+
+async function fetchVerificationVotesForClaim(claimId: string): Promise<{ votes: VerificationVote[]; error?: string }> {
+  const { data, error } = await supabase
+    .from("votes")
+    .select("id,user_id,vote_type,vote_value,trust_weight,accepted,suspicious,rejected_reason,created_at")
+    .eq("claim_id", claimId);
+
+  if (error) {
+    return {
+      votes: [],
+      error: getClaimServiceErrorMessage(error.message),
+    };
+  }
+
+  return {
+    votes: ((data ?? []) as VerificationVoteRow[])
+      .filter((vote) => vote.accepted ?? true)
+      .map(mapVoteRowToVerificationVote),
   };
 }
 
@@ -381,7 +548,7 @@ export async function searchClaimsPage(
   }
 
   if (filters.filter === "OPEN_VOTING") {
-    request = request.eq("status", "OPEN").gt("expires_at", new Date().toISOString());
+    request = request.eq("status", "OPEN").gt("vote_accept_until", new Date().toISOString());
   }
 
   if (
@@ -505,24 +672,57 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 
   const latestClaim = latestClaimResult.claim;
 
-  if (latestClaim.status !== "OPEN" || new Date(latestClaim.expiresAt).getTime() > Date.now()) {
+  if (
+    latestClaim.status === "COMMUNITY_TRUE" ||
+    latestClaim.status === "COMMUNITY_FAKE" ||
+    latestClaim.status === "NEEDS_MORE_EVIDENCE"
+  ) {
     return latestClaimResult;
   }
 
-  const verdict = calculateAutomaticVerdict(latestClaim);
+  const votesResult = await fetchVerificationVotesForClaim(claimId);
 
-  const { error } = await supabase.rpc("finalize_expired_claim", {
-    target_claim_id: claimId,
-  });
+  if (votesResult.error) {
+    return {
+      claim: latestClaim,
+      error: votesResult.error,
+    };
+  }
+
+  const verificationResponse = buildVerificationResponse(latestClaim, votesResult.votes);
+  const scoreLockPassed = new Date(latestClaim.scoreLockAt).getTime() <= Date.now();
+  const shouldPublish = scoreLockPassed || verificationResponse.early_verdict_fired;
+  const publishedStatus = mapVerificationVerdictToStatus(verificationResponse.verdict);
+  const verdictReason =
+    verificationResponse.vote_count < latestClaim.minVotesRequired
+      ? "Minimum vote requirement was not met."
+      : getVerificationVerdictReason(verificationResponse);
+  const updateRow = {
+    current_phase: verificationResponse.current_phase,
+    phase4_locked: verificationResponse.phase4_locked,
+    early_verdict_fired: verificationResponse.early_verdict_fired,
+    suspicious_activity: verificationResponse.suspicious_activity,
+    weighted_community_score: verificationResponse.weighted_community_score,
+    final_score: verificationResponse.final_score,
+    total_votes: verificationResponse.vote_count,
+    ...(verificationResponse.phase4_locked && !shouldPublish ? { status: "VOTING_CLOSED" } : {}),
+    ...(shouldPublish
+      ? {
+          status: publishedStatus,
+          verdict_reason: verdictReason,
+          verdict_calculated_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          phase4_locked: true,
+        }
+      : {}),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from("claims").update(updateRow).eq("id", claimId);
 
   if (error) {
     return {
-      claim: {
-        ...latestClaim,
-        status: verdict.status,
-        verdictReason: verdict.reason,
-        totalVotes: verdict.totalVotes,
-      },
+      claim: latestClaim,
       error: getClaimServiceErrorMessage(error.message, "save"),
     };
   }
@@ -534,11 +734,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
   }
 
   return {
-    claim: {
-      ...refreshedClaim.claim,
-      verdictReason: refreshedClaim.claim.verdictReason ?? verdict.reason,
-      totalVotes: refreshedClaim.claim.totalVotes ?? verdict.totalVotes,
-    },
+    claim: refreshedClaim.claim,
   };
 }
 
@@ -546,7 +742,11 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResult> {
   const finalizedClaims = await Promise.all(
     claims.map(async (claim) => {
-      if (claim.status !== "OPEN" || new Date(claim.expiresAt).getTime() > Date.now()) {
+      if (
+        claim.status === "COMMUNITY_TRUE" ||
+        claim.status === "COMMUNITY_FAKE" ||
+        claim.status === "NEEDS_MORE_EVIDENCE"
+      ) {
         return claim;
       }
 

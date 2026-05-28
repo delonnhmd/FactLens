@@ -3,6 +3,7 @@
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { generateFallbackUsername, normalizeUsername } from "../utils/username";
+import type { VerificationUserRole } from "../types/verification";
 
 export interface Profile {
   id: string;
@@ -11,6 +12,11 @@ export interface Profile {
   avatar_url: string | null;
   verified: boolean;
   reputation_score: number;
+  // PHASE 3 STEP 17
+  votes_cast: number;
+  accuracy_rate: number | null;
+  trust_tier: VerificationUserRole;
+  trust_weight_override: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -156,6 +162,10 @@ async function insertProfileForUser(
       display_name: displayName.trim() || finalUsername,
       verified: Boolean(user.email_confirmed_at),
       reputation_score: 0,
+      votes_cast: 0,
+      accuracy_rate: null,
+      trust_tier: "new",
+      trust_weight_override: null,
     })
     .select()
     .single();
@@ -199,6 +209,10 @@ export async function createProfile(
       id: userId,
       username: normalizedUsername,
       display_name: displayName?.trim() || normalizedUsername,
+      votes_cast: 0,
+      accuracy_rate: null,
+      trust_tier: "new",
+      trust_weight_override: null,
     })
     .select()
     .single();

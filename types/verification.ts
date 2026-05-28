@@ -6,6 +6,16 @@ export type VerificationVerdict = "true" | "fake" | "unsure" | "pending";
 export type SourceQuality = "official" | "mainstream" | "blog" | "unknown";
 export type VerificationUserRole = "new" | "regular" | "verified" | "high_accuracy" | "expert";
 
+// PHASE 3 STEP 17
+export interface VerificationTrustProfile {
+  verified?: boolean;
+  emailConfirmed?: boolean;
+  votesCast?: number;
+  accuracyRate?: number | null;
+  trustTier?: VerificationUserRole | null;
+  trustWeightOverride?: number | null;
+}
+
 export interface AiScanOutput {
   ai_confidence: number;
   source_count: number;
@@ -17,7 +27,7 @@ export interface AiScanOutput {
 export interface VerificationVote {
   id?: string;
   userId: string;
-  vote: Exclude<VoteOption, "NOT_SURE">;
+  vote: VoteOption;
   createdAt: string;
   userCreatedAt?: string | null;
   userRole?: VerificationUserRole;
@@ -28,6 +38,12 @@ export interface VerificationVote {
   ipAddress?: string | null;
   sessionId?: string | null;
   sameDirectionStreak?: number;
+  // PHASE 3 STEP 17
+  voteValue?: number | null;
+  trustWeight?: number | null;
+  accepted?: boolean;
+  suspicious?: boolean;
+  rejectedReason?: string | null;
 }
 
 export interface VerificationInput {

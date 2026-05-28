@@ -10,6 +10,36 @@ const openCreatedAt = hoursAgo(3);
 const trueClosedCreatedAt = hoursAgo(28);
 const evidenceClosedCreatedAt = hoursAgo(30);
 
+// PHASE 3 STEP 17
+const minutesAfter = (createdAt: string, minutes: number) =>
+  new Date(new Date(createdAt).getTime() + minutes * 60 * 1000).toISOString();
+
+const verificationFields = (createdAt: string) => ({
+  mode: "test" as const,
+  currentPhase: 1,
+  voteAcceptUntil: minutesAfter(createdAt, 10),
+  scoreLockAt: minutesAfter(createdAt, 15),
+  publishedAt: null,
+  phase4Locked: false,
+  earlyVerdictFired: false,
+  suspiciousActivity: false,
+  weightedCommunityScore: 0.5,
+  finalScore: 0.5,
+  minVotesRequired: 5,
+  expectedParticipation: 10,
+  sourceCount: 0,
+  sourceQuality: "unknown" as const,
+  redFlags: [],
+  aiSummary: null,
+});
+
+const userTrustFields = {
+  votesCast: 0,
+  accuracyRate: null,
+  trustTier: "new" as const,
+  trustWeightOverride: null,
+};
+
 // PHASE 2 STEP 2
 export const mockClaims: Claim[] = [
   {
@@ -40,6 +70,7 @@ export const mockClaims: Claim[] = [
     status: "OPEN",
     createdAt: openCreatedAt,
     expiresAt: getExpiresAt(openCreatedAt),
+    ...verificationFields(openCreatedAt),
     userVote: null,
     // PHASE 2 STEP 4
     evidence: [
@@ -70,6 +101,7 @@ export const mockClaims: Claim[] = [
       verified: true,
       reputationScore: 92,
       joinedAt: "2026-05-01T00:00:00.000Z",
+      ...userTrustFields,
     },
   },
   {
@@ -99,6 +131,7 @@ export const mockClaims: Claim[] = [
     status: "COMMUNITY_TRUE",
     createdAt: trueClosedCreatedAt,
     expiresAt: getExpiresAt(trueClosedCreatedAt),
+    ...verificationFields(trueClosedCreatedAt),
     userVote: null,
     evidence: [
       {
@@ -133,6 +166,7 @@ export const mockClaims: Claim[] = [
       verified: true,
       reputationScore: 118,
       joinedAt: "2026-04-12T00:00:00.000Z",
+      ...userTrustFields,
     },
   },
   {
@@ -162,6 +196,7 @@ export const mockClaims: Claim[] = [
     status: "NEEDS_MORE_EVIDENCE",
     createdAt: evidenceClosedCreatedAt,
     expiresAt: getExpiresAt(evidenceClosedCreatedAt),
+    ...verificationFields(evidenceClosedCreatedAt),
     userVote: null,
     evidence: [],
     // PHASE 3 STEP 5
@@ -181,6 +216,7 @@ export const mockClaims: Claim[] = [
       verified: false,
       reputationScore: 63,
       joinedAt: "2026-05-10T00:00:00.000Z",
+      ...userTrustFields,
     },
   },
 ];

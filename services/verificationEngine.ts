@@ -1,59 +1,46 @@
 // PHASE 3 VERIFICATION ENGINE
+// PHASE 3 STEP 17
+import {
+  DEFAULT_VERIFICATION_MODE,
+  VERIFICATION_AI_WEIGHT,
+  VERIFICATION_COMMUNITY_WEIGHT,
+  VERIFICATION_THRESHOLDS,
+  getVerificationModeConfig,
+  type VerificationModeConfig,
+} from "../constants/verificationConfig";
+import {
+  detectNewAccountVoteSurge,
+  detectSameIpSession,
+} from "./abuseDetectionService";
 import type {
   AiScanOutput,
   VerificationEngineResult,
   VerificationInput,
   VerificationMode,
+  VerificationTrustProfile,
   VerificationVerdict,
   VerificationVote,
 } from "../types/verification";
 import type { Claim } from "../types/claim";
 
-const SECOND_MS = 1000;
-const MINUTE_MS = 60 * SECOND_MS;
-const HOUR_MS = 60 * MINUTE_MS;
-
 const DEFAULT_AI_CONFIDENCE = 0.5;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-interface ModeConfig {
-  aiScanMs: number;
-  phase1EndMs: number;
-  phase2EndMs: number;
-  phase3EndMs: number;
-  phase4StartMs: number;
-  publishMs: number;
-  minVotes: number;
-  expectedParticipation: number;
-  suspiciousWindowMs: number;
-  testMode: boolean;
-}
-
-const MODE_CONFIG: Record<VerificationMode, ModeConfig> = {
-  production: {
-    aiScanMs: 15 * MINUTE_MS,
-    phase1EndMs: 6 * HOUR_MS,
-    phase2EndMs: 12 * HOUR_MS,
-    phase3EndMs: 20 * HOUR_MS,
-    phase4StartMs: 20 * HOUR_MS,
-    publishMs: 24 * HOUR_MS,
-    minVotes: 15,
-    expectedParticipation: 30,
-    suspiciousWindowMs: 30 * MINUTE_MS,
-    testMode: false,
-  },
-  test: {
-    aiScanMs: 1 * MINUTE_MS,
-    phase1EndMs: 3 * MINUTE_MS,
-    phase2EndMs: 7 * MINUTE_MS,
-    phase3EndMs: 10 * MINUTE_MS,
-    phase4StartMs: 10 * MINUTE_MS,
-    publishMs: 15 * MINUTE_MS,
-    minVotes: 5,
-    expectedParticipation: 10,
-    suspiciousWindowMs: 2 * MINUTE_MS,
-    testMode: true,
-  },
-};
+type VerificationClaimLike = Pick<Claim, "id" | "createdAt" | "aiCheck"> &
+  Partial<
+    Pick<
+      Claim,
+      | "mode"
+      | "voteAcceptUntil"
+      | "scoreLockAt"
+      | "publishedAt"
+      | "phase4Locked"
+      | "earlyVerdictFired"
+      | "suspiciousActivity"
+      | "minVotesRequired"
+      | "expectedParticipation"
+    >
+  >;
 
 function clampScore(value: number): number {
   if (!Number.isFinite(value)) {
@@ -75,11 +62,42 @@ function roundScore(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-export function getVerificationConfig(mode: VerificationMode): ModeConfig {
-  return MODE_CONFIG[mode];
+function getModeFromClaim(claim: Partial<Pick<Claim, "mode">>): VerificationMode {
+  return claim.mode ?? DEFAULT_VERIFICATION_MODE;
 }
 
-export function getVerificationPhase(submittedAt: string, mode: VerificationMode, now = new Date()): number {
+function getSubmittedAt(value: string | Pick<Claim, "createdAt">): string {
+  return typeof value === "string" ? value : value.createdAt;
+}
+
+export function getVerificationConfig(mode: VerificationMode = DEFAULT_VERIFICATION_MODE): VerificationModeConfig {
+  return getVerificationModeConfig(mode);
+}
+
+export function getMinVotesRequired(mode: VerificationMode = DEFAULT_VERIFICATION_MODE): number {
+  return getVerificationConfig(mode).minVotes;
+}
+
+export function getExpectedParticipation(mode: VerificationMode = DEFAULT_VERIFICATION_MODE): number {
+  return getVerificationConfig(mode).expectedParticipation;
+}
+
+export function getVerificationPhase(
+  claim: Pick<Claim, "createdAt"> & Partial<Pick<Claim, "mode">>,
+  now?: Date,
+): number;
+export function getVerificationPhase(submittedAt: string, mode?: VerificationMode, now?: Date): number;
+export function getVerificationPhase(
+  claimOrSubmittedAt: (Pick<Claim, "createdAt"> & Partial<Pick<Claim, "mode">>) | string,
+  modeOrNow: VerificationMode | Date = DEFAULT_VERIFICATION_MODE,
+  maybeNow = new Date(),
+): number {
+  const submittedAt = getSubmittedAt(claimOrSubmittedAt);
+  const mode =
+    typeof claimOrSubmittedAt === "string"
+      ? (modeOrNow instanceof Date ? DEFAULT_VERIFICATION_MODE : modeOrNow)
+      : getModeFromClaim(claimOrSubmittedAt);
+  const now = modeOrNow instanceof Date ? modeOrNow : maybeNow;
   const elapsedMs = now.getTime() - new Date(submittedAt).getTime();
   const config = getVerificationConfig(mode);
 
@@ -98,57 +116,87 @@ export function getVerificationPhase(submittedAt: string, mode: VerificationMode
   return 4;
 }
 
-export function getVotingClosesAt(submittedAt: string, mode: VerificationMode): string {
+export function getVotingClosesAt(submittedAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE): string {
   return new Date(new Date(submittedAt).getTime() + getVerificationConfig(mode).phase4StartMs).toISOString();
 }
 
-export function getVerdictPublishesAt(submittedAt: string, mode: VerificationMode): string {
+export function getVerdictPublishesAt(submittedAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE): string {
   return new Date(new Date(submittedAt).getTime() + getVerificationConfig(mode).publishMs).toISOString();
 }
 
-export function isPhase4Locked(submittedAt: string, mode: VerificationMode, now = new Date()): boolean {
+export function isPhase4Locked(submittedAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE, now = new Date()): boolean {
   return now.getTime() - new Date(submittedAt).getTime() >= getVerificationConfig(mode).phase4StartMs;
 }
 
-export function isVerdictPublished(submittedAt: string, mode: VerificationMode, now = new Date()): boolean {
+export function isVerdictPublished(submittedAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE, now = new Date()): boolean {
   return now.getTime() - new Date(submittedAt).getTime() >= getVerificationConfig(mode).publishMs;
 }
 
-export function canAcceptVerificationVote(submittedAt: string, mode: VerificationMode, now = new Date()): boolean {
+export function canAcceptVerificationVote(submittedAt: string, mode: VerificationMode = DEFAULT_VERIFICATION_MODE, now = new Date()): boolean {
   return now.getTime() - new Date(submittedAt).getTime() < getVerificationConfig(mode).phase4StartMs;
 }
 
-export function getTimeRemainingSeconds(submittedAt: string, mode: VerificationMode, now = new Date()): number {
+export function getTimeRemainingSeconds(
+  claim: Pick<Claim, "createdAt"> & Partial<Pick<Claim, "mode">>,
+  now?: Date,
+): number;
+export function getTimeRemainingSeconds(submittedAt: string, mode?: VerificationMode, now?: Date): number;
+export function getTimeRemainingSeconds(
+  claimOrSubmittedAt: (Pick<Claim, "createdAt"> & Partial<Pick<Claim, "mode">>) | string,
+  modeOrNow: VerificationMode | Date = DEFAULT_VERIFICATION_MODE,
+  maybeNow = new Date(),
+): number {
+  const submittedAt = getSubmittedAt(claimOrSubmittedAt);
+  const mode =
+    typeof claimOrSubmittedAt === "string"
+      ? (modeOrNow instanceof Date ? DEFAULT_VERIFICATION_MODE : modeOrNow)
+      : getModeFromClaim(claimOrSubmittedAt);
+  const now = modeOrNow instanceof Date ? modeOrNow : maybeNow;
   const publishAt = new Date(submittedAt).getTime() + getVerificationConfig(mode).publishMs;
-  return Math.max(0, Math.ceil((publishAt - now.getTime()) / SECOND_MS));
+  return Math.max(0, Math.ceil((publishAt - now.getTime()) / 1000));
 }
 
-export function getUserTrustWeight(vote: VerificationVote, mode: VerificationMode): number {
+export function getUserTrustWeight(
+  vote: VerificationVote | VerificationTrustProfile,
+  mode: VerificationMode = DEFAULT_VERIFICATION_MODE,
+): number {
+  const isVote = "userId" in vote;
+  const voteData = vote as VerificationVote;
+  const profileData = vote as VerificationTrustProfile;
+
   if (mode === "test") {
-    return vote.manualTrustWeight ?? 1;
+    return isVote ? voteData.manualTrustWeight ?? voteData.trustWeight ?? 1 : profileData.trustWeightOverride ?? 1;
   }
 
-  if ((vote.sameDirectionStreak ?? 0) >= 20) {
+  if (isVote && (voteData.sameDirectionStreak ?? 0) >= 20) {
     return 0.3;
   }
 
-  if (vote.manualTrustWeight !== null && vote.manualTrustWeight !== undefined) {
-    return vote.manualTrustWeight;
+  if (isVote && voteData.manualTrustWeight !== null && voteData.manualTrustWeight !== undefined) {
+    return voteData.manualTrustWeight;
   }
 
-  if ((vote.accuracyRate ?? 0) >= 0.85 || vote.userRole === "expert") {
+  if (!isVote && profileData.trustWeightOverride !== null && profileData.trustWeightOverride !== undefined) {
+    return profileData.trustWeightOverride;
+  }
+
+  const role = isVote ? voteData.userRole : profileData.trustTier;
+
+  if ((vote.accuracyRate ?? 0) >= 0.85 || role === "expert") {
     return 3;
   }
 
-  if ((vote.accuracyRate ?? 0) >= 0.7 || vote.userRole === "high_accuracy") {
+  if ((vote.accuracyRate ?? 0) >= 0.7 || role === "high_accuracy") {
     return 2;
   }
 
-  if (vote.emailConfirmed || vote.userRole === "verified") {
+  const verified = isVote ? voteData.emailConfirmed : profileData.verified;
+
+  if (verified || role === "verified") {
     return 1.5;
   }
 
-  if ((vote.votesCast ?? 0) < 10 || vote.userRole === "new") {
+  if ((vote.votesCast ?? 0) < 10 || role === "new") {
     return 0.5;
   }
 
@@ -195,7 +243,7 @@ function getRecentAccountVoteIds(votes: VerificationVote[], mode: VerificationMo
         return false;
       }
 
-      return now.getTime() - new Date(candidate.userCreatedAt).getTime() <= 24 * HOUR_MS;
+      return now.getTime() - new Date(candidate.userCreatedAt).getTime() <= DAY_MS;
     });
 
     if (recentAccountVotes.length / windowVotes.length >= 0.8) {
@@ -231,11 +279,11 @@ export function calculateWeightedCommunityScore(
     (totals, vote) => {
       const baseWeight = getUserTrustWeight(vote, mode);
       const trustWeight = adjustSessionWeights(acceptedVotes, baseWeight, vote);
-      const voteValue = vote.vote === "TRUE" ? 1 : 0;
+      const voteValue = vote.vote === "TRUE" ? 1 : vote.vote === "FAKE" ? 0 : null;
 
       return {
-        score: totals.score + voteValue * trustWeight,
-        weight: totals.weight + trustWeight,
+        score: totals.score + (voteValue === null ? 0 : voteValue * trustWeight),
+        weight: totals.weight + (voteValue === null ? 0 : trustWeight),
       };
     },
     { score: 0, weight: 0 },
@@ -248,6 +296,13 @@ export function calculateWeightedCommunityScore(
   };
 }
 
+export function calculateFinalScore(aiConfidence: number, weightedCommunityScore: number): number {
+  return clampScore(
+    normalizeAiConfidence(aiConfidence) * VERIFICATION_AI_WEIGHT +
+      clampScore(weightedCommunityScore) * VERIFICATION_COMMUNITY_WEIGHT,
+  );
+}
+
 function getVerdict(finalScore: number, voteCount: number, minVotes: number, publishReady: boolean): VerificationVerdict {
   if (!publishReady) {
     return "pending";
@@ -257,15 +312,23 @@ function getVerdict(finalScore: number, voteCount: number, minVotes: number, pub
     return "unsure";
   }
 
-  if (finalScore >= 0.65) {
+  if (finalScore >= VERIFICATION_THRESHOLDS.true) {
     return "true";
   }
 
-  if (finalScore <= 0.34) {
+  if (finalScore <= VERIFICATION_THRESHOLDS.fake) {
     return "fake";
   }
 
   return "unsure";
+}
+
+export function shouldAcceptVote(claim: VerificationClaimLike, now = new Date()): boolean {
+  if (claim.publishedAt) {
+    return false;
+  }
+
+  return canAcceptVerificationVote(claim.createdAt, getModeFromClaim(claim), now);
 }
 
 export function calculateVerificationResult(input: VerificationInput): VerificationEngineResult {
@@ -274,12 +337,12 @@ export function calculateVerificationResult(input: VerificationInput): Verificat
   const phase = getVerificationPhase(input.submittedAt, input.mode, now);
   const community = calculateWeightedCommunityScore(input.votes, input.mode, now);
   const aiConfidence = normalizeAiConfidence(input.aiScan?.ai_confidence);
-  const finalScore = clampScore(aiConfidence * 0.4 + community.score * 0.6);
+  const finalScore = calculateFinalScore(aiConfidence, community.score);
   const earlyVoteThreshold = Math.ceil((input.expectedParticipation ?? config.expectedParticipation) * 0.5);
   const earlyVerdictFired =
     phase === 2 &&
     community.voteCount >= earlyVoteThreshold &&
-    (finalScore >= 0.85 || finalScore <= 0.15);
+    (finalScore >= VERIFICATION_THRESHOLDS.earlyTrue || finalScore <= VERIFICATION_THRESHOLDS.earlyFake);
   const phase4Locked = isPhase4Locked(input.submittedAt, input.mode, now);
   const publishReady = earlyVerdictFired || isVerdictPublished(input.submittedAt, input.mode, now);
   const verdict = getVerdict(finalScore, community.voteCount, config.minVotes, publishReady);
@@ -296,7 +359,10 @@ export function calculateVerificationResult(input: VerificationInput): Verificat
     final_score: roundScore(finalScore),
     verdict,
     early_verdict_fired: earlyVerdictFired,
-    suspicious_activity: community.suspiciousActivity,
+    suspicious_activity:
+      community.suspiciousActivity ||
+      detectNewAccountVoteSurge(input.votes) ||
+      detectSameIpSession(input.votes),
     phase4_locked: phase4Locked,
   };
 }
@@ -356,6 +422,36 @@ export function calculateClaimVerificationResult(
     now,
     aiScan,
     votes: [...aggregateVotes, ...unsureVotes],
+  });
+}
+
+export function calculateVerdict(claim: VerificationClaimLike, votes: VerificationVote[], now = new Date()): VerificationVerdict {
+  return buildVerificationResponse(claim, votes, now).verdict;
+}
+
+export function shouldFireEarlyVerdict(claim: VerificationClaimLike, votes: VerificationVote[], now = new Date()): boolean {
+  return buildVerificationResponse(claim, votes, now).early_verdict_fired;
+}
+
+export function buildVerificationResponse(
+  claim: VerificationClaimLike,
+  votes: VerificationVote[],
+  now = new Date(),
+): VerificationEngineResult {
+  return calculateVerificationResult({
+    articleId: claim.id,
+    mode: getModeFromClaim(claim),
+    submittedAt: claim.createdAt,
+    now,
+    aiScan: {
+      ai_confidence: normalizeAiConfidence(claim.aiCheck.confidence),
+      source_count: 0,
+      source_quality: "unknown",
+      red_flags: [],
+      summary: claim.aiCheck.reason ?? "AI scan pending.",
+    },
+    votes,
+    expectedParticipation: claim.expectedParticipation ?? getExpectedParticipation(getModeFromClaim(claim)),
   });
 }
 

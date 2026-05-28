@@ -50,6 +50,12 @@ function getRelativeTime(createdAt: string): string {
   return `${diffDays}d ago`;
 }
 
+// PHASE 3 STEP 17
+function formatPercent(value: number | null | undefined): string {
+  const normalized = value === null || value === undefined ? 0.5 : value > 1 ? value / 100 : value;
+  return `${Math.round(normalized * 100)}%`;
+}
+
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
@@ -94,6 +100,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
+  const currentVerdict = verdictTitle ?? (claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
 
   // PHASE 3 STEP 6
   const handleSubmitReport = useCallback(async () => {
@@ -228,6 +235,26 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       <View style={styles.windowRow}>
         <Text style={[styles.windowText, !votingOpen && styles.closedText]}>
           {votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed"}
+        </Text>
+      </View>
+
+      <View style={styles.verificationPanel}>
+        <View style={styles.verificationRow}>
+          <Text style={styles.verificationText}>Mode: {claim.mode === "test" ? "Test" : "Production"}</Text>
+          <Text style={styles.verificationText}>Phase {claim.currentPhase}</Text>
+        </View>
+        <Text style={styles.verificationText}>Vote closes: {new Date(claim.voteAcceptUntil).toLocaleTimeString()}</Text>
+        <Text style={styles.verificationText}>Score locks: {new Date(claim.scoreLockAt).toLocaleTimeString()}</Text>
+        <View style={styles.verificationRow}>
+          <Text style={styles.verificationText}>AI {formatPercent(claim.aiCheck.confidence)}</Text>
+          <Text style={styles.verificationText}>Community {formatPercent(claim.weightedCommunityScore)}</Text>
+        </View>
+        <View style={styles.verificationRow}>
+          <Text style={styles.verificationStrong}>Final {formatPercent(claim.finalScore)}</Text>
+          <Text style={styles.verificationStrong}>{currentVerdict}</Text>
+        </View>
+        <Text style={styles.verificationText}>
+          Min votes: {finalTotalVotes}/{claim.minVotesRequired}
         </Text>
       </View>
 
@@ -656,6 +683,33 @@ const styles = StyleSheet.create({
   },
   closedText: {
     color: theme.colors.subtext,
+  },
+  // PHASE 3 STEP 17
+  verificationPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  verificationRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.md,
+    justifyContent: "space-between",
+  },
+  verificationText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+  },
+  verificationStrong: {
+    color: theme.colors.text,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   verdictPanel: {
     backgroundColor: theme.colors.card,

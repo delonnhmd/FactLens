@@ -1,16 +1,17 @@
 // PHASE 2 STEP 3
 import type { Claim, ClaimStatus } from "../types/claim";
+import { DEFAULT_VERIFICATION_MODE } from "../constants/verificationConfig";
 import type { VerificationMode } from "../types/verification";
 import {
   calculateClaimVerificationResult,
   canAcceptVerificationVote,
   getVerdictPublishesAt,
+  getVerificationPhase,
   getVerificationVerdictReason,
   getVotingClosesAt,
+  isPhase4Locked,
   mapVerificationVerdictToStatus,
 } from "./verificationEngine";
-
-const DEFAULT_VERIFICATION_MODE: VerificationMode = "test";
 
 export type AutomaticVerdictStatus = "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE";
 
@@ -112,5 +113,7 @@ export function applyCurrentClaimStatus(claim: Claim, now = new Date()): Claim {
   return {
     ...claim,
     status: getCurrentClaimStatus(claim, now),
+    currentPhase: getVerificationPhase(claim, now),
+    phase4Locked: claim.phase4Locked || isPhase4Locked(claim.createdAt, claim.mode, now),
   };
 }

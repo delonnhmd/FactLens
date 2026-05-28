@@ -1,5 +1,6 @@
 // PHASE 1 STEP 1
 import type { User } from "./user";
+import type { SourceQuality, VerificationMode } from "./verification";
 
 // PHASE 2 STEP 3
 export type ClaimStatus =
@@ -10,6 +11,21 @@ export type ClaimStatus =
   | "NEEDS_MORE_EVIDENCE";
 
 export type VoteOption = "TRUE" | "FAKE" | "NOT_SURE";
+
+// PHASE 3 STEP 17
+export interface ClaimVote {
+  id: string;
+  claimId: string;
+  userId: string;
+  vote: VoteOption;
+  voteValue: number | null;
+  trustWeight: number;
+  accepted: boolean;
+  suspicious: boolean;
+  rejectedReason: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 // PHASE 2 STEP 4
 export type EvidenceType = "SUPPORTS_TRUE" | "SUPPORTS_FAKE" | "ADDS_CONTEXT" | "UNCLEAR";
@@ -82,6 +98,23 @@ export interface Claim {
   totalVotes: number;
   verdictReason: string | null;
   verdictCalculatedAt: string | null;
+  // PHASE 3 STEP 17
+  mode: VerificationMode;
+  currentPhase: number;
+  voteAcceptUntil: string;
+  scoreLockAt: string;
+  publishedAt: string | null;
+  phase4Locked: boolean;
+  earlyVerdictFired: boolean;
+  suspiciousActivity: boolean;
+  weightedCommunityScore: number;
+  finalScore: number;
+  minVotesRequired: number;
+  expectedParticipation: number;
+  sourceCount: number;
+  sourceQuality: SourceQuality;
+  redFlags: string[];
+  aiSummary: string | null;
   status: ClaimStatus;
   createdAt: string;
   expiresAt: string;
