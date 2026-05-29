@@ -24,6 +24,7 @@ import {
   recalculateVoteCounts as recalculateRemoteVoteCounts,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
+import { getVoteAcceptUntil } from "../utils/verificationTiming";
 import {
   addEvidence as addRemoteEvidence,
   fetchEvidenceForClaim as fetchRemoteEvidenceForClaim,
@@ -405,7 +406,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     const expiredOpenClaims = claims.filter(
       (claim) =>
         (claim.status === "OPEN" || claim.status === "VOTING_CLOSED") &&
-        new Date(claim.voteAcceptUntil).getTime() <= now.getTime(),
+        // PHASE 3 STEP 22
+        new Date(getVoteAcceptUntil(claim)).getTime() <= now.getTime(),
     );
 
     if (expiredOpenClaims.length === 0) {
@@ -544,6 +546,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Please verify your email to vote.");
       }
 
+      // PHASE 3 STEP 22
+      if (!profile) {
+        throw new Error("Profile missing.");
+      }
+
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);
       const cachedUserVote = userVotesByClaimId[claimId] ?? existingClaim?.userVote ?? null;
 
@@ -600,7 +607,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Voting is closed.");
       }
 
-      if (refreshedClaim.claim && new Date(refreshedClaim.claim.voteAcceptUntil).getTime() <= Date.now()) {
+      if (refreshedClaim.claim && new Date(getVoteAcceptUntil(refreshedClaim.claim)).getTime() <= Date.now()) {
         // PHASE 3 STEP 20
         throw new Error("Voting is closed. Final score is being locked.");
       }

@@ -41,18 +41,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 13
   // PHASE 3 STEP 15
   // PHASE 3 STEP 18C
+  // PHASE 3 STEP 22
   const loadProfile = useCallback(async (user: SupabaseUser): Promise<AuthActionResult> => {
     try {
       console.log("[auth] current user id:", user.id);
+      console.log("[auth] email confirmed:", Boolean(user.email_confirmed_at));
 
       const existingProfile = await getProfile(user.id);
       console.log("[profile] loaded by id:", existingProfile.profile);
+      console.log("[profile] profile verified:", existingProfile.profile?.verified);
 
       if (existingProfile.profile) {
-        setProfile(existingProfile.profile);
-        setProfileError(null);
-        console.log("[profile] setting profile state:", existingProfile.profile.id);
-        return {};
+        const profileResult =
+          user.email_confirmed_at && !existingProfile.profile.verified
+            ? await ensureProfileForUser(user)
+            : existingProfile;
+        const nextProfile = profileResult.profile
+          ? {
+              ...profileResult.profile,
+              verified: profileResult.profile.verified || Boolean(user.email_confirmed_at),
+            }
+          : null;
+
+        setProfile(nextProfile);
+        setProfileError(profileResult.error ?? null);
+        console.log("[profile] setting profile state:", nextProfile?.id);
+
+        if (profileResult.error) {
+          return { error: profileResult.error };
+        }
+
+        return profileResult.message ? { message: profileResult.message } : {};
       }
 
       if (existingProfile.error) {
@@ -62,10 +81,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const result = await ensureProfileForUser(user);
+      const nextProfile = result.profile
+        ? {
+            ...result.profile,
+            verified: result.profile.verified || Boolean(user.email_confirmed_at),
+          }
+        : null;
 
-      setProfile(result.profile);
+      setProfile(nextProfile);
       setProfileError(result.error ?? null);
-      console.log("[profile] setting profile state:", result.profile?.id);
+      console.log("[profile] setting profile state:", nextProfile?.id);
 
       if (result.error) {
         return { error: result.error };
@@ -274,7 +299,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileError,
       session,
       isAuthenticated: !!session,
-      isVerified: !!currentUser?.email_confirmed_at,
+      // PHASE 3 STEP 22
+      isVerified: Boolean(currentUser?.email_confirmed_at),
       loading,
       signUp,
       signIn,

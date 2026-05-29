@@ -3,8 +3,11 @@ import type { Claim, ClaimStatus } from "../types/claim";
 import { DEFAULT_VERIFICATION_MODE } from "../constants/verificationConfig";
 import type { VerificationMode } from "../types/verification";
 import {
+  getScoreLockAt,
+  getVoteAcceptUntil,
+} from "../utils/verificationTiming";
+import {
   calculateClaimVerificationResult,
-  canAcceptVerificationVote,
   getVerdictPublishesAt,
   getVerificationPhase,
   getVerificationVerdictReason,
@@ -34,15 +37,13 @@ export function getVoteWindowClosesAt(createdAt: string, mode: VerificationMode 
 }
 
 export function isVotingOpen(
-  claim: Pick<Claim, "expiresAt"> & Partial<Pick<Claim, "createdAt">>,
+  // PHASE 3 STEP 22
+  claim: Pick<Claim, "expiresAt"> &
+    Partial<Pick<Claim, "createdAt" | "mode" | "voteAcceptUntil">>,
   now = new Date(),
   mode: VerificationMode = DEFAULT_VERIFICATION_MODE,
 ): boolean {
-  if (claim.createdAt) {
-    return canAcceptVerificationVote(claim.createdAt, mode, now);
-  }
-
-  return new Date(claim.expiresAt).getTime() > now.getTime();
+  return new Date(getVoteAcceptUntil({ ...claim, mode: claim.mode ?? mode })).getTime() > now.getTime();
 }
 
 export function getTimeRemaining(expiresAt: string, now = new Date()): string {
@@ -86,7 +87,9 @@ export function calculateAutomaticVerdict(
 }
 
 export function canUserVote(
-  claim: Pick<Claim, "expiresAt" | "userVote"> & Partial<Pick<Claim, "createdAt">>,
+  // PHASE 3 STEP 22
+  claim: Pick<Claim, "expiresAt" | "userVote"> &
+    Partial<Pick<Claim, "createdAt" | "mode" | "voteAcceptUntil">>,
   now = new Date(),
 ): boolean {
   return isVotingOpen(claim, now) && !claim.userVote;
@@ -102,7 +105,8 @@ export function getCurrentClaimStatus(claim: Claim, now = new Date()): ClaimStat
     return "OPEN";
   }
 
-  if (new Date(claim.expiresAt).getTime() > now.getTime()) {
+  // PHASE 3 STEP 22
+  if (new Date(getScoreLockAt(claim)).getTime() > now.getTime()) {
     return "VOTING_CLOSED";
   }
 

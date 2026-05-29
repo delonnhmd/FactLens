@@ -11,8 +11,9 @@ import { VoteButtons, getVoteOptionLabel } from "../../components/VoteButtons";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { reportReasons } from "../../constants/reportReasons";
-import { calculateAutomaticVerdict, getTimeRemaining, getVoteWindowClosesAt, isVotingOpen } from "../../services/claimVoting";
+import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { getSourceQuality, type SourceQuality } from "../../services/sourceQuality";
+import { getScoreLockAt, getVoteAcceptUntil } from "../../utils/verificationTiming";
 import {
   subscribeToClaimById,
   subscribeToEvidenceForClaim,
@@ -92,7 +93,7 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   // PHASE 2 STEP 9
-  const { currentUser, isAuthenticated, isVerified } = useAuth();
+  const { currentUser, isAuthenticated, isVerified, profile } = useAuth();
   // PHASE 2 STEP 3
   const {
     getClaimById,
@@ -441,8 +442,11 @@ export default function ClaimDetailScreen() {
   const currentVoteTotal = claim.votesTrue + claim.votesFake + claim.votesUnsure;
   const totalVotes = claim.verdictCalculatedAt ? claim.totalVotes : currentVoteTotal;
   const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
-  const voteWindowClosesAt = getVoteWindowClosesAt(claim.createdAt);
-  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
+  // PHASE 3 STEP 22
+  const voteWindowClosesAt = getVoteAcceptUntil(claim);
+  const scoreLockAt = getScoreLockAt(claim);
+  // PHASE 3 STEP 22
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || !profile || Boolean(claim.userVote);
   const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
   // PHASE 3 STEP 10
   const verdictTitle =
@@ -476,6 +480,8 @@ export default function ClaimDetailScreen() {
       ? "Please log in to vote."
         : !isVerified
           ? "Please verify your email to vote."
+        : !profile
+          ? "Profile missing."
         : claim.userVote
           ? "You already voted on this post."
           : "Choose one option before voting closes.";
@@ -800,7 +806,7 @@ export default function ClaimDetailScreen() {
           </View>
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
           <Text style={styles.date}>Voting closes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
-          <Text style={styles.date}>Verdict locks {new Date(claim.expiresAt).toLocaleString()}</Text>
+          <Text style={styles.date}>Verdict locks {new Date(scoreLockAt).toLocaleString()}</Text>
         </View>
 
         <View style={styles.card}>

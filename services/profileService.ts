@@ -1,5 +1,6 @@
 // PHASE 3 STEP 2
 // PHASE 3 STEP 15
+// PHASE 3 STEP 22
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { generateFallbackUsername, normalizeUsername } from "../utils/username";
@@ -155,6 +156,7 @@ async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise
     }
   }
 
+  // PHASE 3 STEP 22
   if (user.email_confirmed_at && !profile.verified) {
     updates.verified = true;
   }
@@ -197,6 +199,7 @@ async function insertProfileForUser(
       id: user.id,
       username: finalUsername,
       display_name: displayName.trim() || finalUsername,
+      // PHASE 3 STEP 22
       verified: Boolean(user.email_confirmed_at),
       reputation_score: 0,
       votes_cast: 0,

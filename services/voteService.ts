@@ -4,6 +4,7 @@
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getUserTrustWeight } from "./verificationEngine";
+import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
 import type { Profile } from "./profileService";
 
@@ -165,7 +166,8 @@ function getVoteErrorMessage(message: string): string {
     return ALREADY_VOTED_MESSAGE;
   }
 
-  return "We could not save your vote. Please try again.";
+  // PHASE 3 STEP 22
+  return message || "We could not save your vote. Please try again.";
 }
 
 function logVoteSupabaseError({
@@ -193,7 +195,8 @@ function logVoteSupabaseError({
 }
 
 function hasVoteWindowClosed(claim: Claim): boolean {
-  return new Date(claim.voteAcceptUntil).getTime() <= Date.now();
+  // PHASE 3 STEP 22
+  return new Date(getVoteAcceptUntil(claim)).getTime() <= Date.now();
 }
 
 function applyVoteTotalsToClaim(claim: Claim, totals: VoteTotals): Claim {
@@ -440,6 +443,13 @@ export async function voteOnClaim(
     };
   }
 
+  // PHASE 3 STEP 22
+  const voteAcceptUntil = getVoteAcceptUntil(claimResult.claim);
+  const scoreLockAt = getScoreLockAt(claimResult.claim);
+  const canAcceptVote = new Date(voteAcceptUntil).getTime() > Date.now();
+  console.log("[vote] voteAcceptUntil:", voteAcceptUntil);
+  console.log("[vote] canAcceptVote:", canAcceptVote);
+
   if (
     claimResult.claim.publishedAt ||
     claimResult.claim.phase4Locked ||
@@ -462,14 +472,14 @@ export async function voteOnClaim(
 
   if (hasVoteWindowClosed(claimResult.claim)) {
     const finalizedClaim =
-      new Date(claimResult.claim.scoreLockAt).getTime() <= Date.now()
+      new Date(scoreLockAt).getTime() <= Date.now()
         ? await finalizeExpiredClaim(claimId)
         : { claim: claimResult.claim };
 
     return {
       claim: finalizedClaim.claim ?? claimResult.claim,
       error:
-        new Date(claimResult.claim.scoreLockAt).getTime() <= Date.now()
+        new Date(scoreLockAt).getTime() <= Date.now()
           ? "This claim is read-only."
           : "Voting is closed. Final score is being locked.",
     };

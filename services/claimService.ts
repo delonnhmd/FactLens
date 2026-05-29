@@ -2,14 +2,18 @@
 import { supabase } from "../lib/supabase";
 import { DEFAULT_VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
-import { getExpiresAt, getVoteWindowClosesAt } from "./claimVoting";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
+import {
+  createProductionModeTiming,
+  createTestModeTiming,
+  getScoreLockAt,
+  getVoteAcceptUntil,
+} from "../utils/verificationTiming";
 import {
   buildVerificationResponse,
   calculateClaimVerificationResult,
   getVerificationVerdictReason,
-  getVerdictPublishesAt,
   mapVerificationVerdictToStatus,
 } from "./verificationEngine";
 import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
@@ -326,8 +330,9 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   // PHASE 3 STEP 17
   const mode = mapVerificationMode(row.mode);
   const modeConfig = getVerificationModeConfig(mode);
-  const voteAcceptUntil = row.vote_accept_until ?? getVoteWindowClosesAt(row.created_at, mode);
-  const scoreLockAt = row.score_lock_at ?? row.expires_at ?? getVerdictPublishesAt(row.created_at, mode);
+  // PHASE 3 STEP 22
+  const voteAcceptUntil = getVoteAcceptUntil(row);
+  const scoreLockAt = getScoreLockAt(row);
   const aiCheck = {
     status: mapAiStatus(row.ai_status),
     confidence: row.ai_confidence,
@@ -386,7 +391,8 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status),
     createdAt: row.created_at,
-    expiresAt: row.expires_at,
+    // PHASE 3 STEP 22
+    expiresAt: scoreLockAt,
     userVote: null,
     evidence: [],
     // PHASE 3 STEP 5
@@ -403,16 +409,16 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
 }
 
 export function mapClaimToInsert(input: CreateClaimInput) {
-  const createdAt = new Date().toISOString();
   const trimmedVideoUrl = input.videoUrl?.trim() || null;
   // PHASE 3 STEP 17
+  // PHASE 3 STEP 22
   const mode = DEFAULT_VERIFICATION_MODE;
-  const modeConfig = getVerificationModeConfig(mode);
-  const scoreLockAt = getExpiresAt(createdAt, mode);
+  const timing =
+    mode === "production" ? createProductionModeTiming() : createTestModeTiming();
 
   return {
     author_id: input.authorId,
-    created_at: createdAt,
+    created_at: timing.createdAt,
     title: input.title.trim(),
     description: input.description.trim(),
     source_url: input.sourceUrl.trim(),
@@ -434,23 +440,23 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     report_count: 0,
     evidence_count: 0,
     is_flagged: false,
-    mode,
+    mode: timing.mode,
     current_phase: 0,
-    vote_accept_until: getVoteWindowClosesAt(createdAt, mode),
-    score_lock_at: scoreLockAt,
+    vote_accept_until: timing.voteAcceptUntil,
+    score_lock_at: timing.scoreLockAt,
     published_at: null,
     phase4_locked: false,
     early_verdict_fired: false,
     suspicious_activity: false,
     weighted_community_score: 0.5,
     final_score: 0.5,
-    min_votes_required: modeConfig.minVotes,
-    expected_participation: modeConfig.expectedParticipation,
+    min_votes_required: timing.minVotesRequired,
+    expected_participation: timing.expectedParticipation,
     source_count: 0,
     source_quality: "unknown",
     red_flags: [],
     ai_summary: null,
-    expires_at: scoreLockAt,
+    expires_at: timing.expiresAt,
   };
 }
 

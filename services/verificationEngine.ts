@@ -12,6 +12,7 @@ import {
   detectNewAccountVoteSurge,
   detectSameIpSession,
 } from "./abuseDetectionService";
+import { getVoteAcceptUntil } from "../utils/verificationTiming";
 import type {
   AiScanOutput,
   VerificationEngineResult,
@@ -328,7 +329,8 @@ export function shouldAcceptVote(claim: VerificationClaimLike, now = new Date())
     return false;
   }
 
-  return canAcceptVerificationVote(claim.createdAt, getModeFromClaim(claim), now);
+  // PHASE 3 STEP 22
+  return new Date(getVoteAcceptUntil(claim)).getTime() > now.getTime();
 }
 
 export function calculateVerificationResult(input: VerificationInput): VerificationEngineResult {
