@@ -65,7 +65,7 @@ interface ClaimsContextValue {
   liveUpdatesEnabled: boolean;
   error: string | null;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
-  voteOnClaim: (claimId: string, vote: VoteOption) => Promise<void>;
+  voteOnClaim: (claimId: string, vote: VoteOption) => Promise<string | void>;
   // PHASE 3 STEP 5
   fetchEvidenceForClaim: (claimId: string) => Promise<Evidence[]>;
   addEvidence: (claimId: string, evidenceInput: EvidenceInput) => Promise<Evidence[]>;
@@ -474,6 +474,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error(result.error ?? "We could not save your vote. Please try again.");
       }
 
+      // PHASE 3 STEP 20D
+      return result.message ?? "Vote saved.";
     },
     [currentClaims, currentUser, profile],
   );

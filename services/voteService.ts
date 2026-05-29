@@ -1,31 +1,26 @@
 // PHASE 3 STEP 4
+// PHASE 3 STEP 20D
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
-import {
-  buildVerificationResponse,
-  getUserTrustWeight,
-  getVerificationVerdictReason,
-  mapVerificationVerdictToStatus,
-} from "./verificationEngine";
+import { getUserTrustWeight } from "./verificationEngine";
 import type { Claim, VoteOption } from "../types/claim";
-import type { VerificationVote } from "../types/verification";
 import type { Profile } from "./profileService";
 
 export type VoteType = "TRUE" | "FAKE" | "UNSURE";
+type VoteTypeInput = VoteOption | VoteType | string;
 
 export interface VoteRow {
-  id: string;
-  claim_id: string;
+  id?: string;
+  claim_id?: string;
   user_id: string;
-  vote_type: VoteType;
-  // PHASE 3 STEP 17
+  vote_type: VoteType | string;
   vote_value: number | null;
   trust_weight: number | null;
   accepted: boolean | null;
   suspicious: boolean | null;
   rejected_reason: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface VoteRowsResult {
@@ -42,56 +37,104 @@ interface ClaimVoteResult {
   claim: Claim | null;
   error?: string;
   message?: string;
+  ok?: boolean;
+  alreadyVoted?: boolean;
+  countRefreshFailed?: boolean;
 }
 
-function toDbVoteType(vote: VoteOption): VoteType {
-  return vote === "NOT_SURE" ? "UNSURE" : vote;
+interface VoteTotals {
+  votesTrue: number;
+  votesFake: number;
+  votesUnsure: number;
+  totalVotes: number;
+  weightedCommunityScore: number;
+  finalScore: number;
 }
 
-function toAppVoteOption(vote: VoteType | string | null): VoteOption | null {
-  if (vote === "TRUE" || vote === "FAKE") {
-    return vote;
+export function normalizeVoteType(voteType: VoteTypeInput): VoteType {
+  const normalized = String(voteType)
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+
+  if (normalized === "TRUE") {
+    return "TRUE";
   }
 
-  if (vote === "UNSURE") {
-    return "NOT_SURE";
+  if (normalized === "FAKE") {
+    return "FAKE";
+  }
+
+  if (normalized === "UNSURE" || normalized === "NOT_SURE") {
+    return "UNSURE";
+  }
+
+  throw new Error("Invalid vote type.");
+}
+
+function toAppVoteOption(voteType: VoteTypeInput | null | undefined): VoteOption | null {
+  if (!voteType) {
+    return null;
+  }
+
+  try {
+    const normalizedVoteType = normalizeVoteType(voteType);
+    return normalizedVoteType === "UNSURE" ? "NOT_SURE" : normalizedVoteType;
+  } catch {
+    return null;
+  }
+}
+
+export function getVoteValue(normalizedVoteType: VoteType): number | null {
+  if (normalizedVoteType === "TRUE") {
+    return 1.0;
+  }
+
+  if (normalizedVoteType === "FAKE") {
+    return 0.0;
   }
 
   return null;
 }
 
-// PHASE 3 STEP 17
-function getVoteValue(vote: VoteOption): number | null {
-  if (vote === "TRUE") {
-    return 1;
+function parseNumber(value: number | string | null | undefined, fallback: number): number {
+  if (value === null || value === undefined) {
+    return fallback;
   }
 
-  if (vote === "FAKE") {
-    return 0;
-  }
-
-  return null;
+  const parsedValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : fallback;
 }
 
-function mapVoteRowToVerificationVote(row: VoteRow): VerificationVote {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    vote: toAppVoteOption(row.vote_type) ?? "NOT_SURE",
-    createdAt: row.created_at,
-    voteValue: row.vote_value,
-    trustWeight: row.trust_weight ?? 1,
-    manualTrustWeight: row.trust_weight ?? 1,
-    accepted: row.accepted ?? true,
-    suspicious: row.suspicious ?? false,
-    rejectedReason: row.rejected_reason,
-  };
+function normalizeAiConfidence(aiConfidence: number | null | undefined): number {
+  const parsedConfidence = parseNumber(aiConfidence, 0.5);
+  const normalizedConfidence = parsedConfidence > 1 ? parsedConfidence / 100 : parsedConfidence;
+
+  return Math.min(1, Math.max(0, normalizedConfidence));
+}
+
+function roundScore(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function getEffectiveVoteValue(vote: VoteRow): number | null {
+  const normalizedVoteType = normalizeVoteType(vote.vote_type);
+
+  if (vote.vote_value !== null && vote.vote_value !== undefined) {
+    return parseNumber(vote.vote_value, getVoteValue(normalizedVoteType) ?? 0);
+  }
+
+  return getVoteValue(normalizedVoteType);
+}
+
+function getEffectiveTrustWeight(vote: Pick<VoteRow, "trust_weight">): number {
+  const trustWeight = parseNumber(vote.trust_weight, 1);
+  return trustWeight > 0 ? trustWeight : 1;
 }
 
 function getProfileTrustWeight(profile: Profile | null | undefined, mode: Claim["mode"]): number {
-  // PHASE 3 STEP 20
-  if (mode === "test" && !profile) {
-    return 1;
+  if (mode === "test") {
+    return 1.0;
   }
 
   return getUserTrustWeight(
@@ -120,7 +163,6 @@ function getVoteErrorMessage(message: string): string {
   return "We could not save your vote. Please try again.";
 }
 
-// PHASE 3 STEP 20
 function logVoteSupabaseError({
   claimId,
   userId,
@@ -149,6 +191,68 @@ function hasVoteWindowClosed(claim: Claim): boolean {
   return new Date(claim.voteAcceptUntil).getTime() <= Date.now();
 }
 
+function applyVoteTotalsToClaim(claim: Claim, totals: VoteTotals): Claim {
+  return {
+    ...claim,
+    votesTrue: totals.votesTrue,
+    votesFake: totals.votesFake,
+    votesUnsure: totals.votesUnsure,
+    totalVotes: totals.totalVotes,
+    weightedCommunityScore: totals.weightedCommunityScore,
+    finalScore: totals.finalScore,
+  };
+}
+
+function calculateVoteTotals(claim: Claim, votes: VoteRow[]): VoteTotals {
+  let votesTrue = 0;
+  let votesFake = 0;
+  let votesUnsure = 0;
+  let weightedNumerator = 0;
+  let weightedDenominator = 0;
+
+  votes.forEach((vote) => {
+    const normalizedVoteType = normalizeVoteType(vote.vote_type);
+
+    if (normalizedVoteType === "TRUE") {
+      votesTrue += 1;
+    }
+
+    if (normalizedVoteType === "FAKE") {
+      votesFake += 1;
+    }
+
+    if (normalizedVoteType === "UNSURE") {
+      votesUnsure += 1;
+      return;
+    }
+
+    const voteValue = getEffectiveVoteValue(vote);
+
+    if (voteValue === null) {
+      return;
+    }
+
+    const trustWeight = getEffectiveTrustWeight(vote);
+    weightedNumerator += voteValue * trustWeight;
+    weightedDenominator += trustWeight;
+  });
+
+  const totalVotes = votesTrue + votesFake + votesUnsure;
+  const weightedCommunityScore =
+    weightedDenominator > 0 ? weightedNumerator / weightedDenominator : 0.5;
+  const aiConfidence = normalizeAiConfidence(claim.aiCheck.confidence);
+  const finalScore = aiConfidence * 0.4 + weightedCommunityScore * 0.6;
+
+  return {
+    votesTrue,
+    votesFake,
+    votesUnsure,
+    totalVotes,
+    weightedCommunityScore: roundScore(weightedCommunityScore),
+    finalScore: roundScore(finalScore),
+  };
+}
+
 async function fetchVoteRowForClaim(claimId: string, userId: string): Promise<{ vote: VoteRow | null; error?: string }> {
   const { data, error } = await supabase
     .from("votes")
@@ -166,6 +270,25 @@ async function fetchVoteRowForClaim(claimId: string, userId: string): Promise<{ 
 
   return {
     vote: (data as VoteRow | null) ?? null,
+  };
+}
+
+async function fetchAcceptedVotesForClaim(claimId: string): Promise<VoteRowsResult> {
+  const { data, error } = await supabase
+    .from("votes")
+    .select("id,claim_id,user_id,vote_type,vote_value,trust_weight,accepted,suspicious,rejected_reason,created_at,updated_at")
+    .eq("claim_id", claimId)
+    .eq("accepted", true);
+
+  if (error) {
+    return {
+      votes: [],
+      error: getVoteErrorMessage(error.message),
+    };
+  }
+
+  return {
+    votes: (data as VoteRow[]) ?? [],
   };
 }
 
@@ -199,6 +322,112 @@ export async function fetchUserVoteForClaim(claimId: string, userId: string): Pr
   };
 }
 
+async function repairExistingVoteRow(
+  vote: VoteRow,
+  claim: Claim,
+  profile?: Profile | null,
+): Promise<void> {
+  const normalizedVoteType = normalizeVoteType(vote.vote_type);
+  const expectedVoteValue = getVoteValue(normalizedVoteType);
+  const expectedTrustWeight = vote.trust_weight ?? getProfileTrustWeight(profile, claim.mode);
+  const currentVoteValue =
+    vote.vote_value === null || vote.vote_value === undefined ? null : parseNumber(vote.vote_value, 0);
+  const voteValueNeedsRepair = expectedVoteValue === null
+    ? currentVoteValue !== null
+    : currentVoteValue !== expectedVoteValue;
+  const needsRepair =
+    vote.vote_type !== normalizedVoteType ||
+    voteValueNeedsRepair ||
+    vote.trust_weight === null ||
+    vote.accepted !== true ||
+    vote.suspicious === null;
+
+  if (!needsRepair || !vote.claim_id) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("votes")
+    .update({
+      vote_type: normalizedVoteType,
+      vote_value: expectedVoteValue,
+      trust_weight: expectedTrustWeight,
+      accepted: true,
+      suspicious: vote.suspicious ?? false,
+      rejected_reason: vote.rejected_reason ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("claim_id", vote.claim_id)
+    .eq("user_id", vote.user_id);
+
+  if (error) {
+    logVoteSupabaseError({
+      action: "repair-existing-vote",
+      claimId: vote.claim_id,
+      userId: vote.user_id,
+      voteType: normalizedVoteType,
+      error,
+    });
+  }
+}
+
+async function persistClaimVoteTotals(
+  claimId: string,
+  totals: VoteTotals,
+): Promise<{ claim: Claim | null; error?: string }> {
+  const rpcResult = await supabase.rpc("recalculate_claim_vote_scores", {
+    target_claim_id: claimId,
+  });
+
+  if (!rpcResult.error) {
+    const refreshedClaim = await fetchClaimById(claimId);
+    return {
+      claim: refreshedClaim.claim,
+      error: refreshedClaim.error,
+    };
+  }
+
+  console.log("[vote] Vote score RPC failed; falling back to direct claim update", {
+    claimId,
+    code: rpcResult.error.code,
+    message: rpcResult.error.message,
+    details: rpcResult.error.details,
+  });
+
+  const { error } = await supabase
+    .from("claims")
+    .update({
+      votes_true: totals.votesTrue,
+      votes_fake: totals.votesFake,
+      votes_unsure: totals.votesUnsure,
+      total_votes: totals.totalVotes,
+      weighted_community_score: totals.weightedCommunityScore,
+      final_score: totals.finalScore,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", claimId);
+
+  if (error) {
+    console.log("[vote] Claim vote count update failed", {
+      claimId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    });
+
+    return {
+      claim: null,
+      error: "Vote saved, but count refresh failed.",
+    };
+  }
+
+  const refreshedClaim = await fetchClaimById(claimId);
+  return {
+    claim: refreshedClaim.claim,
+    error: refreshedClaim.error,
+  };
+}
+
 export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteResult> {
   const claimResult = await fetchClaimById(claimId);
 
@@ -209,7 +438,7 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
     };
   }
 
-  const votesResult = await fetchVotesForClaim(claimId);
+  const votesResult = await fetchAcceptedVotesForClaim(claimId);
 
   if (votesResult.error) {
     return {
@@ -218,115 +447,22 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
     };
   }
 
-  const acceptedVotes = votesResult.votes.filter((vote) => vote.accepted ?? true);
-  const votesTrue = acceptedVotes.filter((vote) => vote.vote_type === "TRUE").length;
-  const votesFake = acceptedVotes.filter((vote) => vote.vote_type === "FAKE").length;
-  const votesUnsure = acceptedVotes.filter((vote) => vote.vote_type === "UNSURE").length;
-  const totalVotes = votesTrue + votesFake + votesUnsure;
-  const verificationVotes = acceptedVotes.map(mapVoteRowToVerificationVote);
-  const verificationResponse = buildVerificationResponse(claimResult.claim, verificationVotes);
-  const earlyStatus = verificationResponse.early_verdict_fired
-    ? mapVerificationVerdictToStatus(verificationResponse.verdict)
-    : undefined;
-  const updateRow = {
-    votes_true: votesTrue,
-    votes_fake: votesFake,
-    votes_unsure: votesUnsure,
-    total_votes: totalVotes,
-    current_phase: verificationResponse.current_phase,
-    weighted_community_score: verificationResponse.weighted_community_score,
-    final_score: verificationResponse.final_score,
-    phase4_locked: verificationResponse.phase4_locked,
-    early_verdict_fired: verificationResponse.early_verdict_fired,
-    suspicious_activity: verificationResponse.suspicious_activity,
-    ...(earlyStatus
-      ? {
-          status: earlyStatus,
-          verdict_reason: getVerificationVerdictReason(verificationResponse),
-          verdict_calculated_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-        }
-      : {}),
-    updated_at: new Date().toISOString(),
-  };
+  const totals = calculateVoteTotals(claimResult.claim, votesResult.votes);
+  console.log("[vote] recalculated counts:", totals);
 
-  const { error } = await supabase.from("claims").update(updateRow).eq("id", claimId);
-  const locallyUpdatedClaim = {
-    ...claimResult.claim,
-    votesTrue,
-    votesFake,
-    votesUnsure,
-    totalVotes,
-    currentPhase: verificationResponse.current_phase,
-    weightedCommunityScore: verificationResponse.weighted_community_score,
-    finalScore: verificationResponse.final_score,
-    phase4Locked: verificationResponse.phase4_locked,
-    earlyVerdictFired: verificationResponse.early_verdict_fired,
-    suspiciousActivity: verificationResponse.suspicious_activity,
-    ...(earlyStatus
-      ? {
-          status: earlyStatus,
-          verdictReason: getVerificationVerdictReason(verificationResponse),
-          verdictCalculatedAt: new Date().toISOString(),
-          publishedAt: new Date().toISOString(),
-        }
-      : {}),
-  };
+  const localClaim = applyVoteTotalsToClaim(claimResult.claim, totals);
+  const persistResult = await persistClaimVoteTotals(claimId, totals);
 
-  if (error) {
-    console.log("[vote] Claim aggregate update failed after vote was saved", {
-      claimId,
-      code: error.code,
-      message: error.message,
-      details: error.details,
-    });
-
-    const rpcResult = await supabase.rpc("recalculate_claim_vote_counts", {
-      target_claim_id: claimId,
-    });
-
-    if (rpcResult.error) {
-      console.log("[vote] Vote count RPC refresh failed after vote was saved", {
-        claimId,
-        code: rpcResult.error.code,
-        message: rpcResult.error.message,
-        details: rpcResult.error.details,
-      });
-    }
-
-    const refreshedClaim = await fetchClaimById(claimId);
-
+  if (persistResult.error || !persistResult.claim) {
     return {
-      claim: refreshedClaim.claim
-        ? {
-            ...refreshedClaim.claim,
-            votesTrue,
-            votesFake,
-            votesUnsure,
-            totalVotes,
-            currentPhase: verificationResponse.current_phase,
-            weightedCommunityScore: verificationResponse.weighted_community_score,
-            finalScore: verificationResponse.final_score,
-            phase4Locked: verificationResponse.phase4_locked,
-            earlyVerdictFired: verificationResponse.early_verdict_fired,
-            suspiciousActivity: verificationResponse.suspicious_activity,
-          }
-        : locallyUpdatedClaim,
-      message: "Vote saved.",
-    };
-  }
-
-  const result = await fetchClaimById(claimId);
-
-  if (result.error || !result.claim) {
-    return {
-      claim: claimResult.claim,
-      error: result.error ?? "We could not refresh this claim after voting.",
+      claim: localClaim,
+      message: "Vote saved, but count refresh failed.",
+      countRefreshFailed: true,
     };
   }
 
   return {
-    claim: result.claim,
+    claim: applyVoteTotalsToClaim(persistResult.claim, totals),
     message: "Vote saved.",
   };
 }
@@ -334,7 +470,7 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
 export async function voteOnClaim(
   claimId: string,
   userId: string,
-  voteType: VoteOption,
+  voteType: VoteTypeInput,
   profile?: Profile | null,
 ): Promise<ClaimVoteResult> {
   const claimResult = await fetchClaimById(claimId);
@@ -367,7 +503,6 @@ export async function voteOnClaim(
   }
 
   if (hasVoteWindowClosed(claimResult.claim)) {
-    // PHASE 3 STEP 10
     const finalizedClaim =
       new Date(claimResult.claim.scoreLockAt).getTime() <= Date.now()
         ? await finalizeExpiredClaim(claimId)
@@ -382,7 +517,13 @@ export async function voteOnClaim(
     };
   }
 
-  const dbVoteType = toDbVoteType(voteType);
+  const normalizedVoteType = normalizeVoteType(voteType);
+  const appVoteOption = toAppVoteOption(normalizedVoteType);
+  const voteValue = getVoteValue(normalizedVoteType);
+  const trustWeight = getProfileTrustWeight(profile, claimResult.claim.mode);
+  console.log("[vote] normalizedVoteType:", normalizedVoteType);
+  console.log("[vote] voteValue:", voteValue);
+
   const existingVote = await fetchVoteRowForClaim(claimId, userId);
 
   if (existingVote.error) {
@@ -390,7 +531,7 @@ export async function voteOnClaim(
       action: "existing-vote-check",
       claimId,
       userId,
-      voteType: dbVoteType,
+      voteType: normalizedVoteType,
       error: { message: existingVote.error },
     });
 
@@ -401,78 +542,102 @@ export async function voteOnClaim(
   }
 
   if (existingVote.vote) {
+    await repairExistingVoteRow(existingVote.vote, claimResult.claim, profile);
+    const updatedClaim = await recalculateVoteCounts(claimId);
+
     return {
-      claim: {
-        ...claimResult.claim,
-        userVote: toAppVoteOption(existingVote.vote.vote_type),
-      },
+      ok: false,
+      alreadyVoted: true,
+      claim: updatedClaim.claim
+        ? {
+            ...updatedClaim.claim,
+            userVote: toAppVoteOption(existingVote.vote.vote_type),
+          }
+        : {
+            ...claimResult.claim,
+            userVote: toAppVoteOption(existingVote.vote.vote_type),
+          },
       error: "You already voted on this claim.",
+      message: "You already voted on this claim.",
     };
-  } else {
-    const voteValue = getVoteValue(voteType);
-    const trustWeight = getProfileTrustWeight(profile, claimResult.claim.mode);
-    const { error } = await supabase.from("votes").insert({
-      claim_id: claimId,
-      user_id: userId,
-      vote_type: dbVoteType,
-      vote_value: voteValue,
-      trust_weight: trustWeight,
-      accepted: true,
-      suspicious: false,
-      rejected_reason: null,
+  }
+
+  const payload = {
+    claim_id: claimId,
+    user_id: userId,
+    vote_type: normalizedVoteType,
+    vote_value: voteValue,
+    trust_weight: trustWeight,
+    accepted: true,
+    suspicious: false,
+    rejected_reason: null,
+  };
+  console.log("[vote] insert payload:", payload);
+
+  const { error } = await supabase.from("votes").insert(payload);
+
+  if (error) {
+    logVoteSupabaseError({
+      action: "insert",
+      claimId,
+      userId,
+      voteType: normalizedVoteType,
+      error,
     });
 
-    if (error) {
-      logVoteSupabaseError({
-        action: "insert",
-        claimId,
+    return {
+      claim: claimResult.claim,
+      error: getVoteErrorMessage(error.message),
+    };
+  }
+
+  if (profile) {
+    const { error: profileUpdateError } = await supabase
+      .from("profiles")
+      .update({
+        votes_cast: (profile.votes_cast ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    if (profileUpdateError) {
+      console.log("[vote] Profile votes_cast update failed", {
         userId,
-        voteType: dbVoteType,
-        error,
+        code: profileUpdateError.code,
+        message: profileUpdateError.message,
+        details: profileUpdateError.details,
       });
-
-      return {
-        claim: claimResult.claim,
-        error: getVoteErrorMessage(error.message),
-      };
-    }
-
-    if (profile) {
-      await supabase
-        .from("profiles")
-        .update({
-          votes_cast: (profile.votes_cast ?? 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
     }
   }
 
   const updatedClaim = await recalculateVoteCounts(claimId);
 
-  if (updatedClaim.error || !updatedClaim.claim) {
+  if (!updatedClaim.claim) {
     console.log("[vote] Vote was inserted but recalculation failed", {
       claimId,
       userId,
-      voteType: dbVoteType,
+      voteType: normalizedVoteType,
       error: updatedClaim.error,
     });
 
     return {
       claim: {
         ...claimResult.claim,
-        userVote: voteType,
+        userVote: appVoteOption,
       },
-      message: "Vote saved.",
+      message: "Vote saved, but count refresh failed.",
+      countRefreshFailed: true,
     };
   }
 
   return {
+    ok: true,
     claim: {
       ...updatedClaim.claim,
-      userVote: voteType,
+      userVote: appVoteOption,
     },
     message: updatedClaim.message ?? "Vote saved.",
+    countRefreshFailed: updatedClaim.countRefreshFailed,
   };
 }
 
@@ -488,7 +653,7 @@ export async function removeVote(claimId: string, userId: string): Promise<Claim
 
   const updatedClaim = await recalculateVoteCounts(claimId);
 
-  if (updatedClaim.error || !updatedClaim.claim) {
+  if (!updatedClaim.claim) {
     return updatedClaim;
   }
 

@@ -59,7 +59,8 @@ function formatPercent(value: number | null | undefined): string {
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
-  onVote: (claimId: string, vote: VoteOption) => void | Promise<void>;
+  // PHASE 3 STEP 20D
+  onVote: (claimId: string, vote: VoteOption) => void | string | Promise<void | string>;
   // PHASE 3 STEP 6
   onReport: (claimId: string, reason: ReportReason, note: string) => void | Promise<void>;
 }
@@ -127,8 +128,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     setVoteSuccess("");
 
     try {
-      await onVote(claim.id, vote);
-      setVoteSuccess("Vote saved.");
+      const message = await onVote(claim.id, vote);
+      setVoteSuccess(typeof message === "string" ? message : "Vote saved.");
     } catch (error) {
       setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
     }

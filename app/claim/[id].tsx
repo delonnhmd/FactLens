@@ -415,8 +415,9 @@ export default function ClaimDetailScreen() {
     setVoteSuccess("");
 
     try {
-      await voteOnClaim(claim.id, vote);
-      setVoteSuccess("Vote saved.");
+      // PHASE 3 STEP 20D
+      const message = await voteOnClaim(claim.id, vote);
+      setVoteSuccess(typeof message === "string" ? message : "Vote saved.");
     } catch (error) {
       setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
     }
