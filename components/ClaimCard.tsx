@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ReportReason, VoteOption } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
 import { SourceQualityBadge } from "./SourceQualityBadge";
-import { VoteButtons } from "./VoteButtons";
+import { VoteButtons, getVoteOptionLabel } from "./VoteButtons";
 import { reportReasons } from "../constants/reportReasons";
 import { theme } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
@@ -153,10 +153,10 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     ? ""
     : !isAuthenticated
       ? "Please log in to vote."
-      : !isVerified
-        ? "Please verify your email to vote."
+        : !isVerified
+          ? "Please verify your email to vote."
         : claim.userVote
-          ? "Your vote is recorded. Vote changes are not allowed."
+          ? "You already voted on this post."
           : "Choose one option before voting closes.";
 
   return (
@@ -293,8 +293,15 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
       {votingOpen ? (
         <View style={styles.buttonWrap}>
-          <VoteButtons disabled={voteDisabled} userVote={claim.userVote} onVote={handleVote} />
-          {voteMessage ? <Text style={styles.voteMessage}>{voteMessage}</Text> : null}
+          {claim.userVote ? (
+            <Text style={styles.userVoteText}>You voted: {getVoteOptionLabel(claim.userVote)}</Text>
+          ) : null}
+          <VoteButtons
+            disabled={voteDisabled}
+            selectedVote={claim.userVote}
+            message={voteMessage}
+            onVote={handleVote}
+          />
           {voteSuccess ? <Text style={styles.voteSuccess}>{voteSuccess}</Text> : null}
           {voteError ? <Text style={styles.voteError}>{voteError}</Text> : null}
         </View>
@@ -784,6 +791,12 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     marginTop: theme.spacing.sm,
+  },
+  userVoteText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
+    marginBottom: theme.spacing.sm,
   },
   voteError: {
     color: theme.colors.danger,

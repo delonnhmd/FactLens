@@ -1,5 +1,6 @@
 // PHASE 3 STEP 4
 // PHASE 3 STEP 20D
+// PHASE 3 STEP 20E
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getUserTrustWeight } from "./verificationEngine";
@@ -30,11 +31,13 @@ interface VoteRowsResult {
 
 interface UserVoteResult {
   vote: VoteOption | null;
+  voteRow: VoteRow | null;
   error?: string;
 }
 
 interface ClaimVoteResult {
   claim: Claim | null;
+  vote?: VoteRow | null;
   error?: string;
   message?: string;
   ok?: boolean;
@@ -50,6 +53,8 @@ interface VoteTotals {
   weightedCommunityScore: number;
   finalScore: number;
 }
+
+const ALREADY_VOTED_MESSAGE = "You already voted on this post.";
 
 export function normalizeVoteType(voteType: VoteTypeInput): VoteType {
   const normalized = String(voteType)
@@ -157,7 +162,7 @@ function getVoteErrorMessage(message: string): string {
   }
 
   if (normalizedMessage.includes("duplicate")) {
-    return "You already voted on this claim.";
+    return ALREADY_VOTED_MESSAGE;
   }
 
   return "We could not save your vote. Please try again.";
@@ -313,62 +318,15 @@ export async function fetchUserVoteForClaim(claimId: string, userId: string): Pr
   if (result.error) {
     return {
       vote: null,
+      voteRow: null,
       error: result.error,
     };
   }
 
   return {
     vote: toAppVoteOption(result.vote?.vote_type ?? null),
+    voteRow: result.vote,
   };
-}
-
-async function repairExistingVoteRow(
-  vote: VoteRow,
-  claim: Claim,
-  profile?: Profile | null,
-): Promise<void> {
-  const normalizedVoteType = normalizeVoteType(vote.vote_type);
-  const expectedVoteValue = getVoteValue(normalizedVoteType);
-  const expectedTrustWeight = vote.trust_weight ?? getProfileTrustWeight(profile, claim.mode);
-  const currentVoteValue =
-    vote.vote_value === null || vote.vote_value === undefined ? null : parseNumber(vote.vote_value, 0);
-  const voteValueNeedsRepair = expectedVoteValue === null
-    ? currentVoteValue !== null
-    : currentVoteValue !== expectedVoteValue;
-  const needsRepair =
-    vote.vote_type !== normalizedVoteType ||
-    voteValueNeedsRepair ||
-    vote.trust_weight === null ||
-    vote.accepted !== true ||
-    vote.suspicious === null;
-
-  if (!needsRepair || !vote.claim_id) {
-    return;
-  }
-
-  const { error } = await supabase
-    .from("votes")
-    .update({
-      vote_type: normalizedVoteType,
-      vote_value: expectedVoteValue,
-      trust_weight: expectedTrustWeight,
-      accepted: true,
-      suspicious: vote.suspicious ?? false,
-      rejected_reason: vote.rejected_reason ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("claim_id", vote.claim_id)
-    .eq("user_id", vote.user_id);
-
-  if (error) {
-    logVoteSupabaseError({
-      action: "repair-existing-vote",
-      claimId: vote.claim_id,
-      userId: vote.user_id,
-      voteType: normalizedVoteType,
-      error,
-    });
-  }
 }
 
 async function persistClaimVoteTotals(
@@ -542,12 +500,13 @@ export async function voteOnClaim(
   }
 
   if (existingVote.vote) {
-    await repairExistingVoteRow(existingVote.vote, claimResult.claim, profile);
+    console.log("[vote] user already voted:", existingVote.vote.vote_type);
     const updatedClaim = await recalculateVoteCounts(claimId);
 
     return {
       ok: false,
       alreadyVoted: true,
+      vote: existingVote.vote,
       claim: updatedClaim.claim
         ? {
             ...updatedClaim.claim,
@@ -557,8 +516,8 @@ export async function voteOnClaim(
             ...claimResult.claim,
             userVote: toAppVoteOption(existingVote.vote.vote_type),
           },
-      error: "You already voted on this claim.",
-      message: "You already voted on this claim.",
+      error: ALREADY_VOTED_MESSAGE,
+      message: ALREADY_VOTED_MESSAGE,
     };
   }
 
@@ -584,6 +543,31 @@ export async function voteOnClaim(
       voteType: normalizedVoteType,
       error,
     });
+
+    if (error.code === "23505") {
+      const duplicateVote = await fetchVoteRowForClaim(claimId, userId);
+      const duplicateVoteType = duplicateVote.vote?.vote_type ?? normalizedVoteType;
+      const updatedClaim = await recalculateVoteCounts(claimId);
+
+      console.log("[vote] user already voted:", duplicateVoteType);
+
+      return {
+        ok: false,
+        alreadyVoted: true,
+        vote: duplicateVote.vote,
+        claim: updatedClaim.claim
+          ? {
+              ...updatedClaim.claim,
+              userVote: toAppVoteOption(duplicateVoteType),
+            }
+          : {
+              ...claimResult.claim,
+              userVote: toAppVoteOption(duplicateVoteType),
+            },
+        error: ALREADY_VOTED_MESSAGE,
+        message: ALREADY_VOTED_MESSAGE,
+      };
+    }
 
     return {
       claim: claimResult.claim,

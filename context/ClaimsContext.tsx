@@ -21,6 +21,7 @@ import {
 import type { ClaimSearchFilters } from "../services/claimService";
 import {
   fetchUserVoteForClaim,
+  recalculateVoteCounts as recalculateRemoteVoteCounts,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
 import {
@@ -66,6 +67,9 @@ interface ClaimsContextValue {
   error: string | null;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<string | void>;
+  // PHASE 3 STEP 20E
+  getUserVoteForClaim: (claimId: string) => VoteOption | null;
+  refreshUserVoteForClaim: (claimId: string) => Promise<VoteOption | null>;
   // PHASE 3 STEP 5
   fetchEvidenceForClaim: (claimId: string) => Promise<Evidence[]>;
   addEvidence: (claimId: string, evidenceInput: EvidenceInput) => Promise<Evidence[]>;
@@ -138,6 +142,30 @@ function getRealtimeClaimId(payload: RealtimeChangePayload): string | null {
   return typeof id === "string" ? id : null;
 }
 
+// PHASE 3 STEP 20E
+const ALREADY_VOTED_MESSAGE = "You already voted on this post.";
+
+function toAppVoteOption(voteType: string | null | undefined): VoteOption | null {
+  const normalizedVoteType = String(voteType ?? "")
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+
+  if (normalizedVoteType === "TRUE") {
+    return "TRUE";
+  }
+
+  if (normalizedVoteType === "FAKE") {
+    return "FAKE";
+  }
+
+  if (normalizedVoteType === "UNSURE" || normalizedVoteType === "NOT_SURE") {
+    return "NOT_SURE";
+  }
+
+  return null;
+}
+
 export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 3
   const { currentUser, profile } = useAuth();
@@ -150,6 +178,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   // PHASE 3 STEP 12
   const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(false);
+  // PHASE 3 STEP 20E
+  const [userVotesByClaimId, setUserVotesByClaimId] = useState<Record<string, VoteOption>>({});
   const [now, setNow] = useState(() => new Date());
   const claimsRef = useRef<Claim[]>([]);
   const locallyCreatedClaimIdsRef = useRef(new Set<string>());
@@ -158,22 +188,53 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     claimsRef.current = claims;
   }, [claims]);
 
+  // PHASE 3 STEP 20E
+  useEffect(() => {
+    if (!currentUser) {
+      setUserVotesByClaimId({});
+      setClaims((currentClaimsState) => currentClaimsState.map((claim) => ({ ...claim, userVote: null })));
+    }
+  }, [currentUser]);
+
   const applyUserVotes = useCallback(
     async (nextClaims: Claim[]) => {
       if (!currentUser) {
+        setUserVotesByClaimId({});
         return nextClaims.map((claim) => ({ ...claim, userVote: null }));
       }
 
-      return Promise.all(
+      const nextVotesByClaimId: Record<string, VoteOption> = {};
+      const claimsWithVotes = await Promise.all(
         nextClaims.map(async (claim) => {
           const result = await fetchUserVoteForClaim(claim.id, currentUser.id);
+          const vote = result.error ? claim.userVote : result.vote;
+
+          if (vote) {
+            nextVotesByClaimId[claim.id] = vote;
+          }
 
           return {
             ...claim,
-            userVote: result.vote,
+            userVote: vote,
           };
         }),
       );
+
+      setUserVotesByClaimId((currentVotes) => {
+        const mergedVotes = { ...currentVotes };
+
+        nextClaims.forEach((claim) => {
+          if (nextVotesByClaimId[claim.id]) {
+            mergedVotes[claim.id] = nextVotesByClaimId[claim.id];
+          } else {
+            delete mergedVotes[claim.id];
+          }
+        });
+
+        return mergedVotes;
+      });
+
+      return claimsWithVotes;
     },
     [currentUser],
   );
@@ -418,6 +479,58 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     return createdClaim;
   }, [currentUser, profile]);
 
+  // PHASE 3 STEP 20E
+  const getUserVoteForClaim = useCallback(
+    (claimId: string) => userVotesByClaimId[claimId] ?? null,
+    [userVotesByClaimId],
+  );
+
+  // PHASE 3 STEP 20E
+  const refreshUserVoteForClaim = useCallback(
+    async (claimId: string) => {
+      if (!currentUser) {
+        setUserVotesByClaimId((currentVotes) => {
+          const nextVotes = { ...currentVotes };
+          delete nextVotes[claimId];
+          return nextVotes;
+        });
+
+        setClaims((currentClaimsState) =>
+          currentClaimsState.map((claim) => (claim.id === claimId ? { ...claim, userVote: null } : claim)),
+        );
+
+        return null;
+      }
+
+      const result = await fetchUserVoteForClaim(claimId, currentUser.id);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      setUserVotesByClaimId((currentVotes) => {
+        const nextVotes = { ...currentVotes };
+
+        if (result.vote) {
+          nextVotes[claimId] = result.vote;
+        } else {
+          delete nextVotes[claimId];
+        }
+
+        return nextVotes;
+      });
+
+      setClaims((currentClaimsState) =>
+        currentClaimsState.map((claim) =>
+          claim.id === claimId ? { ...claim, userVote: result.vote } : claim,
+        ),
+      );
+
+      return result.vote;
+    },
+    [currentUser],
+  );
+
   // PHASE 3 STEP 4
   const voteOnClaim = useCallback(
     async (claimId: string, vote: VoteOption) => {
@@ -432,6 +545,38 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);
+      const cachedUserVote = userVotesByClaimId[claimId] ?? existingClaim?.userVote ?? null;
+
+      if (cachedUserVote) {
+        const updatedClaim = await recalculateRemoteVoteCounts(claimId);
+
+        if (updatedClaim.claim) {
+          setClaims((currentClaimsState) =>
+            currentClaimsState.map((claim) =>
+              claim.id === claimId
+                ? {
+                    ...mergeLocalClaimState(updatedClaim.claim!, existingClaim),
+                    userVote: cachedUserVote,
+                  }
+                : claim,
+            ),
+          );
+        } else {
+          setClaims((currentClaimsState) =>
+            currentClaimsState.map((claim) =>
+              claim.id === claimId ? { ...claim, userVote: cachedUserVote } : claim,
+            ),
+          );
+        }
+
+        setUserVotesByClaimId((currentVotes) => ({
+          ...currentVotes,
+          [claimId]: cachedUserVote,
+        }));
+
+        return ALREADY_VOTED_MESSAGE;
+      }
+
       // PHASE 3 STEP 10
       const refreshedClaim = await refreshRemoteClaimVerdict(claimId);
 
@@ -464,10 +609,41 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       // PHASE 3 STEP 20
       if (result.claim) {
+        const resultVote = result.alreadyVoted
+          ? toAppVoteOption(result.vote?.vote_type) ?? result.claim.userVote
+          : result.claim.userVote ?? vote;
         const updatedClaim = mergeLocalClaimState(result.claim, existingClaim);
         setClaims((currentClaimsState) =>
-          currentClaimsState.map((claim) => (claim.id === claimId ? updatedClaim : claim)),
+          currentClaimsState.map((claim) =>
+            claim.id === claimId ? { ...updatedClaim, userVote: resultVote } : claim,
+          ),
         );
+
+        if (resultVote) {
+          setUserVotesByClaimId((currentVotes) => ({
+            ...currentVotes,
+            [claimId]: resultVote,
+          }));
+        }
+      }
+
+      if (result.alreadyVoted) {
+        const existingVote = toAppVoteOption(result.vote?.vote_type) ?? result.claim?.userVote ?? null;
+
+        if (existingVote) {
+          setUserVotesByClaimId((currentVotes) => ({
+            ...currentVotes,
+            [claimId]: existingVote,
+          }));
+
+          setClaims((currentClaimsState) =>
+            currentClaimsState.map((claim) =>
+              claim.id === claimId ? { ...claim, userVote: existingVote } : claim,
+            ),
+          );
+        }
+
+        return result.message ?? ALREADY_VOTED_MESSAGE;
       }
 
       if (result.error || !result.claim) {
@@ -477,7 +653,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       // PHASE 3 STEP 20D
       return result.message ?? "Vote saved.";
     },
-    [currentClaims, currentUser, profile],
+    [currentClaims, currentUser, profile, userVotesByClaimId],
   );
 
   // PHASE 3 STEP 5
@@ -719,6 +895,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       error,
       createClaim,
       voteOnClaim,
+      getUserVoteForClaim,
+      refreshUserVoteForClaim,
       fetchEvidenceForClaim,
       addEvidence,
       fetchReportsForClaim,
@@ -751,6 +929,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       fetchTrendingClaims,
       fetchTrendingClaimsPage,
       getClaimById,
+      getUserVoteForClaim,
       hasMoreClaims,
       liveUpdatesEnabled,
       loadMoreClaims,
@@ -760,6 +939,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       reportClaim,
       refreshClaims,
       refreshClaimVerdict,
+      refreshUserVoteForClaim,
       searchClaims,
       searchClaimsPage,
       voteOnClaim,

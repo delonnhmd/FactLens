@@ -1,4 +1,5 @@
 // PHASE 1 STEP 4
+// PHASE 3 STEP 20E
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { theme } from "../constants/theme";
 import type { VoteOption } from "../types/claim";
@@ -10,37 +11,71 @@ const voteOptions: Array<{ label: string; value: VoteOption; style: "primary" | 
   { label: "Not Sure", value: "NOT_SURE", style: "warning" },
 ];
 
+export function getVoteOptionLabel(vote: VoteOption | null | undefined): string {
+  if (vote === "TRUE") {
+    return "True";
+  }
+
+  if (vote === "FAKE") {
+    return "Fake";
+  }
+
+  if (vote === "NOT_SURE") {
+    return "Not Sure";
+  }
+
+  return "";
+}
+
 interface VoteButtonsProps {
   disabled?: boolean;
   // PHASE 3 STEP 4
   userVote?: VoteOption | null;
-  onVote: (vote: VoteOption) => void | Promise<void>;
+  // PHASE 3 STEP 20E
+  selectedVote?: VoteOption | null;
+  message?: string;
+  onVote: (vote: VoteOption) => void | string | Promise<void | string>;
 }
 
-export function VoteButtons({ disabled = false, userVote, onVote }: VoteButtonsProps) {
-  return (
-    <View style={styles.row}>
-      {voteOptions.map((option, index) => {
-        const selected = userVote === option.value;
+export function VoteButtons({
+  disabled = false,
+  userVote,
+  selectedVote,
+  message,
+  onVote,
+}: VoteButtonsProps) {
+  const activeVote = selectedVote ?? userVote ?? null;
+  const isLocked = disabled || Boolean(activeVote);
+  const visibleMessage = activeVote ? "You already voted on this post." : message;
 
-        return (
-          <TouchableOpacity
-            key={option.value}
-            style={[
-              styles.button,
-              styles[option.style],
-              index > 0 && styles.buttonSpacing,
-              disabled && !selected && styles.disabled,
-              selected && styles.selected,
-            ]}
-            activeOpacity={0.8}
-            disabled={disabled}
-            onPress={() => onVote(option.value)}
-          >
-            <Text style={[styles.label, disabled && !selected && styles.disabledLabel]}>{option.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
+  return (
+    <View>
+      <View style={styles.row}>
+        {voteOptions.map((option, index) => {
+          const selected = activeVote === option.value;
+
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.button,
+                styles[option.style],
+                index > 0 && styles.buttonSpacing,
+                isLocked && !selected && styles.disabled,
+                selected && styles.selected,
+              ]}
+              activeOpacity={0.8}
+              disabled={isLocked}
+              onPress={() => onVote(option.value)}
+            >
+              <Text style={[styles.label, isLocked && !selected && styles.disabledLabel]}>{option.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {visibleMessage ? (
+        <Text style={[styles.message, activeVote && styles.selectedMessage]}>{visibleMessage}</Text>
+      ) : null}
     </View>
   );
 }
@@ -84,5 +119,14 @@ const styles = StyleSheet.create({
   },
   selected: {
     borderColor: theme.colors.text,
+  },
+  message: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    marginTop: theme.spacing.sm,
+  },
+  selectedMessage: {
+    color: theme.colors.primary,
+    fontWeight: "700",
   },
 });
