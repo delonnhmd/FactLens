@@ -3,7 +3,7 @@
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type IoniconName =
@@ -28,8 +28,9 @@ function TabIcon({
 export default function TabLayout() {
   // PHASE 3 STEP 20
   // PHASE 3 STEP 21
+  // PHASE 3 STEP 23
   const insets = useSafeAreaInsets();
-  const tabBarBottomPadding = Math.max(insets.bottom, 16);
+  const tabBarBottomPadding = Math.max(insets.bottom, 20);
 
   return (
     <Tabs
@@ -38,11 +39,12 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
-          height: 64 + tabBarBottomPadding,
+          height: 76 + tabBarBottomPadding,
           paddingBottom: tabBarBottomPadding,
           paddingTop: 8,
           borderTopColor: '#E5E7EB',
           backgroundColor: '#FFFFFF',
+          marginBottom: Platform.OS === 'android' ? 8 : 0,
         },
         tabBarLabelStyle: {
           fontSize: 12,
