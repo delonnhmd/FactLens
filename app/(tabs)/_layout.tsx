@@ -27,8 +27,9 @@ function TabIcon({
 
 export default function TabLayout() {
   // PHASE 3 STEP 20
+  // PHASE 3 STEP 21
   const insets = useSafeAreaInsets();
-  const tabBarBottomPadding = Math.max(insets.bottom, 8);
+  const tabBarBottomPadding = Math.max(insets.bottom, 16);
 
   return (
     <Tabs
@@ -41,6 +42,7 @@ export default function TabLayout() {
           paddingBottom: tabBarBottomPadding,
           paddingTop: 8,
           borderTopColor: '#E5E7EB',
+          backgroundColor: '#FFFFFF',
         },
         tabBarLabelStyle: {
           fontSize: 12,

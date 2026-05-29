@@ -18,6 +18,7 @@ export default function Layout() {
   }
 
   // PHASE 3 STEP 20
+  // PHASE 3 STEP 21
   return (
     <SafeAreaProvider>
       <AuthProvider>
