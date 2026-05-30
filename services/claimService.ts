@@ -7,7 +7,7 @@ import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
-import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
+import { detectVideoPlatform, getYouTubeThumbnailUrl, normalizeUrl } from "../utils/videoUrl";
 import { formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
 import {
   createClaimTiming,
@@ -666,7 +666,9 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
 }
 
 export function mapClaimToInsert(input: CreateClaimInput) {
-  const trimmedVideoUrl = input.videoUrl?.trim() || null;
+  const normalizedSourceUrl = normalizeUrl(input.sourceUrl);
+  const normalizedVideoUrl = input.videoUrl ? normalizeUrl(input.videoUrl) : "";
+  const trimmedVideoUrl = normalizedVideoUrl || null;
   // PHASE 3 STEP 17
   // PHASE 3 STEP 22
   // PHASE 3 STEP 24
@@ -678,7 +680,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     created_at: timing.createdAt,
     title: input.title.trim(),
     description: input.description.trim(),
-    source_url: input.sourceUrl.trim(),
+    source_url: normalizedSourceUrl,
     video_url: trimmedVideoUrl,
     image_url: input.imageUrl ?? null,
     category: input.category?.trim() || "Other",
@@ -1155,8 +1157,8 @@ export async function updateClaim(id: string, updates: ClaimUpdates): Promise<Cl
   const updateRow = {
     ...(updates.title !== undefined ? { title: updates.title.trim() } : {}),
     ...(updates.description !== undefined ? { description: updates.description.trim() } : {}),
-    ...(updates.sourceUrl !== undefined ? { source_url: updates.sourceUrl.trim() } : {}),
-    ...(updates.videoUrl !== undefined ? { video_url: updates.videoUrl?.trim() || null } : {}),
+    ...(updates.sourceUrl !== undefined ? { source_url: normalizeUrl(updates.sourceUrl) } : {}),
+    ...(updates.videoUrl !== undefined ? { video_url: updates.videoUrl ? normalizeUrl(updates.videoUrl) : null } : {}),
     ...(updates.imageUrl !== undefined ? { image_url: updates.imageUrl } : {}),
     ...(updates.category !== undefined ? { category: updates.category.trim() || "Other" } : {}),
     ...(updates.slug !== undefined ? { slug: updates.slug } : {}),

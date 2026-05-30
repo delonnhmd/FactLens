@@ -1,6 +1,8 @@
 // PHASE 3 STEP 8
 export type VideoPlatform = "YouTube" | "TikTok" | "X" | "Facebook" | "Instagram" | "Video Link";
 
+const WEB_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i;
+
 function getParsedUrl(url: string): URL | null {
   const normalizedUrl = normalizeUrl(url);
 
@@ -25,7 +27,40 @@ function matchesHost(hostname: string, host: string): boolean {
 }
 
 export function normalizeUrl(url: string): string {
-  return url.trim();
+  const trimmedUrl = url.trim();
+
+  if (!trimmedUrl) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmedUrl)) {
+    return trimmedUrl;
+  }
+
+  if (trimmedUrl.startsWith("//")) {
+    return `https:${trimmedUrl}`;
+  }
+
+  if (WEB_DOMAIN_PATTERN.test(trimmedUrl)) {
+    return `https://${trimmedUrl}`;
+  }
+
+  return trimmedUrl;
+}
+
+export function isValidWebUrl(url: string): boolean {
+  const normalizedUrl = normalizeUrl(url);
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+    return Boolean(parsedUrl.hostname && (parsedUrl.hostname.includes(".") || parsedUrl.hostname === "localhost"));
+  } catch {
+    return false;
+  }
 }
 
 export function detectVideoPlatform(url: string): VideoPlatform | null {

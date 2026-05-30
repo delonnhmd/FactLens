@@ -9,7 +9,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { pickClaimImage, uploadClaimImage, type PickedClaimImage } from "../../services/imageUploadService";
 import { validateClaimContent } from "../../utils/contentValidation";
-import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
+import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl, normalizeUrl } from "../../utils/videoUrl";
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
@@ -41,9 +41,10 @@ export default function CreateScreen() {
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
   // PHASE 3 STEP 8
   const trimmedVideoUrl = videoUrl.trim();
-  const videoPlatform = trimmedVideoUrl ? detectVideoPlatform(trimmedVideoUrl) : null;
-  const youtubeThumbnailUrl = trimmedVideoUrl ? getYouTubeThumbnailUrl(trimmedVideoUrl) : null;
-  const videoUrlInvalid = trimmedVideoUrl.length > 0 && !isSupportedVideoUrl(trimmedVideoUrl);
+  const normalizedVideoUrl = normalizeUrl(videoUrl);
+  const videoPlatform = trimmedVideoUrl ? detectVideoPlatform(normalizedVideoUrl) : null;
+  const youtubeThumbnailUrl = trimmedVideoUrl ? getYouTubeThumbnailUrl(normalizedVideoUrl) : null;
+  const videoUrlInvalid = trimmedVideoUrl.length > 0 && !isSupportedVideoUrl(normalizedVideoUrl);
   const submitDisabled = titleOverLimit || descriptionOverLimit || videoUrlInvalid || isSubmitting;
 
   const titleCounterStyle = useMemo(
@@ -130,7 +131,7 @@ export default function CreateScreen() {
         description: descriptionOverLimit
           ? "Description must be 1000 characters or fewer."
           : currentErrors.description,
-        videoUrl: videoUrlInvalid ? "Video URL must start with http:// or https://." : currentErrors.videoUrl,
+        videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
       }));
       return;
     }
@@ -157,8 +158,8 @@ export default function CreateScreen() {
       await createClaim({
         title,
         description,
-        sourceUrl,
-        videoUrl,
+        sourceUrl: normalizeUrl(sourceUrl),
+        videoUrl: trimmedVideoUrl ? normalizedVideoUrl : "",
         imageUrl,
         category,
       });
@@ -343,7 +344,7 @@ export default function CreateScreen() {
             <TextInput
               value={sourceUrl}
               onChangeText={(value) => updateField("sourceUrl", value)}
-              placeholder="https://example.com/source"
+              placeholder="apple.com/news"
               style={[styles.input, errors.sourceUrl && styles.inputError]}
               placeholderTextColor={theme.colors.muted}
               keyboardType="url"
@@ -358,7 +359,7 @@ export default function CreateScreen() {
             <TextInput
               value={videoUrl}
               onChangeText={(value) => updateField("videoUrl", value)}
-              placeholder="YouTube, TikTok, X/Twitter, Facebook, Instagram, or video link"
+              placeholder="youtube.com/watch, tiktok.com, x.com, or video link"
               style={[styles.input, errors.videoUrl && styles.inputError]}
               placeholderTextColor={theme.colors.muted}
               keyboardType="url"
@@ -367,7 +368,7 @@ export default function CreateScreen() {
             />
             {errors.videoUrl || videoUrlInvalid ? (
               <Text style={styles.errorText}>
-                {errors.videoUrl ?? "Video URL must start with http:// or https://."}
+                {errors.videoUrl ?? "Enter a valid video URL."}
               </Text>
             ) : null}
             {trimmedVideoUrl && videoPlatform ? (

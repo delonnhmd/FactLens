@@ -1,6 +1,6 @@
 // PHASE 3 STEP 8
 import { PROHIBITED_CONTENT } from "../constants/contentRules";
-import { isSupportedVideoUrl, normalizeUrl } from "./videoUrl";
+import { isSupportedVideoUrl, isValidWebUrl, normalizeUrl } from "./videoUrl";
 
 export interface ClaimContentValidationInput {
   title: string;
@@ -13,10 +13,6 @@ export interface ClaimContentValidationInput {
 interface ClaimContentValidationResult {
   ok: boolean;
   errors: string[];
-}
-
-function startsWithHttp(url: string): boolean {
-  return /^https?:\/\//i.test(url);
 }
 
 function containsProhibitedTerm(value: string): boolean {
@@ -50,12 +46,12 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
 
   if (!sourceUrl) {
     errors.push("Source URL is required.");
-  } else if (!startsWithHttp(sourceUrl)) {
-    errors.push("Source URL must start with http:// or https://.");
+  } else if (!isValidWebUrl(sourceUrl)) {
+    errors.push("Enter a valid source URL, like apple.com or www.google.com.");
   }
 
-  if (videoUrl && (!startsWithHttp(videoUrl) || !isSupportedVideoUrl(videoUrl))) {
-    errors.push("Video URL must start with http:// or https://.");
+  if (videoUrl && !isSupportedVideoUrl(videoUrl)) {
+    errors.push("Enter a valid video URL, like youtube.com/watch or tiktok.com/@user/video.");
   }
 
   if (!category) {
