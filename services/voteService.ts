@@ -1,9 +1,9 @@
 // PHASE 3 STEP 4
 // PHASE 3 STEP 20D
 // PHASE 3 STEP 20E
+// PHASE 3 STEP 24
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
-import { getUserTrustWeight } from "./verificationEngine";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
 import type { Profile } from "./profileService";
@@ -14,7 +14,7 @@ type VoteTypeInput = VoteOption | VoteType | string;
 export interface VoteRow {
   id?: string;
   claim_id?: string;
-  user_id: string;
+  user_id?: string;
   vote_type: VoteType | string;
   vote_value: number | null;
   trust_weight: number | null;
@@ -136,23 +136,6 @@ function getEffectiveVoteValue(vote: VoteRow): number | null {
 function getEffectiveTrustWeight(vote: Pick<VoteRow, "trust_weight">): number {
   const trustWeight = parseNumber(vote.trust_weight, 1);
   return trustWeight > 0 ? trustWeight : 1;
-}
-
-function getProfileTrustWeight(profile: Profile | null | undefined, mode: Claim["mode"]): number {
-  if (mode === "test") {
-    return 1.0;
-  }
-
-  return getUserTrustWeight(
-    {
-      verified: profile?.verified ?? false,
-      votesCast: profile?.votes_cast ?? 0,
-      accuracyRate: profile?.accuracy_rate ?? null,
-      trustTier: profile?.trust_tier ?? "new",
-      trustWeightOverride: profile?.trust_weight_override ?? null,
-    },
-    mode,
-  );
 }
 
 function getVoteErrorMessage(message: string): string {
@@ -284,7 +267,7 @@ async function fetchVoteRowForClaim(claimId: string, userId: string): Promise<{ 
 async function fetchAcceptedVotesForClaim(claimId: string): Promise<VoteRowsResult> {
   const { data, error } = await supabase
     .from("votes")
-    .select("id,claim_id,user_id,vote_type,vote_value,trust_weight,accepted,suspicious,rejected_reason,created_at,updated_at")
+    .select("vote_type,vote_value,trust_weight,accepted")
     .eq("claim_id", claimId)
     .eq("accepted", true);
 
@@ -336,25 +319,6 @@ async function persistClaimVoteTotals(
   claimId: string,
   totals: VoteTotals,
 ): Promise<{ claim: Claim | null; error?: string }> {
-  const rpcResult = await supabase.rpc("recalculate_claim_vote_scores", {
-    target_claim_id: claimId,
-  });
-
-  if (!rpcResult.error) {
-    const refreshedClaim = await fetchClaimById(claimId);
-    return {
-      claim: refreshedClaim.claim,
-      error: refreshedClaim.error,
-    };
-  }
-
-  console.log("[vote] Vote score RPC failed; falling back to direct claim update", {
-    claimId,
-    code: rpcResult.error.code,
-    message: rpcResult.error.message,
-    details: rpcResult.error.details,
-  });
-
   const { error } = await supabase
     .from("claims")
     .update({
@@ -409,7 +373,7 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
   }
 
   const totals = calculateVoteTotals(claimResult.claim, votesResult.votes);
-  console.log("[vote] recalculated counts:", totals);
+  console.log("[vote] updated counts:", totals);
 
   const localClaim = applyVoteTotalsToClaim(claimResult.claim, totals);
   const persistResult = await persistClaimVoteTotals(claimId, totals);
@@ -434,6 +398,7 @@ export async function voteOnClaim(
   voteType: VoteTypeInput,
   profile?: Profile | null,
 ): Promise<ClaimVoteResult> {
+  void profile;
   const claimResult = await fetchClaimById(claimId);
 
   if (claimResult.error || !claimResult.claim) {
@@ -488,7 +453,7 @@ export async function voteOnClaim(
   const normalizedVoteType = normalizeVoteType(voteType);
   const appVoteOption = toAppVoteOption(normalizedVoteType);
   const voteValue = getVoteValue(normalizedVoteType);
-  const trustWeight = getProfileTrustWeight(profile, claimResult.claim.mode);
+  const trustWeight = 1.0;
   console.log("[vote] normalizedVoteType:", normalizedVoteType);
   console.log("[vote] voteValue:", voteValue);
 

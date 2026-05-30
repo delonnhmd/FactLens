@@ -1,5 +1,12 @@
 // PHASE 3 STEP 22
-import { DEFAULT_VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
+// PHASE 3 STEP 24
+import {
+  DEFAULT_VERIFICATION_MODE,
+  PRODUCTION_VERIFICATION_CONFIG,
+  TEST_VERIFICATION_CONFIG,
+  VERIFICATION_MODE,
+  getVerificationModeConfig,
+} from "../constants/verificationConfig";
 import type { VerificationMode } from "../types/verification";
 
 type TimingInput = {
@@ -36,25 +43,34 @@ function addMs(isoDate: string, ms: number): string {
   return new Date(new Date(isoDate).getTime() + ms).toISOString();
 }
 
+function addMinutes(isoDate: string, minutes: number): string {
+  return addMs(isoDate, minutes * 60 * 1000);
+}
+
 function getCreatedAt(input: TimingInput): string {
   const createdAt = input.createdAt ?? input.created_at;
   return isValidDateString(createdAt) ? createdAt : new Date().toISOString();
 }
 
 function createTiming(mode: VerificationMode, createdAt = new Date().toISOString()): VerificationTiming {
-  const config = getVerificationModeConfig(mode);
-  const voteAcceptUntil = addMs(createdAt, config.phase4StartMs);
-  const scoreLockAt = addMs(createdAt, config.publishMs);
+  const config = mode === "production" ? PRODUCTION_VERIFICATION_CONFIG : TEST_VERIFICATION_CONFIG;
+  const voteAcceptUntil = addMinutes(createdAt, config.voteWindowMinutes);
+  const scoreLockAt = addMinutes(createdAt, config.scoreLockMinutes);
+  const expiresAt = addMinutes(createdAt, config.expiresMinutes);
 
   return {
     mode,
     createdAt,
-    expiresAt: scoreLockAt,
+    expiresAt,
     voteAcceptUntil,
     scoreLockAt,
-    minVotesRequired: config.minVotes,
+    minVotesRequired: config.minVotesRequired,
     expectedParticipation: config.expectedParticipation,
   };
+}
+
+export function createClaimTiming(mode: VerificationMode = VERIFICATION_MODE): VerificationTiming {
+  return createTiming(mode, new Date().toISOString());
 }
 
 export function createTestModeTiming(createdAt = new Date().toISOString()): VerificationTiming {
@@ -78,7 +94,7 @@ export function getVoteAcceptUntil(claim: TimingInput): string {
 }
 
 export function getScoreLockAt(claim: TimingInput): string {
-  const explicitValue = claim.scoreLockAt ?? claim.score_lock_at ?? claim.expiresAt ?? claim.expires_at;
+  const explicitValue = claim.scoreLockAt ?? claim.score_lock_at;
 
   if (isValidDateString(explicitValue)) {
     return explicitValue;

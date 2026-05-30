@@ -1,12 +1,12 @@
 // PHASE 3 STEP 3
+// PHASE 3 STEP 24
 import { supabase } from "../lib/supabase";
-import { DEFAULT_VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
+import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import {
-  createProductionModeTiming,
-  createTestModeTiming,
+  createClaimTiming,
   getScoreLockAt,
   getVoteAcceptUntil,
 } from "../utils/verificationTiming";
@@ -412,9 +412,9 @@ export function mapClaimToInsert(input: CreateClaimInput) {
   const trimmedVideoUrl = input.videoUrl?.trim() || null;
   // PHASE 3 STEP 17
   // PHASE 3 STEP 22
-  const mode = DEFAULT_VERIFICATION_MODE;
-  const timing =
-    mode === "production" ? createProductionModeTiming() : createTestModeTiming();
+  // PHASE 3 STEP 24
+  const timing = createClaimTiming(VERIFICATION_MODE);
+  console.log("[createClaim] timing:", timing);
 
   return {
     author_id: input.authorId,
@@ -440,7 +440,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     report_count: 0,
     evidence_count: 0,
     is_flagged: false,
-    mode: timing.mode,
+    mode: "test",
     current_phase: 0,
     vote_accept_until: timing.voteAcceptUntil,
     score_lock_at: timing.scoreLockAt,
@@ -450,8 +450,8 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     suspicious_activity: false,
     weighted_community_score: 0.5,
     final_score: 0.5,
-    min_votes_required: timing.minVotesRequired,
-    expected_participation: timing.expectedParticipation,
+    min_votes_required: 5,
+    expected_participation: 10,
     source_count: 0,
     source_quality: "unknown",
     red_flags: [],

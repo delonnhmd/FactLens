@@ -1,10 +1,30 @@
 // PHASE 3 STEP 17
+// PHASE 3 STEP 24
 import type { VerificationMode } from "../types/verification";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 
-export const DEFAULT_VERIFICATION_MODE: VerificationMode = "test";
+export const VERIFICATION_MODE: VerificationMode = "test";
+export const DEFAULT_VERIFICATION_MODE: VerificationMode = VERIFICATION_MODE;
+
+export const TEST_VERIFICATION_CONFIG = {
+  mode: "test",
+  voteWindowMinutes: 10,
+  scoreLockMinutes: 15,
+  expiresMinutes: 15,
+  minVotesRequired: 5,
+  expectedParticipation: 10,
+} as const;
+
+export const PRODUCTION_VERIFICATION_CONFIG = {
+  mode: "production",
+  voteWindowMinutes: 20 * 60,
+  scoreLockMinutes: 24 * 60,
+  expiresMinutes: 24 * 60,
+  minVotesRequired: 15,
+  expectedParticipation: 30,
+} as const;
 
 export const VERIFICATION_AI_WEIGHT = 0.4;
 export const VERIFICATION_COMMUNITY_WEIGHT = 0.6;
@@ -36,10 +56,10 @@ export const VERIFICATION_MODE_CONFIG: Record<VerificationMode, VerificationMode
     phase1EndMs: 6 * HOUR_MS,
     phase2EndMs: 12 * HOUR_MS,
     phase3EndMs: 20 * HOUR_MS,
-    phase4StartMs: 20 * HOUR_MS,
-    publishMs: 24 * HOUR_MS,
-    minVotes: 15,
-    expectedParticipation: 30,
+    phase4StartMs: PRODUCTION_VERIFICATION_CONFIG.voteWindowMinutes * MINUTE_MS,
+    publishMs: PRODUCTION_VERIFICATION_CONFIG.scoreLockMinutes * MINUTE_MS,
+    minVotes: PRODUCTION_VERIFICATION_CONFIG.minVotesRequired,
+    expectedParticipation: PRODUCTION_VERIFICATION_CONFIG.expectedParticipation,
     suspiciousWindowMs: 30 * MINUTE_MS,
   },
   test: {
@@ -48,10 +68,10 @@ export const VERIFICATION_MODE_CONFIG: Record<VerificationMode, VerificationMode
     phase1EndMs: 3 * MINUTE_MS,
     phase2EndMs: 7 * MINUTE_MS,
     phase3EndMs: 10 * MINUTE_MS,
-    phase4StartMs: 10 * MINUTE_MS,
-    publishMs: 15 * MINUTE_MS,
-    minVotes: 5,
-    expectedParticipation: 10,
+    phase4StartMs: TEST_VERIFICATION_CONFIG.voteWindowMinutes * MINUTE_MS,
+    publishMs: TEST_VERIFICATION_CONFIG.scoreLockMinutes * MINUTE_MS,
+    minVotes: TEST_VERIFICATION_CONFIG.minVotesRequired,
+    expectedParticipation: TEST_VERIFICATION_CONFIG.expectedParticipation,
     suspiciousWindowMs: 2 * MINUTE_MS,
   },
 };
