@@ -1,5 +1,6 @@
 // PHASE 3 STEP 3
 // PHASE 3 STEP 24
+// PHASE 3 STEP 25
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -59,7 +60,7 @@ interface ClaimProfileRow {
   accuracy_rate?: number | null;
   trust_tier?: string | null;
   trust_weight_override?: number | null;
-  created_at: string;
+  created_at?: string | null;
 }
 
 export interface ClaimRow {
@@ -102,10 +103,10 @@ export interface ClaimRow {
   expected_participation?: number | null;
   source_count?: number | null;
   source_quality?: string | null;
-  red_flags?: string[] | null;
+  red_flags?: unknown;
   ai_summary?: string | null;
   created_at: string;
-  expires_at: string;
+  expires_at: string | null;
   updated_at: string;
   profiles?: ClaimProfileRow | ClaimProfileRow[] | null;
 }
@@ -160,7 +161,48 @@ const DEFAULT_CLAIM_LIMIT = 50;
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 
 const CLAIM_SELECT = `
-  *,
+  id,
+  author_id,
+  title,
+  description,
+  source_url,
+  video_url,
+  image_url,
+  category,
+  slug,
+  share_url,
+  votes_true,
+  votes_fake,
+  votes_unsure,
+  status,
+  ai_status,
+  ai_confidence,
+  ai_reason,
+  report_count,
+  evidence_count,
+  is_flagged,
+  created_at,
+  expires_at,
+  updated_at,
+  verdict_reason,
+  verdict_calculated_at,
+  total_votes,
+  mode,
+  current_phase,
+  vote_accept_until,
+  score_lock_at,
+  published_at,
+  phase4_locked,
+  early_verdict_fired,
+  suspicious_activity,
+  weighted_community_score,
+  final_score,
+  min_votes_required,
+  expected_participation,
+  source_count,
+  source_quality,
+  red_flags,
+  ai_summary,
   profiles:author_id (
     id,
     username,
@@ -168,13 +210,31 @@ const CLAIM_SELECT = `
     avatar_url,
     verified,
     reputation_score,
-    votes_cast,
-    accuracy_rate,
     trust_tier,
-    trust_weight_override,
-    created_at
+    trust_weight_override
   )
 `;
+
+interface SupabaseErrorLike {
+  code?: string;
+  message: string;
+  details?: string | null;
+  hint?: string | null;
+}
+
+function logClaimsFetchError(error: SupabaseErrorLike) {
+  console.log("[claims fetch error]", {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
+}
+
+function getClaimLoadError(error: SupabaseErrorLike): string {
+  logClaimsFetchError(error);
+  return getClaimServiceErrorMessage(error.message);
+}
 
 function getClaimServiceErrorMessage(message: string, action: "load" | "save" | "delete" = "load"): string {
   const normalizedMessage = message.toLowerCase();
@@ -189,6 +249,10 @@ function getClaimServiceErrorMessage(message: string, action: "load" | "save" | 
 
   if (action === "delete") {
     return "We could not delete this claim. Please try again.";
+  }
+
+  if (VERIFICATION_MODE === "test" || process.env.NODE_ENV !== "production") {
+    return `Could not load claims: ${message}`;
   }
 
   return "We could not load claims right now. Please try again.";
@@ -237,6 +301,18 @@ function mapSourceQuality(sourceQuality: string | null | undefined): SourceQuali
   }
 
   return "unknown";
+}
+
+function isValidDateString(value: string | null | undefined): value is string {
+  return Boolean(value && Number.isFinite(new Date(value).getTime()));
+}
+
+function getClaimExpiresAt(row: ClaimRow, fallbackScoreLockAt: string): string {
+  return isValidDateString(row.expires_at) ? row.expires_at : fallbackScoreLockAt;
+}
+
+function mapStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function mapTrustTier(tier: string | null | undefined): AppUser["trustTier"] {
@@ -333,10 +409,18 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   // PHASE 3 STEP 22
   const voteAcceptUntil = getVoteAcceptUntil(row);
   const scoreLockAt = getScoreLockAt(row);
+  const expiresAt = getClaimExpiresAt(row, scoreLockAt);
+  const aiFlags = mapStringList(row.red_flags);
+  // PHASE 3 STEP 25
   const aiCheck = {
     status: mapAiStatus(row.ai_status),
-    confidence: row.ai_confidence,
-    reason: row.ai_reason,
+    confidence: row.ai_confidence ?? null,
+    reason: row.ai_reason ?? null,
+    riskLabel: null,
+    flags: aiFlags,
+    missingEvidence: [],
+    sourceNotes: row.ai_summary ?? null,
+    checkedAt: null,
   };
   const engineResult = calculateClaimVerificationResult(
     {
@@ -387,12 +471,13 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     expectedParticipation: row.expected_participation ?? modeConfig.expectedParticipation,
     sourceCount: row.source_count ?? 0,
     sourceQuality: mapSourceQuality(row.source_quality),
-    redFlags: row.red_flags ?? [],
+    redFlags: aiFlags,
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status),
     createdAt: row.created_at,
     // PHASE 3 STEP 22
-    expiresAt: scoreLockAt,
+    // PHASE 3 STEP 25
+    expiresAt,
     userVote: null,
     evidence: [],
     // PHASE 3 STEP 5
@@ -520,7 +605,7 @@ export async function fetchLatestClaimsPage(
   if (error) {
     return {
       claims: [],
-      error: getClaimServiceErrorMessage(error.message),
+      error: getClaimLoadError(error),
     };
   }
 
@@ -584,7 +669,7 @@ export async function searchClaimsPage(
   if (error) {
     return {
       claims: [],
-      error: getClaimServiceErrorMessage(error.message),
+      error: getClaimLoadError(error),
     };
   }
 
@@ -605,7 +690,7 @@ export async function fetchClaimsByCategory(category: string): Promise<ClaimsRes
   if (error) {
     return {
       claims: [],
-      error: getClaimServiceErrorMessage(error.message),
+      error: getClaimLoadError(error),
     };
   }
 
@@ -626,7 +711,7 @@ export async function fetchClaimsByStatus(status: ClaimStatus): Promise<ClaimsRe
   if (error) {
     return {
       claims: [],
-      error: getClaimServiceErrorMessage(error.message),
+      error: getClaimLoadError(error),
     };
   }
 
@@ -655,7 +740,7 @@ export async function fetchTrendingClaimsPage(
   if (error) {
     return {
       claims: [],
-      error: getClaimServiceErrorMessage(error.message),
+      error: getClaimLoadError(error),
     };
   }
 
@@ -782,7 +867,7 @@ export async function fetchClaimById(id: string): Promise<ClaimResult> {
   if (error) {
     return {
       claim: null,
-      error: getClaimServiceErrorMessage(error.message),
+      error: getClaimLoadError(error),
     };
   }
 

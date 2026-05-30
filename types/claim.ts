@@ -78,6 +78,12 @@ export interface AiCheck {
   status: "PENDING" | "LIKELY_TRUE" | "LIKELY_FAKE" | "NEEDS_MORE_EVIDENCE";
   confidence: number | null;
   reason: string | null;
+  // PHASE 3 STEP 25
+  riskLabel: string | null;
+  flags: string[];
+  missingEvidence: string[];
+  sourceNotes: string | null;
+  checkedAt: string | null;
 }
 
 export interface Claim {
