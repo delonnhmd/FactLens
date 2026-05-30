@@ -1,4 +1,5 @@
 // PHASE 2 STEP 2
+// PHASE 3 STEP 26
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -9,6 +10,7 @@ import {
   fetchClaimsByCategory as fetchRemoteClaimsByCategory,
   fetchClaimsByStatus as fetchRemoteClaimsByStatus,
   fetchClaimById as fetchRemoteClaimById,
+  fetchLatestClaimsDebug as fetchRemoteLatestClaimsDebug,
   fetchLatestClaimsPage as fetchRemoteLatestClaimsPage,
   fetchTrendingClaims as fetchRemoteTrendingClaims,
   fetchTrendingClaimsPage as fetchRemoteTrendingClaimsPage,
@@ -263,8 +265,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 11
   const fetchLatestClaims = useCallback(
     async () => {
+      // PHASE 3 STEP 26
       const nextClaims = await applyRemoteClaims(
-        await fetchRemoteLatestClaimsPage(DEFAULT_CLAIMS_PAGE_SIZE, 0),
+        await fetchRemoteLatestClaimsDebug(),
         true,
       );
       setClaimOffset(nextClaims.length);

@@ -1,6 +1,7 @@
 // PHASE 3 STEP 3
 // PHASE 3 STEP 24
 // PHASE 3 STEP 25
+// PHASE 3 STEP 26
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -64,11 +65,11 @@ interface ClaimProfileRow {
 }
 
 export interface ClaimRow {
-  id: string;
-  author_id: string;
-  title: string;
-  description: string;
-  source_url: string;
+  id?: string | null;
+  author_id?: string | null;
+  title?: string | null;
+  description?: string | null;
+  source_url?: string | null;
   video_url: string | null;
   image_url: string | null;
   category: string | null;
@@ -105,9 +106,9 @@ export interface ClaimRow {
   source_quality?: string | null;
   red_flags?: unknown;
   ai_summary?: string | null;
-  created_at: string;
+  created_at?: string | null;
   expires_at: string | null;
-  updated_at: string;
+  updated_at?: string | null;
   profiles?: ClaimProfileRow | ClaimProfileRow[] | null;
 }
 
@@ -231,6 +232,10 @@ function logClaimsFetchError(error: SupabaseErrorLike) {
   });
 }
 
+function logClaimsFetchErrorFull(error: SupabaseErrorLike) {
+  console.log("[CLAIMS FETCH ERROR FULL]", JSON.stringify(error, null, 2));
+}
+
 function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
   console.log("[claims finalize warning]", {
     claimId,
@@ -242,8 +247,14 @@ function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
 }
 
 function getClaimLoadError(error: SupabaseErrorLike): string {
+  logClaimsFetchErrorFull(error);
   logClaimsFetchError(error);
-  return getClaimServiceErrorMessage(error.message);
+  return [
+    `Could not load claims: ${error.message}`,
+    `Code: ${error.code ?? "none"}`,
+    `Details: ${error.details ?? "none"}`,
+    `Hint: ${error.hint ?? "none"}`,
+  ].join("\n");
 }
 
 function getClaimServiceErrorMessage(message: string, action: "load" | "save" | "delete" = "load"): string {
@@ -386,18 +397,22 @@ function getEmbeddedProfile(row: ClaimRow): ClaimProfileRow | null {
 }
 
 function mapAuthor(row: ClaimRow): AppUser {
+  // PHASE 3 STEP 26
+  // Home feed debug query intentionally does not join profiles.
+  const authorId = row.author_id ?? "unknown-author";
   const profile = getEmbeddedProfile(row);
-  const username = profile?.username ?? `user_${row.author_id.slice(0, 8)}`;
-  const displayName = profile?.display_name || username;
+  const username = profile?.username ?? "unknown";
+  const displayName = profile?.display_name || "Unknown User";
+  const createdAt = row.created_at ?? new Date().toISOString();
 
   return {
-    id: row.author_id,
+    id: authorId,
     username,
     displayName,
     avatar: profile?.avatar_url ?? null,
     verified: profile?.verified ?? false,
     reputationScore: profile?.reputation_score ?? 0,
-    joinedAt: profile?.created_at ?? row.created_at,
+    joinedAt: profile?.created_at ?? createdAt,
     votesCast: profile?.votes_cast ?? 0,
     accuracyRate: profile?.accuracy_rate ?? null,
     trustTier: mapTrustTier(profile?.trust_tier),
@@ -406,20 +421,29 @@ function mapAuthor(row: ClaimRow): AppUser {
 }
 
 export function mapClaimRowToClaim(row: ClaimRow): Claim {
+  // PHASE 3 STEP 26
+  const createdAt = row.created_at ?? new Date().toISOString();
+  const claimId = row.id ?? `local-${createdAt}`;
+  const title = row.title ?? "";
+  const description = row.description ?? "";
+  const sourceUrl = row.source_url ?? "";
   const author = mapAuthor(row);
   const videoUrl = row.video_url ?? "";
   // PHASE 3 STEP 8
   const videoPlatform = videoUrl ? detectVideoPlatform(videoUrl) : null;
   const youtubeThumbnailUrl = videoUrl ? getYouTubeThumbnailUrl(videoUrl) : null;
   // PHASE 3 STEP 10
-  const totalVotes = row.total_votes ?? (row.votes_true ?? 0) + (row.votes_fake ?? 0) + (row.votes_unsure ?? 0);
+  const votesTrue = row.votes_true ?? 0;
+  const votesFake = row.votes_fake ?? 0;
+  const votesUnsure = row.votes_unsure ?? 0;
+  const totalVotes = row.total_votes ?? votesTrue + votesFake + votesUnsure;
   // PHASE 3 STEP 17
   const mode = mapVerificationMode(row.mode);
   const modeConfig = getVerificationModeConfig(mode);
   // PHASE 3 STEP 22
   const voteAcceptUntil = getVoteAcceptUntil(row);
   const scoreLockAt = getScoreLockAt(row);
-  const expiresAt = getClaimExpiresAt(row, scoreLockAt);
+  const expiresAt = isValidDateString(row.expires_at) ? row.expires_at : createdAt;
   const aiFlags = mapStringList(row.red_flags);
   // PHASE 3 STEP 25
   const aiCheck = {
@@ -434,23 +458,23 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   };
   const engineResult = calculateClaimVerificationResult(
     {
-      id: row.id,
-      createdAt: row.created_at,
+      id: claimId,
+      createdAt,
       aiCheck,
-      votesTrue: row.votes_true ?? 0,
-      votesFake: row.votes_fake ?? 0,
-      votesUnsure: row.votes_unsure ?? 0,
+      votesTrue,
+      votesFake,
+      votesUnsure,
     },
     mode,
   );
 
   return {
-    id: row.id,
-    slug: row.slug ?? generateClaimSlug(row.title),
-    shareUrl: row.share_url ?? generateClaimShareUrl(row.id),
-    title: row.title,
-    description: row.description,
-    sourceUrl: row.source_url,
+    id: claimId,
+    slug: row.slug ?? generateClaimSlug(title),
+    shareUrl: row.share_url ?? generateClaimShareUrl(claimId),
+    title,
+    description,
+    sourceUrl,
     media: {
       imageUrl: row.image_url,
       videoUrl: videoUrl && videoPlatform !== "YouTube" ? videoUrl : null,
@@ -460,9 +484,9 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     },
     aiCheck,
     category: row.category ?? "Other",
-    votesTrue: row.votes_true ?? 0,
-    votesFake: row.votes_fake ?? 0,
-    votesUnsure: row.votes_unsure ?? 0,
+    votesTrue,
+    votesFake,
+    votesUnsure,
     // PHASE 3 STEP 10
     totalVotes,
     verdictReason: row.verdict_reason ?? null,
@@ -484,7 +508,7 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
     redFlags: aiFlags,
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status),
-    createdAt: row.created_at,
+    createdAt,
     // PHASE 3 STEP 22
     // PHASE 3 STEP 25
     expiresAt,
@@ -601,16 +625,41 @@ export async function fetchLatestClaims(limit = DEFAULT_CLAIM_LIMIT): Promise<Cl
   return fetchLatestClaimsPage(limit, 0);
 }
 
+// PHASE 3 STEP 26
+export async function fetchLatestClaimsDebug(): Promise<ClaimsResult> {
+  const { data, error } = await supabase
+    .from("claims")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    return {
+      claims: [],
+      error: getClaimLoadError(error),
+    };
+  }
+
+  console.log("[claims debug count]", data?.length);
+  console.log("[claims debug first row]", data?.[0]);
+
+  return {
+    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
+  };
+}
+
 // PHASE 3 STEP 11
 export async function fetchLatestClaimsPage(
   limit = DEFAULT_CLAIMS_PAGE_SIZE,
   offset = 0,
 ): Promise<ClaimsResult> {
+  // PHASE 3 STEP 26
+  void offset;
   const { data, error } = await supabase
     .from("claims")
-    .select(CLAIM_SELECT)
+    .select("*")
     .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .limit(limit);
 
   if (error) {
     return {
@@ -928,11 +977,20 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   }
 
   const insertedRow = data as ClaimRow;
-  const shareUrl = generateClaimShareUrl(insertedRow.id);
+  const insertedClaimId = insertedRow.id;
+
+  if (!insertedClaimId) {
+    return {
+      claim: mapClaimRowToClaim(insertedRow),
+      error: "Claim was saved, but Supabase did not return a claim id.",
+    };
+  }
+
+  const shareUrl = generateClaimShareUrl(insertedClaimId);
   const { data: updatedData } = await supabase
     .from("claims")
     .update({ share_url: shareUrl })
-    .eq("id", insertedRow.id)
+    .eq("id", insertedClaimId)
     .select(CLAIM_SELECT)
     .single();
 
