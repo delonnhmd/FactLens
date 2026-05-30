@@ -1,4 +1,5 @@
 // PHASE 1 STEP 4
+// PHASE 3 STEP 27
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -49,6 +50,10 @@ export default function HomeScreen() {
     loadingMore,
     liveUpdatesEnabled,
     error,
+    claimsErrorMessage,
+    claimsErrorCode,
+    claimsErrorDetails,
+    claimsErrorHint,
     voteOnClaim,
     reportClaim,
     searchClaimsPage,
@@ -193,6 +198,10 @@ export default function HomeScreen() {
   const listLoading = filteredFeedActive ? feedLoading : loading;
   const listLoadingMore = filteredFeedActive ? feedLoadingMore : loadingMore;
   const displayError = feedError || error || "";
+  const displayErrorMessage = feedError || claimsErrorMessage || error || "";
+  const displayErrorCode = claimsErrorCode || "none";
+  const displayErrorDetails = claimsErrorDetails || "none";
+  const displayErrorHint = claimsErrorHint || "none";
 
   const listHeader = (
     <View>
@@ -230,7 +239,14 @@ export default function HomeScreen() {
       ) : null}
       {displayError ? (
         <View style={styles.errorPanel}>
-          <Text style={styles.errorText}>{displayError}</Text>
+          <Text style={styles.errorTitle}>Could not load claims.</Text>
+          <Text style={styles.errorText}>Message: {displayErrorMessage}</Text>
+          <Text style={styles.errorText}>Code: {displayErrorCode}</Text>
+          <Text style={styles.errorText}>Details: {displayErrorDetails}</Text>
+          <Text style={styles.errorText}>Hint: {displayErrorHint}</Text>
+          <TouchableOpacity style={styles.retryButton} activeOpacity={0.8} onPress={handleRefresh}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
       {listLoading ? (
@@ -379,8 +395,29 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "600",
+    marginTop: theme.spacing.xs,
+  },
+  errorTitle: {
+    color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "800",
+    marginBottom: theme.spacing.xs,
+  },
+  retryButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  retryButtonText: {
+    color: theme.colors.background,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "800",
   },
   footerLoader: {
     alignItems: "center",

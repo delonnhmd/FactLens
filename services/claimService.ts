@@ -2,11 +2,13 @@
 // PHASE 3 STEP 24
 // PHASE 3 STEP 25
 // PHASE 3 STEP 26
+// PHASE 3 STEP 27
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
+import { formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
 import {
   createClaimTiming,
   getScoreLockAt,
@@ -152,9 +154,15 @@ interface ClaimResult {
   error?: string;
 }
 
-interface ClaimsResult {
+export interface ClaimsResult {
+  ok?: boolean;
   claims: Claim[];
   error?: string;
+  errorMessage?: string;
+  errorCode?: string;
+  errorDetails?: string;
+  errorHint?: string;
+  rawError?: unknown;
 }
 
 const DEFAULT_CLAIM_LIMIT = 50;
@@ -232,7 +240,7 @@ function logClaimsFetchError(error: SupabaseErrorLike) {
   });
 }
 
-function logClaimsFetchErrorFull(error: SupabaseErrorLike) {
+function logClaimsFetchErrorFull(error: unknown) {
   console.log("[CLAIMS FETCH ERROR FULL]", JSON.stringify(error, null, 2));
 }
 
@@ -246,15 +254,48 @@ function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
   });
 }
 
-function getClaimLoadError(error: SupabaseErrorLike): string {
+function getClaimLoadError(error: unknown): string {
   logClaimsFetchErrorFull(error);
-  logClaimsFetchError(error);
+  logClaimsFetchError(error as SupabaseErrorLike);
   return [
-    `Could not load claims: ${error.message}`,
-    `Code: ${error.code ?? "none"}`,
-    `Details: ${error.details ?? "none"}`,
-    `Hint: ${error.hint ?? "none"}`,
+    `Could not load claims: ${getDebugErrorParts(error).message}`,
+    `Code: ${getDebugErrorParts(error).code || "none"}`,
+    `Details: ${getDebugErrorParts(error).details || "none"}`,
+    `Hint: ${getDebugErrorParts(error).hint || "none"}`,
   ].join("\n");
+}
+
+function getClaimsErrorResult(error: unknown, prefix = "Could not load claims"): ClaimsResult {
+  const parts = getDebugErrorParts(error);
+  const message = prefix === "Claim mapping failed" ? `${prefix}: ${parts.message}` : parts.message;
+  const displayError = [
+    `${prefix}: ${parts.message}`,
+    `Code: ${parts.code || "none"}`,
+    `Details: ${parts.details || "none"}`,
+    `Hint: ${parts.hint || "none"}`,
+  ].join("\n");
+
+  console.log("[CLAIMS FETCH ERROR FULL]", formatErrorForDisplay(error));
+
+  return {
+    ok: false,
+    claims: [],
+    error: displayError,
+    errorMessage: message,
+    errorCode: parts.code,
+    errorDetails: parts.details,
+    errorHint: parts.hint,
+    rawError: error,
+  };
+}
+
+function getClaimsSuccessResult(rows: ClaimRow[]): ClaimsResult {
+  const claims = rows.map((row) => mapClaimRowToClaim(row));
+
+  return {
+    ok: true,
+    claims,
+  };
 }
 
 function getClaimServiceErrorMessage(message: string, action: "load" | "save" | "delete" = "load"): string {
@@ -420,7 +461,7 @@ function mapAuthor(row: ClaimRow): AppUser {
   };
 }
 
-export function mapClaimRowToClaim(row: ClaimRow): Claim {
+function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   // PHASE 3 STEP 26
   const createdAt = row.created_at ?? new Date().toISOString();
   const claimId = row.id ?? `local-${createdAt}`;
@@ -527,6 +568,103 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   };
 }
 
+function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
+  const createdAt = row.created_at ?? new Date().toISOString();
+  const claimId = row.id ?? `broken-${createdAt}`;
+  const scoreLockAt = new Date(new Date(createdAt).getTime() + 15 * 60 * 1000).toISOString();
+  const voteAcceptUntil = new Date(new Date(createdAt).getTime() + 10 * 60 * 1000).toISOString();
+  const fallbackAuthor: AppUser = {
+    id: row.author_id ?? "unknown-author",
+    username: "unknown",
+    displayName: "Unknown User",
+    avatar: null,
+    verified: false,
+    reputationScore: 0,
+    joinedAt: createdAt,
+    votesCast: 0,
+    accuracyRate: null,
+    trustTier: "new",
+    trustWeightOverride: null,
+  };
+
+  console.log("[claim mapping failed]", {
+    error: formatErrorForDisplay(error),
+    row,
+  });
+
+  return {
+    id: claimId,
+    slug: row.slug ?? generateClaimSlug(row.title ?? "Broken claim"),
+    shareUrl: row.share_url ?? generateClaimShareUrl(claimId),
+    title: row.title ?? "Broken claim",
+    description: "This claim failed to map.",
+    sourceUrl: row.source_url ?? "",
+    media: {
+      imageUrl: row.image_url ?? null,
+      videoUrl: row.video_url ?? null,
+      youtubeUrl: null,
+      videoPlatform: null,
+      youtubeThumbnailUrl: null,
+    },
+    aiCheck: {
+      status: "PENDING",
+      confidence: null,
+      reason: null,
+      riskLabel: null,
+      flags: [],
+      missingEvidence: [],
+      sourceNotes: null,
+      checkedAt: null,
+    },
+    category: row.category ?? "Other",
+    votesTrue: row.votes_true ?? 0,
+    votesFake: row.votes_fake ?? 0,
+    votesUnsure: row.votes_unsure ?? 0,
+    totalVotes: row.total_votes ?? 0,
+    verdictReason: row.verdict_reason ?? null,
+    verdictCalculatedAt: row.verdict_calculated_at ?? null,
+    mode: mapVerificationMode(row.mode),
+    currentPhase: row.current_phase ?? 0,
+    voteAcceptUntil,
+    scoreLockAt,
+    publishedAt: row.published_at ?? null,
+    phase4Locked: row.phase4_locked ?? false,
+    earlyVerdictFired: row.early_verdict_fired ?? false,
+    suspiciousActivity: row.suspicious_activity ?? false,
+    weightedCommunityScore: row.weighted_community_score ?? 0.5,
+    finalScore: row.final_score ?? 0.5,
+    minVotesRequired: row.min_votes_required ?? 5,
+    expectedParticipation: row.expected_participation ?? 10,
+    sourceCount: row.source_count ?? 0,
+    sourceQuality: mapSourceQuality(row.source_quality),
+    redFlags: [],
+    aiSummary: row.ai_summary ?? row.ai_reason ?? null,
+    status: mapStatus(row.status ?? "OPEN"),
+    createdAt,
+    expiresAt: row.expires_at ?? scoreLockAt,
+    userVote: null,
+    evidence: [],
+    evidenceCount: row.evidence_count ?? 0,
+    reports: [],
+    reportCount: row.report_count ?? 0,
+    isFlagged: row.is_flagged ?? false,
+    authorId: fallbackAuthor.id,
+    authorUsername: fallbackAuthor.username,
+    authorDisplayName: fallbackAuthor.displayName,
+    authorVerified: false,
+    author: fallbackAuthor,
+  };
+}
+
+export function mapClaimRowToClaim(row: ClaimRow): Claim {
+  // PHASE 3 STEP 27
+  try {
+    return mapClaimRowToClaimStrict(row);
+  } catch (error) {
+    return createFallbackClaim(row, error);
+  }
+}
+
 export function mapClaimToInsert(input: CreateClaimInput) {
   const trimmedVideoUrl = input.videoUrl?.trim() || null;
   // PHASE 3 STEP 17
@@ -621,31 +759,34 @@ export async function fetchClaims(): Promise<ClaimsResult> {
 
 // PHASE 3 STEP 9
 export async function fetchLatestClaims(limit = DEFAULT_CLAIM_LIMIT): Promise<ClaimsResult> {
-  // PHASE 3 STEP 11
-  return fetchLatestClaimsPage(limit, 0);
+  // PHASE 3 STEP 27
+  try {
+    return await fetchLatestClaimsPage(limit, 0);
+  } catch (error) {
+    return getClaimsErrorResult(error);
+  }
 }
 
 // PHASE 3 STEP 26
 export async function fetchLatestClaimsDebug(): Promise<ClaimsResult> {
-  const { data, error } = await supabase
-    .from("claims")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(20);
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
 
-  if (error) {
-    return {
-      claims: [],
-      error: getClaimLoadError(error),
-    };
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    console.log("[claims debug count]", data?.length);
+    console.log("[claims debug first row]", data?.[0]);
+
+    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
   }
-
-  console.log("[claims debug count]", data?.length);
-  console.log("[claims debug first row]", data?.[0]);
-
-  return {
-    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
-  };
 }
 
 // PHASE 3 STEP 11
@@ -655,22 +796,22 @@ export async function fetchLatestClaimsPage(
 ): Promise<ClaimsResult> {
   // PHASE 3 STEP 26
   void offset;
-  const { data, error } = await supabase
-    .from("claims")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  // PHASE 3 STEP 27
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (error) {
-    return {
-      claims: [],
-      error: getClaimLoadError(error),
-    };
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
   }
-
-  return {
-    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
-  };
 }
 
 // PHASE 3 STEP 9
@@ -686,55 +827,61 @@ export async function searchClaimsPage(
   limit = DEFAULT_CLAIMS_PAGE_SIZE,
   offset = 0,
 ): Promise<ClaimsResult> {
-  const searchTerm = cleanSearchTerm(query);
-  let request = supabase.from("claims").select(CLAIM_SELECT);
+  void offset;
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (searchTerm) {
-    request = request.or(getSearchExpression(searchTerm));
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    const searchTerm = cleanSearchTerm(query).toLowerCase();
+    const filteredRows = ((data ?? []) as ClaimRow[]).filter((row) => {
+      const rowMatchesQuery =
+        !searchTerm ||
+        [row.title, row.description, row.source_url, row.category]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(searchTerm));
+
+      if (!rowMatchesQuery) {
+        return false;
+      }
+
+      if (filters.category && row.category !== filters.category) {
+        return false;
+      }
+
+      if (filters.filter === "COMMUNITY_TRUE" || filters.filter === "COMMUNITY_FAKE" || filters.filter === "NEEDS_MORE_EVIDENCE") {
+        return row.status === filters.filter;
+      }
+
+      if (filters.filter === "OPEN_VOTING") {
+        return row.status === "OPEN";
+      }
+
+      if (filters.filter === "FLAGGED") {
+        return Boolean(row.is_flagged);
+      }
+
+      if (filters.filter === "HAS_IMAGE") {
+        return Boolean(row.image_url);
+      }
+
+      if (filters.filter === "HAS_VIDEO") {
+        return Boolean(row.video_url);
+      }
+
+      return true;
+    });
+
+    return getClaimsSuccessResult(filteredRows);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
   }
-
-  if (filters.category) {
-    request = request.eq("category", filters.category);
-  }
-
-  if (filters.filter === "OPEN_VOTING") {
-    request = request.eq("status", "OPEN").gt("vote_accept_until", new Date().toISOString());
-  }
-
-  if (
-    filters.filter === "COMMUNITY_TRUE" ||
-    filters.filter === "COMMUNITY_FAKE" ||
-    filters.filter === "NEEDS_MORE_EVIDENCE"
-  ) {
-    request = request.eq("status", filters.filter);
-  }
-
-  if (filters.filter === "FLAGGED") {
-    request = request.eq("is_flagged", true);
-  }
-
-  if (filters.filter === "HAS_IMAGE") {
-    request = request.not("image_url", "is", null);
-  }
-
-  if (filters.filter === "HAS_VIDEO") {
-    request = request.not("video_url", "is", null);
-  }
-
-  const { data, error } = await request
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (error) {
-    return {
-      claims: [],
-      error: getClaimLoadError(error),
-    };
-  }
-
-  return {
-    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
-  };
 }
 
 // PHASE 3 STEP 9
@@ -781,8 +928,12 @@ export async function fetchClaimsByStatus(status: ClaimStatus): Promise<ClaimsRe
 
 // PHASE 3 STEP 9
 export async function fetchTrendingClaims(limit = 100): Promise<ClaimsResult> {
-  // PHASE 3 STEP 11
-  return fetchTrendingClaimsPage(limit, 0);
+  // PHASE 3 STEP 27
+  try {
+    return await fetchTrendingClaimsPage(limit, 0);
+  } catch (error) {
+    return getClaimsErrorResult(error);
+  }
 }
 
 // PHASE 3 STEP 11
@@ -790,26 +941,27 @@ export async function fetchTrendingClaimsPage(
   limit = DEFAULT_CLAIMS_PAGE_SIZE,
   offset = 0,
 ): Promise<ClaimsResult> {
-  const { data, error } = await supabase
-    .from("claims")
-    .select(CLAIM_SELECT)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+  void offset;
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
-  if (error) {
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    const result = getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+
     return {
-      claims: [],
-      error: getClaimLoadError(error),
+      ok: true,
+      claims: result.claims.sort((first, second) => calculateTrendingScore(second) - calculateTrendingScore(first)),
     };
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
   }
-
-  const claims = ((data ?? []) as ClaimRow[])
-    .map(mapClaimRowToClaim)
-    .sort((first, second) => calculateTrendingScore(second) - calculateTrendingScore(first));
-
-  return {
-    claims,
-  };
 }
 
 // PHASE 3 STEP 10

@@ -1,5 +1,6 @@
 // PHASE 2 STEP 2
 // PHASE 3 STEP 26
+// PHASE 3 STEP 27
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -20,7 +21,7 @@ import {
   searchClaimsPage as searchRemoteClaimsPage,
   DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
-import type { ClaimSearchFilters } from "../services/claimService";
+import type { ClaimSearchFilters, ClaimsResult } from "../services/claimService";
 import {
   fetchUserVoteForClaim,
   recalculateVoteCounts as recalculateRemoteVoteCounts,
@@ -41,6 +42,7 @@ import {
   type RealtimeChangePayload,
 } from "../services/realtimeService";
 import type { Claim, ClaimStatus, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
+import { getDebugErrorParts } from "../utils/debugError";
 
 export interface CreateClaimInput {
   title: string;
@@ -68,6 +70,12 @@ interface ClaimsContextValue {
   // PHASE 3 STEP 12
   liveUpdatesEnabled: boolean;
   error: string | null;
+  // PHASE 3 STEP 27
+  claimsErrorMessage: string | null;
+  claimsErrorCode: string | null;
+  claimsErrorDetails: string | null;
+  claimsErrorHint: string | null;
+  rawClaimsError: unknown | null;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<string | void>;
   // PHASE 3 STEP 20E
@@ -179,6 +187,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [claimOffset, setClaimOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // PHASE 3 STEP 27
+  const [claimsErrorMessage, setClaimsErrorMessage] = useState<string | null>(null);
+  const [claimsErrorCode, setClaimsErrorCode] = useState<string | null>(null);
+  const [claimsErrorDetails, setClaimsErrorDetails] = useState<string | null>(null);
+  const [claimsErrorHint, setClaimsErrorHint] = useState<string | null>(null);
+  const [rawClaimsError, setRawClaimsError] = useState<unknown | null>(null);
   // PHASE 3 STEP 12
   const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(false);
   // PHASE 3 STEP 20E
@@ -190,6 +204,36 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     claimsRef.current = claims;
   }, [claims]);
+
+  const clearClaimsError = useCallback(() => {
+    setError(null);
+    setClaimsErrorMessage(null);
+    setClaimsErrorCode(null);
+    setClaimsErrorDetails(null);
+    setClaimsErrorHint(null);
+    setRawClaimsError(null);
+  }, []);
+
+  const setClaimsErrorFromResult = useCallback((result: Partial<ClaimsResult>) => {
+    const message = result.errorMessage ?? result.error ?? "Could not load claims.";
+    setError(result.error ?? message);
+    setClaimsErrorMessage(message);
+    setClaimsErrorCode(result.errorCode ?? null);
+    setClaimsErrorDetails(result.errorDetails ?? null);
+    setClaimsErrorHint(result.errorHint ?? null);
+    setRawClaimsError(result.rawError ?? null);
+  }, []);
+
+  const setClaimsErrorFromUnknown = useCallback((loadError: unknown) => {
+    const parts = getDebugErrorParts(loadError);
+    const message = parts.message || "Could not load claims.";
+    setError(message);
+    setClaimsErrorMessage(message);
+    setClaimsErrorCode(parts.code || null);
+    setClaimsErrorDetails(parts.details || null);
+    setClaimsErrorHint(parts.hint || null);
+    setRawClaimsError(loadError);
+  }, []);
 
   // PHASE 3 STEP 20E
   useEffect(() => {
@@ -244,11 +288,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 9
   const applyRemoteClaims = useCallback(
-    async (result: { claims: Claim[]; error?: string }, replace = false) => {
-      if (result.error) {
-        throw new Error(result.error);
+    async (result: ClaimsResult, replace = false) => {
+      if (result.ok === false || result.error) {
+        setClaimsErrorFromResult(result);
+        throw new Error(result.error ?? result.errorMessage ?? "Could not load claims.");
       }
 
+      clearClaimsError();
       // PHASE 3 STEP 10
       const finalizedResult = await finalizeRemoteExpiredClaims(result.claims);
       const claimsWithVotes = await applyUserVotes(finalizedResult.claims);
@@ -259,7 +305,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       return claimsWithVotes;
     },
-    [applyUserVotes],
+    [applyUserVotes, clearClaimsError, setClaimsErrorFromResult],
   );
 
   // PHASE 3 STEP 11
@@ -280,13 +326,18 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 11
   const refreshClaims = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    clearClaimsError();
 
     if (supabaseConfigError) {
       setClaims([]);
       setClaimOffset(0);
       setHasMoreClaims(false);
-      setError(supabaseConfigError);
+      setClaimsErrorFromResult({
+        ok: false,
+        claims: [],
+        error: supabaseConfigError,
+        errorMessage: supabaseConfigError,
+      });
       setLoading(false);
       return;
     }
@@ -297,12 +348,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       setClaims([]);
       setClaimOffset(0);
       setHasMoreClaims(false);
-      setError(loadError instanceof Error ? loadError.message : "We could not load claims right now.");
+      setClaimsErrorFromUnknown(loadError);
       throw loadError;
     } finally {
       setLoading(false);
     }
-  }, [fetchLatestClaims]);
+  }, [clearClaimsError, fetchLatestClaims, setClaimsErrorFromResult, setClaimsErrorFromUnknown]);
 
   // PHASE 3 STEP 11
   const loadMoreClaims = useCallback(async () => {
@@ -311,7 +362,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     }
 
     setLoadingMore(true);
-    setError(null);
+    clearClaimsError();
 
     try {
       const nextClaims = await applyRemoteClaims(
@@ -321,11 +372,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       setClaimOffset((currentOffset) => currentOffset + nextClaims.length);
       setHasMoreClaims(nextClaims.length === DEFAULT_CLAIMS_PAGE_SIZE);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Could not load claims. Pull to retry.");
+      setClaimsErrorFromUnknown(loadError);
     } finally {
       setLoadingMore(false);
     }
-  }, [applyRemoteClaims, claimOffset, hasMoreClaims, loading, loadingMore]);
+  }, [applyRemoteClaims, claimOffset, clearClaimsError, hasMoreClaims, loading, loadingMore, setClaimsErrorFromUnknown]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -903,6 +954,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       loadingMore,
       liveUpdatesEnabled,
       error,
+      claimsErrorMessage,
+      claimsErrorCode,
+      claimsErrorDetails,
+      claimsErrorHint,
+      rawClaimsError,
       createClaim,
       voteOnClaim,
       getUserVoteForClaim,
@@ -930,6 +986,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       createClaim,
       currentClaims,
       error,
+      claimsErrorCode,
+      claimsErrorDetails,
+      claimsErrorHint,
+      claimsErrorMessage,
       fetchEvidenceForClaim,
       fetchClaimById,
       fetchClaimsByCategory,
@@ -946,6 +1006,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       loading,
       loadingMore,
       now,
+      rawClaimsError,
       reportClaim,
       refreshClaims,
       refreshClaimVerdict,
