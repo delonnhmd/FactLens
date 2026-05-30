@@ -106,13 +106,13 @@ export default function HomeScreen() {
         setFeedClaims((currentClaims) => (replace ? nextClaims : mergeClaimsById(currentClaims, nextClaims)));
         setFeedOffset(nextOffset + nextClaims.length);
         setFeedHasMore(nextClaims.length === HOME_PAGE_SIZE);
-      } catch {
+      } catch (loadError) {
         if (replace) {
           setFeedClaims([]);
           setFeedOffset(0);
         }
 
-        setFeedError("Could not load claims. Pull to retry.");
+        setFeedError(loadError instanceof Error ? loadError.message : "Could not load claims. Pull to retry.");
       } finally {
         setFeedLoading(false);
         setFeedLoadingMore(false);
@@ -146,8 +146,8 @@ export default function HomeScreen() {
       } else {
         await refreshClaims();
       }
-    } catch {
-      setFeedError("Could not load claims. Pull to retry.");
+    } catch (loadError) {
+      setFeedError(loadError instanceof Error ? loadError.message : "Could not load claims. Pull to retry.");
     } finally {
       setRefreshing(false);
     }
@@ -192,7 +192,7 @@ export default function HomeScreen() {
 
   const listLoading = filteredFeedActive ? feedLoading : loading;
   const listLoadingMore = filteredFeedActive ? feedLoadingMore : loadingMore;
-  const displayError = feedError || error ? "Could not load claims. Pull to retry." : "";
+  const displayError = feedError || error || "";
 
   const listHeader = (
     <View>

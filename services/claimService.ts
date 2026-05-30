@@ -231,6 +231,16 @@ function logClaimsFetchError(error: SupabaseErrorLike) {
   });
 }
 
+function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
+  console.log("[claims finalize warning]", {
+    claimId,
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
+}
+
 function getClaimLoadError(error: SupabaseErrorLike): string {
   logClaimsFetchError(error);
   return getClaimServiceErrorMessage(error.message);
@@ -784,6 +794,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
   const scoreLockPassed = new Date(latestClaim.scoreLockAt).getTime() <= Date.now();
   const shouldPublish = scoreLockPassed || verificationResponse.early_verdict_fired;
   const publishedStatus = mapVerificationVerdictToStatus(verificationResponse.verdict);
+  const finalizedAt = new Date().toISOString();
   const verdictReason =
     verificationResponse.vote_count < latestClaim.minVotesRequired
       ? "Minimum vote requirement was not met."
@@ -801,20 +812,42 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
       ? {
           status: publishedStatus,
           verdict_reason: verdictReason,
-          verdict_calculated_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
+          verdict_calculated_at: finalizedAt,
+          published_at: finalizedAt,
           phase4_locked: true,
         }
       : {}),
     updated_at: new Date().toISOString(),
   };
+  const localFinalizedClaim: Claim = {
+    ...latestClaim,
+    currentPhase: verificationResponse.current_phase,
+    phase4Locked: shouldPublish ? true : verificationResponse.phase4_locked,
+    earlyVerdictFired: verificationResponse.early_verdict_fired,
+    suspiciousActivity: verificationResponse.suspicious_activity,
+    weightedCommunityScore: verificationResponse.weighted_community_score,
+    finalScore: verificationResponse.final_score,
+    totalVotes: verificationResponse.vote_count,
+    ...(verificationResponse.phase4_locked && !shouldPublish ? { status: "VOTING_CLOSED" as ClaimStatus } : {}),
+    ...(shouldPublish
+      ? {
+          status: publishedStatus,
+          verdictReason,
+          verdictCalculatedAt: finalizedAt,
+          publishedAt: finalizedAt,
+        }
+      : {}),
+  };
 
   const { error } = await supabase.from("claims").update(updateRow).eq("id", claimId);
 
   if (error) {
+    // PHASE 3 STEP 25
+    // Client-side verdict saving is best-effort. RLS can block this for non-authors,
+    // but the feed should still render the fetched claim.
+    logClaimFinalizeWarning(claimId, error);
     return {
-      claim: latestClaim,
-      error: getClaimServiceErrorMessage(error.message, "save"),
+      claim: localFinalizedClaim,
     };
   }
 
@@ -831,6 +864,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 
 // PHASE 3 STEP 10
 export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResult> {
+  const now = Date.now();
   const finalizedClaims = await Promise.all(
     claims.map(async (claim) => {
       if (
@@ -841,10 +875,17 @@ export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResu
         return claim;
       }
 
+      if (new Date(claim.voteAcceptUntil).getTime() > now && new Date(claim.scoreLockAt).getTime() > now) {
+        return claim;
+      }
+
       const result = await finalizeExpiredClaim(claim.id);
 
       if (result.error) {
-        throw new Error(result.error);
+        console.log("[claims finalize warning]", {
+          claimId: claim.id,
+          message: result.error,
+        });
       }
 
       return result.claim ?? claim;
