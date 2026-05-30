@@ -1,11 +1,13 @@
 // PHASE 3 STEP 17
 // PHASE 3 STEP 24
+// PHASE 3 STEP 28
+import { APP_CONFIG } from "./appConfig";
 import type { VerificationMode } from "../types/verification";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 
-export const VERIFICATION_MODE: VerificationMode = "test";
+export const VERIFICATION_MODE: VerificationMode = APP_CONFIG.CLAIM_VOTING_MODE;
 export const DEFAULT_VERIFICATION_MODE: VerificationMode = VERIFICATION_MODE;
 
 export const TEST_VERIFICATION_CONFIG = {

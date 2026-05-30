@@ -1,6 +1,7 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 27
-import { useState } from "react";
+// PHASE 3 STEP 28
+import { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
@@ -24,6 +25,7 @@ export default function ProfileScreen() {
   const fallbackProfile = getAuthProfile(currentUser);
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
+  const profileAutoFixAttempted = useRef(false);
 
   const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
   const username = profile?.username ?? fallbackProfile.username;
@@ -54,6 +56,16 @@ export default function ProfileScreen() {
 
     setActionMessage(result.message ?? "Profile ready.");
   };
+
+  // PHASE 3 STEP 28
+  useEffect(() => {
+    if (loading || !isAuthenticated || profile || profileAutoFixAttempted.current) {
+      return;
+    }
+
+    profileAutoFixAttempted.current = true;
+    void handleCreateMissingProfile();
+  }, [isAuthenticated, loading, profile]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -102,7 +114,7 @@ export default function ProfileScreen() {
                   FactLens could not find your public profile row. Create it from your auth metadata.
                 </Text>
                 <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateMissingProfile}>
-                  <Text style={styles.buttonText}>Create Missing Profile</Text>
+                  <Text style={styles.buttonText}>Fix Profile</Text>
                 </TouchableOpacity>
               </View>
             ) : null}

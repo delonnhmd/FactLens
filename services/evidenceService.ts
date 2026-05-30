@@ -1,7 +1,9 @@
 // PHASE 3 STEP 5
+// PHASE 3 STEP 28
 import { supabase } from "../lib/supabase";
 import { getSourceQuality } from "./sourceQuality";
 import type { Evidence, EvidenceType } from "../types/claim";
+import { isValidSourceUrl, normalizeUrl } from "../utils/url";
 
 export interface EvidenceInput {
   url: string;
@@ -73,8 +75,8 @@ function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string |
     return "Evidence URL is required.";
   }
 
-  if (trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
-    return "Evidence URL must start with http:// or https://.";
+  if (trimmedUrl && !isValidSourceUrl(trimmedUrl)) {
+    return "Enter a valid evidence URL.";
   }
 
   if (input.note !== undefined && !trimmedNote) {
@@ -165,7 +167,8 @@ export async function addEvidence(
     };
   }
 
-  const sourceQuality = getSourceQuality(input.url);
+  const normalizedUrl = normalizeUrl(input.url);
+  const sourceQuality = getSourceQuality(normalizedUrl);
 
   const { data, error } = await supabase
     .from("evidence")
@@ -173,7 +176,7 @@ export async function addEvidence(
       claim_id: claimId,
       user_id: userId,
       evidence_type: input.type,
-      url: input.url.trim(),
+      url: normalizedUrl,
       note: input.note.trim(),
       source_quality_label: sourceQuality.label,
       source_quality_score: sourceQuality.score,
@@ -218,9 +221,10 @@ export async function updateEvidence(
     };
   }
 
-  const sourceQuality = updates.url ? getSourceQuality(updates.url) : null;
+  const normalizedUrl = updates.url ? normalizeUrl(updates.url) : null;
+  const sourceQuality = normalizedUrl ? getSourceQuality(normalizedUrl) : null;
   const updateRow = {
-    ...(updates.url !== undefined ? { url: updates.url.trim() } : {}),
+    ...(updates.url !== undefined ? { url: normalizedUrl } : {}),
     ...(updates.note !== undefined ? { note: updates.note.trim() } : {}),
     ...(updates.type !== undefined ? { evidence_type: updates.type } : {}),
     ...(sourceQuality

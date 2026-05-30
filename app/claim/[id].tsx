@@ -1,4 +1,5 @@
 // PHASE 1 STEP 4
+// PHASE 3 STEP 28
 import { useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
@@ -23,6 +24,7 @@ import {
 } from "../../services/realtimeService";
 import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../types/claim";
 import { theme } from "../../constants/theme";
+import { isValidSourceUrl, normalizeUrl } from "../../utils/url";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
@@ -93,7 +95,7 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   // PHASE 2 STEP 9
-  const { currentUser, isAuthenticated, isVerified, profile } = useAuth();
+  const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
   const {
     getClaimById,
@@ -342,8 +344,8 @@ export default function ClaimDetailScreen() {
 
     if (!trimmedUrl) {
       nextErrors.url = "Evidence URL is required.";
-    } else if (!/^https?:\/\//i.test(trimmedUrl)) {
-      nextErrors.url = "Evidence URL must start with http:// or https://.";
+    } else if (!isValidSourceUrl(trimmedUrl)) {
+      nextErrors.url = "Enter a valid evidence URL.";
     }
 
     if (!trimmedNote) {
@@ -372,7 +374,7 @@ export default function ClaimDetailScreen() {
 
     try {
       await addEvidence(claim.id, {
-        url: evidenceUrl,
+        url: normalizeUrl(evidenceUrl),
         note: evidenceNote,
         type: evidenceType,
       });
@@ -446,7 +448,7 @@ export default function ClaimDetailScreen() {
   const voteWindowClosesAt = getVoteAcceptUntil(claim);
   const scoreLockAt = getScoreLockAt(claim);
   // PHASE 3 STEP 22
-  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || !profile || Boolean(claim.userVote);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
   const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
   // PHASE 3 STEP 10
   const verdictTitle =
@@ -480,8 +482,6 @@ export default function ClaimDetailScreen() {
       ? "Please log in to vote."
         : !isVerified
           ? "Please verify your email to vote."
-        : !profile
-          ? "Profile missing."
         : claim.userVote
           ? "You already voted on this post."
           : "Choose one option before voting closes.";

@@ -1,7 +1,9 @@
 // PHASE 3 STEP 2
 // PHASE 3 STEP 15
 // PHASE 3 STEP 22
+// PHASE 3 STEP 28
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { APP_CONFIG } from "../constants/appConfig";
 import { supabase } from "../lib/supabase";
 import { generateFallbackUsername, normalizeUsername } from "../utils/username";
 import type { VerificationUserRole } from "../types/verification";
@@ -46,6 +48,11 @@ export interface ProfileResult {
 }
 
 const FALLBACK_USERNAME_MESSAGE = "That username was taken, so FactLens created a fallback username for you.";
+
+// PHASE 3 STEP 28
+function getUserVerifiedForProfile(user: SupabaseUser): boolean {
+  return APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? Boolean(user.email_confirmed_at) : true;
+}
 
 function readMetadataString(user: SupabaseUser, key: string): string | undefined {
   const value = user.user_metadata?.[key];
@@ -157,7 +164,8 @@ async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise
   }
 
   // PHASE 3 STEP 22
-  if (user.email_confirmed_at && !profile.verified) {
+  // PHASE 3 STEP 28
+  if (getUserVerifiedForProfile(user) && !profile.verified) {
     updates.verified = true;
   }
 
@@ -200,7 +208,8 @@ async function insertProfileForUser(
       username: finalUsername,
       display_name: displayName.trim() || finalUsername,
       // PHASE 3 STEP 22
-      verified: Boolean(user.email_confirmed_at),
+      // PHASE 3 STEP 28
+      verified: getUserVerifiedForProfile(user),
       reputation_score: 0,
       votes_cast: 0,
       accuracy_rate: null,
@@ -226,6 +235,7 @@ async function insertProfileForUser(
   }
 
   console.log("PHASE 3 STEP 15 profile created", { userId: user.id, username: finalUsername });
+  console.log("[profile] ensure profile result:", user.id);
 
   return {
     profile: mapProfileRowToProfile(data as ProfileRow),
@@ -249,6 +259,8 @@ export async function createProfile(
       id: userId,
       username: normalizedUsername,
       display_name: displayName?.trim() || normalizedUsername,
+      // PHASE 3 STEP 28
+      verified: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? false : true,
       votes_cast: 0,
       accuracy_rate: null,
       trust_tier: "new",
@@ -318,7 +330,9 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
   }
 
   if (existingProfile.profile) {
-    return syncProfileForUser(existingProfile.profile, user);
+    const result = await syncProfileForUser(existingProfile.profile, user);
+    console.log("[profile] ensure profile result:", result.profile?.id);
+    return result;
   }
 
   console.log("PHASE 3 STEP 15 profile missing", { userId: user.id });
@@ -332,7 +346,9 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
   }
 
   if (usernameLookup.profile?.id === user.id) {
-    return syncProfileForUser(usernameLookup.profile, user);
+    const result = await syncProfileForUser(usernameLookup.profile, user);
+    console.log("[profile] ensure profile result:", result.profile?.id);
+    return result;
   }
 
   let finalUsername = preferredUsername;

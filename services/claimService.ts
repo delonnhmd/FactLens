@@ -3,11 +3,13 @@
 // PHASE 3 STEP 25
 // PHASE 3 STEP 26
 // PHASE 3 STEP 27
+// PHASE 3 STEP 28
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
-import { detectVideoPlatform, getYouTubeThumbnailUrl, normalizeUrl } from "../utils/videoUrl";
+import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
+import { normalizeUrl } from "../utils/url";
 import { formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
 import {
   createClaimTiming,
@@ -674,6 +676,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
   // PHASE 3 STEP 24
   const timing = createClaimTiming(VERIFICATION_MODE);
   console.log("[createClaim] timing:", timing);
+  console.log("[url] normalized source url:", normalizedSourceUrl);
 
   return {
     author_id: input.authorId,

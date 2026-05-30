@@ -1,6 +1,8 @@
 // PHASE 3 STEP 8
+// PHASE 3 STEP 28
 import { PROHIBITED_CONTENT } from "../constants/contentRules";
-import { isSupportedVideoUrl, isValidWebUrl, normalizeUrl } from "./videoUrl";
+import { isSupportedVideoUrl } from "./videoUrl";
+import { isValidSourceUrl, normalizeUrl } from "./url";
 
 export interface ClaimContentValidationInput {
   title: string;
@@ -46,8 +48,8 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
 
   if (!sourceUrl) {
     errors.push("Source URL is required.");
-  } else if (!isValidWebUrl(sourceUrl)) {
-    errors.push("Enter a valid source URL, like apple.com or www.google.com.");
+  } else if (!isValidSourceUrl(sourceUrl)) {
+    errors.push("Enter a valid source URL.");
   }
 
   if (videoUrl && !isSupportedVideoUrl(videoUrl)) {

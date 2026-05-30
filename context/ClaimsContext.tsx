@@ -1,6 +1,7 @@
 // PHASE 2 STEP 2
 // PHASE 3 STEP 26
 // PHASE 3 STEP 27
+// PHASE 3 STEP 28
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -179,7 +180,7 @@ function toAppVoteOption(voteType: string | null | undefined): VoteOption | null
 
 export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 3
-  const { currentUser, profile } = useAuth();
+  const { currentUser, profile, isVerified, ensureProfile } = useAuth();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   // PHASE 3 STEP 11
@@ -502,11 +503,19 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       throw new Error("You need an account to post.");
     }
 
-    if (!currentUser.email_confirmed_at) {
+    // PHASE 3 STEP 28
+    if (!isVerified) {
       throw new Error("Please verify your email before posting.");
     }
 
-    if (!profile) {
+    let authorProfile = profile;
+
+    if (!authorProfile) {
+      const profileResult = await ensureProfile();
+      authorProfile = profileResult.profile ?? null;
+    }
+
+    if (!authorProfile) {
       throw new Error("Profile required to post.");
     }
 
@@ -518,7 +527,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       videoUrl: input.videoUrl,
       imageUrl: input.imageUrl ?? null,
       category: input.category,
-      profile,
+      profile: authorProfile,
     });
 
     if (result.error || !result.claim) {
@@ -533,7 +542,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     ]);
     setClaimOffset((currentOffset) => currentOffset + 1);
     return createdClaim;
-  }, [currentUser, profile]);
+  }, [currentUser, ensureProfile, isVerified, profile]);
 
   // PHASE 3 STEP 20E
   const getUserVoteForClaim = useCallback(
@@ -595,13 +604,22 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Please log in to vote.");
       }
 
-      if (!currentUser.email_confirmed_at) {
+      // PHASE 3 STEP 28
+      if (!isVerified) {
         // PHASE 3 STEP 20
         throw new Error("Please verify your email to vote.");
       }
 
       // PHASE 3 STEP 22
-      if (!profile) {
+      // PHASE 3 STEP 28
+      let votingProfile = profile;
+
+      if (!votingProfile) {
+        const profileResult = await ensureProfile();
+        votingProfile = profileResult.profile ?? null;
+      }
+
+      if (!votingProfile) {
         throw new Error("Profile missing.");
       }
 
@@ -666,7 +684,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Voting is closed. Final score is being locked.");
       }
 
-      const result = await voteOnRemoteClaim(claimId, currentUser.id, vote, profile);
+      const result = await voteOnRemoteClaim(claimId, currentUser.id, vote, votingProfile);
 
       // PHASE 3 STEP 20
       if (result.claim) {
@@ -714,7 +732,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       // PHASE 3 STEP 20D
       return result.message ?? "Vote saved.";
     },
-    [currentClaims, currentUser, profile, userVotesByClaimId],
+    [currentClaims, currentUser, ensureProfile, isVerified, profile, userVotesByClaimId],
   );
 
   // PHASE 3 STEP 5
@@ -747,11 +765,19 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Log in to add evidence.");
       }
 
-      if (!currentUser.email_confirmed_at) {
+      // PHASE 3 STEP 28
+      if (!isVerified) {
         throw new Error("Verify your email to add evidence.");
       }
 
-      if (!profile) {
+      let evidenceProfile = profile;
+
+      if (!evidenceProfile) {
+        const profileResult = await ensureProfile();
+        evidenceProfile = profileResult.profile ?? null;
+      }
+
+      if (!evidenceProfile) {
         throw new Error("Profile required to add evidence.");
       }
 
@@ -781,7 +807,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       return listResult.evidence;
     },
-    [currentUser, profile],
+    [currentUser, ensureProfile, isVerified, profile],
   );
 
   // PHASE 3 STEP 6
@@ -822,11 +848,19 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Log in to report claims.");
       }
 
-      if (!currentUser.email_confirmed_at) {
+      // PHASE 3 STEP 28
+      if (!isVerified) {
         throw new Error("Verify your email to report claims.");
       }
 
-      if (!profile) {
+      let reportProfile = profile;
+
+      if (!reportProfile) {
+        const profileResult = await ensureProfile();
+        reportProfile = profileResult.profile ?? null;
+      }
+
+      if (!reportProfile) {
         throw new Error("Profile required to report claims.");
       }
 
@@ -851,7 +885,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error(reportsResult.error);
       }
     },
-    [currentClaims, currentUser, profile],
+    [currentClaims, currentUser, ensureProfile, isVerified, profile],
   );
 
   // PHASE 3 STEP 9

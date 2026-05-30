@@ -1,7 +1,9 @@
 // PHASE 3 STEP 2
+// PHASE 3 STEP 28
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import { APP_CONFIG } from "../constants/appConfig";
 import { supabase, supabaseConfigError } from "../lib/supabase";
 import { ensureProfileForUser, getProfile } from "../services/profileService";
 import type { Profile } from "../services/profileService";
@@ -10,6 +12,7 @@ import { normalizeUsername } from "../utils/username";
 interface AuthActionResult {
   error?: string;
   message?: string;
+  profile?: Profile | null;
 }
 
 interface AuthContextValue {
@@ -31,12 +34,27 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// PHASE 3 STEP 28
+function getUserVerified(user: SupabaseUser | null): boolean {
+  if (!user) {
+    return false;
+  }
+
+  return APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? Boolean(user.email_confirmed_at) : true;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // PHASE 3 STEP 28
+  useEffect(() => {
+    console.log("[auth] test mode:", APP_CONFIG.TEST_MODE);
+    console.log("[auth] require email verification:", APP_CONFIG.REQUIRE_EMAIL_VERIFICATION);
+  }, []);
 
   // PHASE 3 STEP 13
   // PHASE 3 STEP 15
@@ -46,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("[auth] current user id:", user.id);
       console.log("[auth] email confirmed:", Boolean(user.email_confirmed_at));
+      const userVerified = getUserVerified(user);
 
       const existingProfile = await getProfile(user.id);
       console.log("[profile] loaded by id:", existingProfile.profile);
@@ -53,25 +72,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (existingProfile.profile) {
         const profileResult =
-          user.email_confirmed_at && !existingProfile.profile.verified
+          userVerified && !existingProfile.profile.verified
             ? await ensureProfileForUser(user)
             : existingProfile;
         const nextProfile = profileResult.profile
           ? {
               ...profileResult.profile,
-              verified: profileResult.profile.verified || Boolean(user.email_confirmed_at),
+              verified: profileResult.profile.verified || userVerified,
             }
           : null;
 
         setProfile(nextProfile);
         setProfileError(profileResult.error ?? null);
         console.log("[profile] setting profile state:", nextProfile?.id);
+        console.log("[profile] ensure profile result:", nextProfile?.id);
 
         if (profileResult.error) {
-          return { error: profileResult.error };
+          return { error: profileResult.error, profile: nextProfile };
         }
 
-        return profileResult.message ? { message: profileResult.message } : {};
+        return profileResult.message ? { message: profileResult.message, profile: nextProfile } : { profile: nextProfile };
       }
 
       if (existingProfile.error) {
@@ -84,24 +104,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextProfile = result.profile
         ? {
             ...result.profile,
-            verified: result.profile.verified || Boolean(user.email_confirmed_at),
+            verified: result.profile.verified || userVerified,
           }
         : null;
 
       setProfile(nextProfile);
       setProfileError(result.error ?? null);
       console.log("[profile] setting profile state:", nextProfile?.id);
+      console.log("[profile] ensure profile result:", nextProfile?.id);
 
       if (result.error) {
-        return { error: result.error };
+        return { error: result.error, profile: nextProfile };
       }
 
-      return result.message ? { message: result.message } : {};
+      return result.message ? { message: result.message, profile: nextProfile } : { profile: nextProfile };
     } catch {
       const message = "We could not load your profile. Please try again.";
       setProfile(null);
       setProfileError(message);
-      return { error: message };
+      return { error: message, profile: null };
     }
   }, []);
 
@@ -244,7 +265,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileError(null);
     }
 
-    return { message: "Check your email to verify your account." };
+    return {
+      message: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? "Check your email to verify your account." : "Account created.",
+    };
   }, [loadProfile]);
 
   const signIn = useCallback(
@@ -300,7 +323,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isAuthenticated: !!session,
       // PHASE 3 STEP 22
-      isVerified: Boolean(currentUser?.email_confirmed_at),
+      // PHASE 3 STEP 28
+      isVerified: getUserVerified(currentUser),
       loading,
       signUp,
       signIn,

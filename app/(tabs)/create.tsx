@@ -1,5 +1,6 @@
 // PHASE 1 STEP 4
-import { useMemo, useState } from "react";
+// PHASE 3 STEP 28
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
@@ -9,7 +10,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { pickClaimImage, uploadClaimImage, type PickedClaimImage } from "../../services/imageUploadService";
 import { validateClaimContent } from "../../utils/contentValidation";
-import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl, normalizeUrl } from "../../utils/videoUrl";
+import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
+import { normalizeUrl } from "../../utils/url";
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
@@ -36,6 +38,7 @@ export default function CreateScreen() {
   // PHASE 3 STEP 15
   const [profileGateError, setProfileGateError] = useState("");
   const [profileGateMessage, setProfileGateMessage] = useState("");
+  const profileAutoFixAttempted = useRef(false);
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
@@ -155,10 +158,13 @@ export default function CreateScreen() {
         imageUrl = await uploadClaimImage(currentUser.id, selectedImage.uri, selectedImage.mimeType);
       }
 
+      const normalizedSourceUrl = normalizeUrl(sourceUrl);
+      console.log("[url] normalized source url:", normalizedSourceUrl);
+
       await createClaim({
         title,
         description,
-        sourceUrl: normalizeUrl(sourceUrl),
+        sourceUrl: normalizedSourceUrl,
         videoUrl: trimmedVideoUrl ? normalizedVideoUrl : "",
         imageUrl,
         category,
@@ -196,6 +202,16 @@ export default function CreateScreen() {
 
     setProfileGateMessage(result.message ?? "Profile ready.");
   };
+
+  // PHASE 3 STEP 28
+  useEffect(() => {
+    if (loading || !isAuthenticated || !isVerified || profile || profileAutoFixAttempted.current) {
+      return;
+    }
+
+    profileAutoFixAttempted.current = true;
+    void handleFixProfile();
+  }, [isAuthenticated, isVerified, loading, profile]);
 
   if (loading) {
     return (

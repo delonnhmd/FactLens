@@ -1,4 +1,5 @@
 // PHASE 1 STEP 4
+// PHASE 3 STEP 28
 import { memo, useCallback, useState } from "react";
 import { Alert, Image, Share, TouchableOpacity, View, Text, StyleSheet, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -68,7 +69,7 @@ interface ClaimCardProps {
 
 function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
   // PHASE 3 STEP 4
-  const { isAuthenticated, isVerified, profile } = useAuth();
+  const { isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 6
   const [showReportForm, setShowReportForm] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState<ReportReason>("Spam");
@@ -86,7 +87,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const voteWindowClosesAt = getVoteAcceptUntil(claim);
   const scoreLockAt = getScoreLockAt(claim);
   // PHASE 3 STEP 22
-  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || !profile || Boolean(claim.userVote);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
   const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
@@ -159,8 +160,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       ? "Please log in to vote."
         : !isVerified
           ? "Please verify your email to vote."
-        : !profile
-          ? "Profile missing."
         : claim.userVote
           ? "You already voted on this post."
           : "Choose one option before voting closes.";
