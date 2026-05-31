@@ -1,5 +1,6 @@
 // PHASE 3 STEP 2
 // PHASE 3 STEP 28
+// PHASE 3 STEP 29
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
@@ -86,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfileError(profileResult.error ?? null);
         console.log("[profile] setting profile state:", nextProfile?.id);
         console.log("[profile] ensure profile result:", nextProfile?.id);
+        console.log("[profile] ensure result:", nextProfile?.id);
 
         if (profileResult.error) {
           return { error: profileResult.error, profile: nextProfile };
@@ -112,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileError(result.error ?? null);
       console.log("[profile] setting profile state:", nextProfile?.id);
       console.log("[profile] ensure profile result:", nextProfile?.id);
+      console.log("[profile] ensure result:", nextProfile?.id);
 
       if (result.error) {
         return { error: result.error, profile: nextProfile };

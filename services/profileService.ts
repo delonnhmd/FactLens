@@ -2,6 +2,7 @@
 // PHASE 3 STEP 15
 // PHASE 3 STEP 22
 // PHASE 3 STEP 28
+// PHASE 3 STEP 29
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { supabase } from "../lib/supabase";
@@ -102,7 +103,7 @@ function mapProfileRowToProfile(row: ProfileRow): Profile {
     reputation_score: row.reputation_score ?? 0,
     votes_cast: row.votes_cast ?? 0,
     accuracy_rate: row.accuracy_rate ?? null,
-    trust_tier: row.trust_tier ?? "new",
+    trust_tier: row.trust_tier ?? "new_user",
     trust_weight_override: row.trust_weight_override ?? null,
     created_at: row.created_at ?? "",
     updated_at: row.updated_at ?? "",
@@ -213,7 +214,7 @@ async function insertProfileForUser(
       reputation_score: 0,
       votes_cast: 0,
       accuracy_rate: null,
-      trust_tier: "new",
+      trust_tier: "new_user",
       trust_weight_override: null,
     })
     .select()
@@ -236,6 +237,7 @@ async function insertProfileForUser(
 
   console.log("PHASE 3 STEP 15 profile created", { userId: user.id, username: finalUsername });
   console.log("[profile] ensure profile result:", user.id);
+  console.log("[profile] ensure result:", user.id);
 
   return {
     profile: mapProfileRowToProfile(data as ProfileRow),
@@ -263,7 +265,7 @@ export async function createProfile(
       verified: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? false : true,
       votes_cast: 0,
       accuracy_rate: null,
-      trust_tier: "new",
+      trust_tier: "new_user",
       trust_weight_override: null,
     })
     .select()
@@ -332,6 +334,7 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
   if (existingProfile.profile) {
     const result = await syncProfileForUser(existingProfile.profile, user);
     console.log("[profile] ensure profile result:", result.profile?.id);
+    console.log("[profile] ensure result:", result.profile?.id);
     return result;
   }
 
@@ -348,6 +351,7 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
   if (usernameLookup.profile?.id === user.id) {
     const result = await syncProfileForUser(usernameLookup.profile, user);
     console.log("[profile] ensure profile result:", result.profile?.id);
+    console.log("[profile] ensure result:", result.profile?.id);
     return result;
   }
 

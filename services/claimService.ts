@@ -4,6 +4,7 @@
 // PHASE 3 STEP 26
 // PHASE 3 STEP 27
 // PHASE 3 STEP 28
+// PHASE 3 STEP 29
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -171,61 +172,6 @@ const DEFAULT_CLAIM_LIMIT = 50;
 // PHASE 3 STEP 11
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 
-const CLAIM_SELECT = `
-  id,
-  author_id,
-  title,
-  description,
-  source_url,
-  video_url,
-  image_url,
-  category,
-  slug,
-  share_url,
-  votes_true,
-  votes_fake,
-  votes_unsure,
-  status,
-  ai_status,
-  ai_confidence,
-  ai_reason,
-  report_count,
-  evidence_count,
-  is_flagged,
-  created_at,
-  expires_at,
-  updated_at,
-  verdict_reason,
-  verdict_calculated_at,
-  total_votes,
-  mode,
-  current_phase,
-  vote_accept_until,
-  score_lock_at,
-  published_at,
-  phase4_locked,
-  early_verdict_fired,
-  suspicious_activity,
-  weighted_community_score,
-  final_score,
-  min_votes_required,
-  expected_participation,
-  source_count,
-  source_quality,
-  red_flags,
-  ai_summary,
-  profiles:author_id (
-    id,
-    username,
-    display_name,
-    avatar_url,
-    verified,
-    reputation_score,
-    trust_tier,
-    trust_weight_override
-  )
-`;
-
 interface SupabaseErrorLike {
   code?: string;
   message: string;
@@ -382,6 +328,7 @@ function mapStringList(value: unknown): string[] {
 function mapTrustTier(tier: string | null | undefined): AppUser["trustTier"] {
   if (
     tier === "new" ||
+    tier === "new_user" ||
     tier === "regular" ||
     tier === "verified" ||
     tier === "high_accuracy" ||
@@ -677,6 +624,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
   const timing = createClaimTiming(VERIFICATION_MODE);
   console.log("[createClaim] timing:", timing);
   console.log("[url] normalized source url:", normalizedSourceUrl);
+  console.log("[url] normalized source:", normalizedSourceUrl);
 
   return {
     author_id: input.authorId,
@@ -702,7 +650,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     report_count: 0,
     evidence_count: 0,
     is_flagged: false,
-    mode: "test",
+    mode: timing.mode,
     current_phase: 0,
     vote_accept_until: timing.voteAcceptUntil,
     score_lock_at: timing.scoreLockAt,
@@ -712,8 +660,8 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     suspicious_activity: false,
     weighted_community_score: 0.5,
     final_score: 0.5,
-    min_votes_required: 5,
-    expected_participation: 10,
+    min_votes_required: timing.minVotesRequired,
+    expected_participation: timing.expectedParticipation,
     source_count: 0,
     source_quality: "unknown",
     red_flags: [],
@@ -891,44 +839,44 @@ export async function searchClaimsPage(
 
 // PHASE 3 STEP 9
 export async function fetchClaimsByCategory(category: string): Promise<ClaimsResult> {
-  const { data, error } = await supabase
-    .from("claims")
-    .select(CLAIM_SELECT)
-    .eq("category", category)
-    .order("created_at", { ascending: false })
-    .limit(DEFAULT_CLAIM_LIMIT);
+  // PHASE 3 STEP 29
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .eq("category", category)
+      .order("created_at", { ascending: false })
+      .limit(DEFAULT_CLAIM_LIMIT);
 
-  if (error) {
-    return {
-      claims: [],
-      error: getClaimLoadError(error),
-    };
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
   }
-
-  return {
-    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
-  };
 }
 
 // PHASE 3 STEP 9
 export async function fetchClaimsByStatus(status: ClaimStatus): Promise<ClaimsResult> {
-  const { data, error } = await supabase
-    .from("claims")
-    .select(CLAIM_SELECT)
-    .eq("status", status)
-    .order("created_at", { ascending: false })
-    .limit(DEFAULT_CLAIM_LIMIT);
+  // PHASE 3 STEP 29
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .eq("status", status)
+      .order("created_at", { ascending: false })
+      .limit(DEFAULT_CLAIM_LIMIT);
 
-  if (error) {
-    return {
-      claims: [],
-      error: getClaimLoadError(error),
-    };
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
   }
-
-  return {
-    claims: ((data ?? []) as ClaimRow[]).map(mapClaimRowToClaim),
-  };
 }
 
 // PHASE 3 STEP 9
@@ -1109,7 +1057,8 @@ export async function refreshClaimVerdict(claimId: string): Promise<ClaimResult>
 }
 
 export async function fetchClaimById(id: string): Promise<ClaimResult> {
-  const { data, error } = await supabase.from("claims").select(CLAIM_SELECT).eq("id", id).maybeSingle();
+  // PHASE 3 STEP 29
+  const { data, error } = await supabase.from("claims").select("*").eq("id", id).maybeSingle();
 
   if (error) {
     return {
@@ -1124,7 +1073,8 @@ export async function fetchClaimById(id: string): Promise<ClaimResult> {
 }
 
 export async function createClaim(input: CreateClaimInput): Promise<ClaimResult> {
-  const { data, error } = await supabase.from("claims").insert(mapClaimToInsert(input)).select(CLAIM_SELECT).single();
+  // PHASE 3 STEP 29
+  const { data, error } = await supabase.from("claims").insert(mapClaimToInsert(input)).select("*").single();
 
   if (error) {
     return {
@@ -1148,7 +1098,7 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
     .from("claims")
     .update({ share_url: shareUrl })
     .eq("id", insertedClaimId)
-    .select(CLAIM_SELECT)
+    .select("*")
     .single();
 
   return {
@@ -1169,7 +1119,8 @@ export async function updateClaim(id: string, updates: ClaimUpdates): Promise<Cl
     ...(updates.status !== undefined ? { status: updates.status } : {}),
   };
 
-  const { data, error } = await supabase.from("claims").update(updateRow).eq("id", id).select(CLAIM_SELECT).single();
+  // PHASE 3 STEP 29
+  const { data, error } = await supabase.from("claims").update(updateRow).eq("id", id).select("*").single();
 
   if (error) {
     return {

@@ -1,10 +1,11 @@
 // PHASE 3 VERIFICATION ENGINE
+// PHASE 3 STEP 29
 import type { VoteOption } from "./claim";
 
 export type VerificationMode = "test" | "production";
 export type VerificationVerdict = "true" | "fake" | "unsure" | "pending";
 export type SourceQuality = "official" | "mainstream" | "blog" | "unknown";
-export type VerificationUserRole = "new" | "regular" | "verified" | "high_accuracy" | "expert";
+export type VerificationUserRole = "new_user" | "new" | "regular" | "verified" | "high_accuracy" | "expert";
 
 // PHASE 3 STEP 17
 export interface VerificationTrustProfile {

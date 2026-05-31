@@ -1,6 +1,7 @@
 // PHASE 3 STEP 17
 // PHASE 3 STEP 24
 // PHASE 3 STEP 28
+// PHASE 3 STEP 29
 import { APP_CONFIG } from "./appConfig";
 import type { VerificationMode } from "../types/verification";
 
@@ -12,11 +13,11 @@ export const DEFAULT_VERIFICATION_MODE: VerificationMode = VERIFICATION_MODE;
 
 export const TEST_VERIFICATION_CONFIG = {
   mode: "test",
-  voteWindowMinutes: 10,
-  scoreLockMinutes: 15,
-  expiresMinutes: 15,
-  minVotesRequired: 5,
-  expectedParticipation: 10,
+  voteWindowMinutes: APP_CONFIG.TEST_VOTE_CLOSE_MINUTES,
+  scoreLockMinutes: APP_CONFIG.TEST_SCORE_LOCK_MINUTES,
+  expiresMinutes: APP_CONFIG.TEST_EXPIRES_MINUTES,
+  minVotesRequired: APP_CONFIG.TEST_MIN_VOTES_REQUIRED,
+  expectedParticipation: APP_CONFIG.TEST_EXPECTED_PARTICIPATION,
 } as const;
 
 export const PRODUCTION_VERIFICATION_CONFIG = {

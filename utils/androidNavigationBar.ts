@@ -1,4 +1,5 @@
 // PHASE 3 STEP 23
+// PHASE 3 STEP 29
 import { Platform } from "react-native";
 import { NavigationBar, setVisibilityAsync } from "expo-navigation-bar";
 
@@ -8,8 +9,8 @@ export function setupAndroidNavigationBar() {
   }
 
   try {
-    // Light navigation bar style means dark system buttons on a light surface.
-    NavigationBar.setStyle("light");
+    // Dark navigation bar style means dark system buttons on the app's white bottom surface.
+    NavigationBar.setStyle("dark");
     NavigationBar.setHidden(true);
   } catch (error) {
     console.log("[android-navigation-bar] setup failed:", error);

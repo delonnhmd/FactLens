@@ -1,5 +1,6 @@
 // PHASE 3 STEP 14
 // Fixed FactLens bottom tabs with explicit labels
+// PHASE 3 STEP 29
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';

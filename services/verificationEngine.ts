@@ -1,5 +1,6 @@
 // PHASE 3 VERIFICATION ENGINE
 // PHASE 3 STEP 17
+// PHASE 3 STEP 29
 import {
   DEFAULT_VERIFICATION_MODE,
   VERIFICATION_AI_WEIGHT,
@@ -197,7 +198,7 @@ export function getUserTrustWeight(
     return 1.5;
   }
 
-  if ((vote.votesCast ?? 0) < 10 || role === "new") {
+  if ((vote.votesCast ?? 0) < 10 || role === "new" || role === "new_user") {
     return 0.5;
   }
 

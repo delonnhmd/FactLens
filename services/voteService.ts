@@ -2,6 +2,7 @@
 // PHASE 3 STEP 20D
 // PHASE 3 STEP 20E
 // PHASE 3 STEP 24
+// PHASE 3 STEP 29
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
