@@ -54,6 +54,8 @@ export default function HomeScreen() {
     claimsErrorCode,
     claimsErrorDetails,
     claimsErrorHint,
+    aiPrecheckNotice,
+    clearAiPrecheckNotice,
     voteOnClaim,
     reportClaim,
     searchClaimsPage,
@@ -216,6 +218,12 @@ export default function HomeScreen() {
       />
       {/* PHASE 3 STEP 12 */}
       {liveUpdatesEnabled ? <Text style={styles.liveText}>Live updates on</Text> : null}
+      {/* PHASE 4 STEP 2 */}
+      {aiPrecheckNotice ? (
+        <TouchableOpacity style={styles.aiNoticeBanner} activeOpacity={0.85} onPress={clearAiPrecheckNotice}>
+          <Text style={styles.aiNoticeText}>{aiPrecheckNotice}</Text>
+        </TouchableOpacity>
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
         {categoryChips.map((category) => {
           const selected = category === "All" ? !activeCategory : activeCategory === category;
@@ -341,6 +349,22 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  // PHASE 4 STEP 2
+  aiNoticeBanner: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBg,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  aiNoticeText: {
+    color: theme.colors.warning,
+    fontSize: 11,
+    fontWeight: "500",
   },
   categoryRow: {
     gap: theme.spacing.sm,

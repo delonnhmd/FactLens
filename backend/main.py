@@ -1,16 +1,17 @@
 # PHASE 4 STEP 1
-import json
+# PHASE 4 STEP 2
 import os
 from datetime import datetime, timezone
 from typing import Literal
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-from fastapi import FastAPI
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from supabase import Client, create_client
 
 
+load_dotenv()
 app = FastAPI(title="FactLens backend")
 
 app.add_middleware(
@@ -27,7 +28,7 @@ AiStatus = Literal["PENDING", "LOW_RISK", "MEDIUM_RISK", "NEEDS_MORE_EVIDENCE"]
 
 
 class AiPrecheckRequest(BaseModel):
-    claim_id: str = Field(..., min_length=1)
+    claim_id: str = ""
     title: str = ""
     description: str = ""
     source_url: str = ""
@@ -88,7 +89,7 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "FactLens backend"}
+    return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-2"}
 
 
 def analyze_claim(payload: AiPrecheckRequest) -> dict:
@@ -154,51 +155,43 @@ def update_claim_ai_fields(claim_id: str, analysis: dict) -> str | None:
     if not supabase_url or not service_role_key:
         return "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY on backend."
 
-    update_url = f"{supabase_url}/rest/v1/claims?id=eq.{claim_id}"
-    body = json.dumps(
-        {
-            "ai_confidence": analysis["ai_confidence"],
-            "source_count": analysis["source_count"],
-            "source_quality": analysis["source_quality"],
-            "red_flags": analysis["red_flags"],
-            "ai_summary": analysis["ai_summary"],
-            "ai_status": analysis["ai_status"],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    ).encode("utf-8")
-    request = Request(
-        update_url,
-        data=body,
-        method="PATCH",
-        headers={
-            "apikey": service_role_key,
-            "Authorization": f"Bearer {service_role_key}",
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal",
-        },
-    )
-
     try:
-        with urlopen(request, timeout=15) as response:
-            if response.status >= 400:
-                return f"Supabase update failed with HTTP {response.status}."
-    except HTTPError as error:
-        details = error.read().decode("utf-8", errors="replace")
-        return f"Supabase update failed: HTTP {error.code}. {details}"
-    except URLError as error:
-        return f"Supabase update failed: {error.reason}"
-    except TimeoutError:
-        return "Supabase update timed out."
+        supabase: Client = create_client(supabase_url, service_role_key)
+        supabase.table("claims").update(
+            {
+                "ai_confidence": analysis["ai_confidence"],
+                "source_count": analysis["source_count"],
+                "source_quality": analysis["source_quality"],
+                "red_flags": analysis["red_flags"],
+                "ai_summary": analysis["ai_summary"],
+                "ai_status": analysis["ai_status"],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", claim_id).execute()
+    except Exception as error:
+        return f"Supabase update failed: {error}"
 
     return None
 
 
 @app.post("/ai/precheck", response_model=AiPrecheckResponse)
 def ai_precheck(payload: AiPrecheckRequest):
+    claim_id = payload.claim_id.strip()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    payload.claim_id = claim_id
     analysis = analyze_claim(payload)
+    print("[ai/precheck] called", flush=True)
+    print(f"[ai/precheck] claim_id={payload.claim_id}", flush=True)
+    print(f"[ai/precheck] source_url={payload.source_url}", flush=True)
+    print(f"[ai/precheck] ai_status={analysis['ai_status']}", flush=True)
+    print(f"[ai/precheck] ai_confidence={analysis['ai_confidence']}", flush=True)
     update_error = update_claim_ai_fields(payload.claim_id, analysis)
 
     if update_error:
+        print(f"[ai/precheck] Supabase update failure: {update_error}", flush=True)
         return {
             "ok": False,
             "claim_id": payload.claim_id,
@@ -206,6 +199,7 @@ def ai_precheck(payload: AiPrecheckRequest):
             "error": update_error,
         }
 
+    print("[ai/precheck] Supabase update success", flush=True)
     return {
         "ok": True,
         "claim_id": payload.claim_id,

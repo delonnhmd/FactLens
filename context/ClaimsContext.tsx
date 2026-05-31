@@ -78,6 +78,10 @@ interface ClaimsContextValue {
   claimsErrorDetails: string | null;
   claimsErrorHint: string | null;
   rawClaimsError: unknown | null;
+  // PHASE 4 STEP 2
+  aiPrecheckNotice: string | null;
+  clearAiPrecheckNotice: () => void;
+  runAiPrecheckForClaimId: (claimId: string) => Promise<Claim | undefined>;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<string | void>;
   // PHASE 3 STEP 20E
@@ -197,6 +201,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [rawClaimsError, setRawClaimsError] = useState<unknown | null>(null);
   // PHASE 3 STEP 12
   const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(false);
+  // PHASE 4 STEP 2
+  const [aiPrecheckNotice, setAiPrecheckNotice] = useState<string | null>(null);
   // PHASE 3 STEP 20E
   const [userVotesByClaimId, setUserVotesByClaimId] = useState<Record<string, VoteOption>>({});
   const [now, setNow] = useState(() => new Date());
@@ -499,6 +505,63 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [claims, now],
   );
 
+  // PHASE 4 STEP 2
+  const clearAiPrecheckNotice = useCallback(() => {
+    setAiPrecheckNotice(null);
+  }, []);
+
+  // PHASE 4 STEP 2
+  const runAiPrecheckAndRefreshClaim = useCallback(
+    async (targetClaim: Claim) => {
+      const precheckResult = await runAiPrecheckForClaim(targetClaim);
+
+      if (!precheckResult.ok) {
+        console.log("[ai precheck warning]", precheckResult.error ?? "AI pre-check unavailable");
+        setAiPrecheckNotice("AI pre-check will retry later.");
+        return undefined;
+      }
+
+      const refreshedClaimResult = await fetchRemoteClaimById(targetClaim.id);
+
+      if (refreshedClaimResult.error || !refreshedClaimResult.claim) {
+        console.log("[ai precheck warning]", refreshedClaimResult.error ?? "Could not refresh AI pre-check result.");
+        setAiPrecheckNotice("AI pre-check will retry later.");
+        return undefined;
+      }
+
+      const refreshedClaim = mergeLocalClaimState(refreshedClaimResult.claim, targetClaim);
+      const [claimWithVote] = await applyUserVotes([refreshedClaim]);
+
+      setClaims((currentClaimsState) => {
+        const claimExists = currentClaimsState.some((claim) => claim.id === targetClaim.id);
+
+        if (!claimExists) {
+          return sortClaimsNewestFirst([claimWithVote, ...currentClaimsState]);
+        }
+
+        return currentClaimsState.map((claim) => (claim.id === targetClaim.id ? claimWithVote : claim));
+      });
+
+      setAiPrecheckNotice(null);
+      return claimWithVote;
+    },
+    [applyUserVotes],
+  );
+
+  // PHASE 4 STEP 2
+  const runAiPrecheckForClaimId = useCallback(
+    async (claimId: string) => {
+      const targetClaim = claimsRef.current.find((claim) => claim.id === claimId);
+
+      if (!targetClaim) {
+        throw new Error("Claim not found.");
+      }
+
+      return runAiPrecheckAndRefreshClaim(targetClaim);
+    },
+    [runAiPrecheckAndRefreshClaim],
+  );
+
   const createClaim = useCallback(async (input: CreateClaimInput) => {
     if (!currentUser) {
       throw new Error("You need an account to post.");
@@ -543,32 +606,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     ]);
     setClaimOffset((currentOffset) => currentOffset + 1);
 
-    // PHASE 4 STEP 1
-    try {
-      const precheckResult = await runAiPrecheckForClaim(createdClaim);
-
-      if (!precheckResult.ok) {
-        console.log("[ai precheck warning]", precheckResult.error ?? "AI pre-check did not complete.");
-        return createdClaim;
-      }
-
-      const refreshedClaimResult = await fetchRemoteClaimById(createdClaim.id);
-
-      if (refreshedClaimResult.claim) {
-        const refreshedClaim = mergeLocalClaimState(refreshedClaimResult.claim, createdClaim);
-
-        setClaims((currentClaimsState) =>
-          currentClaimsState.map((claim) => (claim.id === createdClaim.id ? refreshedClaim : claim)),
-        );
-
-        return refreshedClaim;
-      }
-    } catch (precheckError) {
+    // PHASE 4 STEP 2
+    void runAiPrecheckAndRefreshClaim(createdClaim).catch((precheckError) => {
       console.log("[ai precheck warning]", precheckError instanceof Error ? precheckError.message : precheckError);
-    }
+      setAiPrecheckNotice("AI pre-check will retry later.");
+    });
 
     return createdClaim;
-  }, [currentUser, ensureProfile, isVerified, profile]);
+  }, [currentUser, ensureProfile, isVerified, profile, runAiPrecheckAndRefreshClaim]);
 
   // PHASE 3 STEP 20E
   const getUserVoteForClaim = useCallback(
@@ -1020,6 +1065,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       claimsErrorDetails,
       claimsErrorHint,
       rawClaimsError,
+      aiPrecheckNotice,
+      clearAiPrecheckNotice,
+      runAiPrecheckForClaimId,
       createClaim,
       voteOnClaim,
       getUserVoteForClaim,
@@ -1051,6 +1099,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       claimsErrorDetails,
       claimsErrorHint,
       claimsErrorMessage,
+      aiPrecheckNotice,
+      clearAiPrecheckNotice,
       fetchEvidenceForClaim,
       fetchClaimById,
       fetchClaimsByCategory,
@@ -1072,6 +1122,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       refreshClaims,
       refreshClaimVerdict,
       refreshUserVoteForClaim,
+      runAiPrecheckForClaimId,
       searchClaims,
       searchClaimsPage,
       voteOnClaim,

@@ -124,6 +124,7 @@ export default function ClaimDetailScreen() {
     fetchReportsForClaim,
     reportClaim,
     refreshClaimVerdict,
+    runAiPrecheckForClaimId,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -147,6 +148,10 @@ export default function ClaimDetailScreen() {
   const [voteError, setVoteError] = useState("");
   // PHASE 3 STEP 20
   const [voteSuccess, setVoteSuccess] = useState("");
+  // PHASE 4 STEP 2
+  const [aiPrecheckLoading, setAiPrecheckLoading] = useState(false);
+  const [aiPrecheckMessage, setAiPrecheckMessage] = useState("");
+  const [aiPrecheckError, setAiPrecheckError] = useState("");
   // PHASE 3 STEP 12
   const [liveUpdatesOn, setLiveUpdatesOn] = useState(false);
 
@@ -476,6 +481,28 @@ export default function ClaimDetailScreen() {
     }
   };
 
+  // PHASE 4 STEP 2
+  const handleRunAiPrecheck = async () => {
+    if (!claim) {
+      return;
+    }
+
+    setAiPrecheckLoading(true);
+    setAiPrecheckMessage("");
+    setAiPrecheckError("");
+
+    try {
+      const updatedClaim = await runAiPrecheckForClaimId(claim.id);
+      await waitForClaimRefetch();
+      await refreshDetailClaim();
+      setAiPrecheckMessage(updatedClaim ? "AI pre-check updated." : "AI pre-check will retry later.");
+    } catch (error) {
+      setAiPrecheckError(error instanceof Error ? error.message : "AI pre-check will retry later.");
+    } finally {
+      setAiPrecheckLoading(false);
+    }
+  };
+
   if (!claim) {
     return (
       <SafeAreaView style={styles.container}>
@@ -526,6 +553,11 @@ export default function ClaimDetailScreen() {
     claim.aiSummary ??
     claim.aiCheck.reason ??
     "AI pre-check is pending. Community voting and evidence are still needed.";
+  // PHASE 4 STEP 2
+  const canRetryAiPrecheck =
+    claim.aiCheck.status === "PENDING" ||
+    claim.aiCheck.confidence === null ||
+    claim.aiCheck.confidence === undefined;
   const voteMessage = !votingOpen
     ? ""
     : !isAuthenticated
@@ -607,6 +639,20 @@ export default function ClaimDetailScreen() {
               <Text style={styles.aiDisclaimer}>
                 AI pre-check is only a risk signal. Community voting decides the final result.
               </Text>
+              {canRetryAiPrecheck ? (
+                <TouchableOpacity
+                  style={[styles.aiRetryButton, aiPrecheckLoading && styles.disabledButton]}
+                  activeOpacity={0.85}
+                  disabled={aiPrecheckLoading}
+                  onPress={handleRunAiPrecheck}
+                >
+                  <Text style={styles.aiRetryButtonText}>
+                    {aiPrecheckLoading ? "Running..." : "Run AI Pre-check"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              {aiPrecheckMessage ? <Text style={styles.aiRetryMessage}>{aiPrecheckMessage}</Text> : null}
+              {aiPrecheckError ? <Text style={styles.aiRetryError}>{aiPrecheckError}</Text> : null}
             </View>
           </View>
         </View>
@@ -1189,6 +1235,31 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: 11,
     lineHeight: 15,
+  },
+  // PHASE 4 STEP 2
+  aiRetryButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.ai,
+    borderRadius: theme.radius.sm,
+    marginTop: 2,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  aiRetryButtonText: {
+    color: theme.colors.background,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  aiRetryMessage: {
+    color: theme.colors.success,
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  aiRetryError: {
+    color: theme.colors.danger,
+    fontSize: 11,
+    fontWeight: "500",
   },
   flaggedBadge: {
     alignSelf: "flex-start",
