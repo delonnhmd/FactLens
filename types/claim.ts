@@ -82,7 +82,9 @@ export interface AiCheck {
     | "MEDIUM_RISK"
     | "LIKELY_TRUE"
     | "LIKELY_FAKE"
-    | "NEEDS_MORE_EVIDENCE";
+    | "NEEDS_MORE_EVIDENCE"
+    // PHASE 4 STEP 3
+    | "ERROR";
   confidence: number | null;
   reason: string | null;
   // PHASE 3 STEP 25

@@ -481,7 +481,7 @@ export default function ClaimDetailScreen() {
     }
   };
 
-  // PHASE 4 STEP 2
+  // PHASE 4 STEP 3
   const handleRunAiPrecheck = async () => {
     if (!claim) {
       return;
@@ -495,9 +495,9 @@ export default function ClaimDetailScreen() {
       const updatedClaim = await runAiPrecheckForClaimId(claim.id);
       await waitForClaimRefetch();
       await refreshDetailClaim();
-      setAiPrecheckMessage(updatedClaim ? "AI pre-check updated." : "AI pre-check will retry later.");
+      setAiPrecheckMessage(updatedClaim ? "AI pre-check updated." : "AI pre-check is unavailable. Try again later.");
     } catch (error) {
-      setAiPrecheckError(error instanceof Error ? error.message : "AI pre-check will retry later.");
+      setAiPrecheckError(error instanceof Error ? error.message : "AI pre-check is unavailable. Try again later.");
     } finally {
       setAiPrecheckLoading(false);
     }
@@ -553,9 +553,11 @@ export default function ClaimDetailScreen() {
     claim.aiSummary ??
     claim.aiCheck.reason ??
     "AI pre-check is pending. Community voting and evidence are still needed.";
-  // PHASE 4 STEP 2
+  // PHASE 4 STEP 3
   const canRetryAiPrecheck =
     claim.aiCheck.status === "PENDING" ||
+    claim.aiCheck.status === "ERROR" ||
+    claim.aiCheck.status === "NEEDS_MORE_EVIDENCE" ||
     claim.aiCheck.confidence === null ||
     claim.aiCheck.confidence === undefined;
   const voteMessage = !votingOpen
@@ -647,7 +649,7 @@ export default function ClaimDetailScreen() {
                   onPress={handleRunAiPrecheck}
                 >
                   <Text style={styles.aiRetryButtonText}>
-                    {aiPrecheckLoading ? "Running..." : "Run AI Pre-check"}
+                    {aiPrecheckLoading ? "Checking..." : "Run AI Pre-check"}
                   </Text>
                 </TouchableOpacity>
               ) : null}

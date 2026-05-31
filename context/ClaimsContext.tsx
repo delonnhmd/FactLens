@@ -28,7 +28,7 @@ import {
   fetchUserVoteForClaim,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
-import { runAiPrecheckForClaim } from "../services/aiPrecheckService";
+import { retryAiPrecheckForClaim, runAiPrecheckForClaim } from "../services/aiPrecheckService";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
 import {
   addEvidence as addRemoteEvidence,
@@ -208,6 +208,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(() => new Date());
   const claimsRef = useRef<Claim[]>([]);
   const locallyCreatedClaimIdsRef = useRef(new Set<string>());
+  // PHASE 4 STEP 3
+  const aiRetryInProgressClaimIdsRef = useRef(new Set<string>());
+  const aiAutoRetryStartedRef = useRef(false);
 
   useEffect(() => {
     claimsRef.current = claims;
@@ -510,17 +513,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     setAiPrecheckNotice(null);
   }, []);
 
-  // PHASE 4 STEP 2
-  const runAiPrecheckAndRefreshClaim = useCallback(
+  // PHASE 4 STEP 3
+  const refreshClaimAfterAiPrecheck = useCallback(
     async (targetClaim: Claim) => {
-      const precheckResult = await runAiPrecheckForClaim(targetClaim);
-
-      if (!precheckResult.ok) {
-        console.log("[ai precheck warning]", precheckResult.error ?? "AI pre-check unavailable");
-        setAiPrecheckNotice("AI pre-check will retry later.");
-        return undefined;
-      }
-
       const refreshedClaimResult = await fetchRemoteClaimById(targetClaim.id);
 
       if (refreshedClaimResult.error || !refreshedClaimResult.claim) {
@@ -549,6 +544,55 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   );
 
   // PHASE 4 STEP 2
+  const runAiPrecheckAndRefreshClaim = useCallback(
+    async (targetClaim: Claim) => {
+      const precheckResult = await runAiPrecheckForClaim(targetClaim);
+
+      if (!precheckResult.ok) {
+        console.log("[ai precheck warning]", precheckResult.error ?? "AI pre-check unavailable");
+        setAiPrecheckNotice("AI pre-check will retry later.");
+        return undefined;
+      }
+
+      return refreshClaimAfterAiPrecheck(targetClaim);
+    },
+    [refreshClaimAfterAiPrecheck],
+  );
+
+  // PHASE 4 STEP 3
+  const retryAiPrecheckAndRefreshClaim = useCallback(
+    async (targetClaim: Claim, showNotice = true) => {
+      if (aiRetryInProgressClaimIdsRef.current.has(targetClaim.id)) {
+        return undefined;
+      }
+
+      aiRetryInProgressClaimIdsRef.current.add(targetClaim.id);
+
+      try {
+        const precheckResult = await retryAiPrecheckForClaim(targetClaim.id);
+
+        if (!precheckResult.ok) {
+          console.log("[ai precheck retry warning]", precheckResult.error ?? "AI pre-check unavailable");
+          await refreshClaimAfterAiPrecheck(targetClaim).catch((refreshError) => {
+            console.log("[ai precheck retry warning]", refreshError instanceof Error ? refreshError.message : refreshError);
+          });
+
+          if (showNotice) {
+            setAiPrecheckNotice("AI pre-check is unavailable. Try again later.");
+          }
+
+          return undefined;
+        }
+
+        return refreshClaimAfterAiPrecheck(targetClaim);
+      } finally {
+        aiRetryInProgressClaimIdsRef.current.delete(targetClaim.id);
+      }
+    },
+    [refreshClaimAfterAiPrecheck],
+  );
+
+  // PHASE 4 STEP 2
   const runAiPrecheckForClaimId = useCallback(
     async (claimId: string) => {
       const targetClaim = claimsRef.current.find((claim) => claim.id === claimId);
@@ -557,10 +601,40 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Claim not found.");
       }
 
-      return runAiPrecheckAndRefreshClaim(targetClaim);
+      return retryAiPrecheckAndRefreshClaim(targetClaim);
     },
-    [runAiPrecheckAndRefreshClaim],
+    [retryAiPrecheckAndRefreshClaim],
   );
+
+  // PHASE 4 STEP 3
+  useEffect(() => {
+    if (loading || aiAutoRetryStartedRef.current) {
+      return;
+    }
+
+    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const retryClaims = currentClaims
+      .filter((claim) => {
+        const createdAtMs = new Date(claim.createdAt).getTime();
+        const isRecent = Number.isFinite(createdAtMs) && createdAtMs >= twentyFourHoursAgo;
+        const aiStatus = claim.aiCheck.status;
+
+        return isRecent && (aiStatus === "PENDING" || aiStatus === "ERROR");
+      })
+      .slice(0, 5);
+
+    if (retryClaims.length === 0) {
+      return;
+    }
+
+    aiAutoRetryStartedRef.current = true;
+
+    retryClaims.forEach((claim) => {
+      void retryAiPrecheckAndRefreshClaim(claim, false).catch((retryError) => {
+        console.log("[ai precheck auto-retry warning]", retryError instanceof Error ? retryError.message : retryError);
+      });
+    });
+  }, [currentClaims, loading, retryAiPrecheckAndRefreshClaim]);
 
   const createClaim = useCallback(async (input: CreateClaimInput) => {
     if (!currentUser) {

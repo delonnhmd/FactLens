@@ -291,7 +291,9 @@ function mapAiStatus(status: string | null): ClaimAiStatus {
     status === "MEDIUM_RISK" ||
     status === "LIKELY_TRUE" ||
     status === "LIKELY_FAKE" ||
-    status === "NEEDS_MORE_EVIDENCE"
+    status === "NEEDS_MORE_EVIDENCE" ||
+    // PHASE 4 STEP 3
+    status === "ERROR"
   ) {
     return status;
   }
