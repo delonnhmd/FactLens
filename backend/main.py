@@ -5,8 +5,9 @@
 # PHASE 4 STEP 5
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
+# PHASE 4 STEP 5D
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -82,6 +83,7 @@ class AiPrecheckResponse(BaseModel):
     # PHASE 4 STEP 5B
     details: str | None = None
     hint: str | None = None
+    ai_result: dict | None = None
     update_payload: dict | None = None
     supabase_updated: bool | None = None
     updated_claim: dict | None = None
@@ -144,15 +146,16 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
+# PHASE 4 STEP 5D
 def build_claim_ai_update_payload(analysis: dict) -> dict:
     return {
+        "ai_status": analysis["ai_status"],
         "ai_confidence": analysis["ai_confidence"],
-        "source_count": analysis["source_count"],
         "source_quality": analysis["source_quality"],
+        "source_count": analysis["source_count"],
         "red_flags": normalize_red_flags(analysis.get("red_flags")),
         "ai_summary": analysis["ai_summary"],
-        "ai_status": analysis["ai_status"],
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -196,11 +199,13 @@ def format_supabase_response_error(error: object) -> dict:
 
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
-def update_claim_ai_fields(claim_id: str, analysis: dict, endpoint_label: str) -> dict:
-    update_payload = build_claim_ai_update_payload(analysis)
+# PHASE 4 STEP 5D
+def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) -> dict:
+    update_payload = build_claim_ai_update_payload(ai_result)
     print(f"[{endpoint_label}] Supabase project_ref:", get_supabase_project_ref(), flush=True)
     print(f"[{endpoint_label}] claim_id:", claim_id, flush=True)
-    print(f"[{endpoint_label}] update payload:", update_payload, flush=True)
+    print(f"[{endpoint_label}] AI result:", ai_result, flush=True)
+    print(f"[{endpoint_label}] update_payload:", update_payload, flush=True)
 
     try:
         supabase = get_supabase_client()
@@ -210,7 +215,7 @@ def update_claim_ai_fields(claim_id: str, analysis: dict, endpoint_label: str) -
             .eq("id", claim_id)
             .execute()
         )
-        print(f"[{endpoint_label}] update result:", update_result.data, flush=True)
+        print(f"[{endpoint_label}] update_result.data:", update_result.data, flush=True)
 
         update_error = getattr(update_result, "error", None)
         if update_error:
@@ -261,8 +266,20 @@ def update_claim_ai_fields(claim_id: str, analysis: dict, endpoint_label: str) -
             "update_payload": update_payload,
         }
 
+    if updated_claim.get("ai_summary") != update_payload["ai_summary"]:
+        return {
+            "ok": False,
+            "claim_id": claim_id,
+            "error": "Supabase update did not persist new AI fields",
+            "ai_result": ai_result,
+            "update_payload": update_payload,
+            "updated_claim": updated_claim,
+        }
+
     return {
         "ok": True,
+        "ai_result": ai_result,
+        "update_payload": update_payload,
         "updated_claim": updated_claim,
     }
 
@@ -292,6 +309,7 @@ def mark_claim_ai_error(claim_id: str) -> str | None:
 
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
+# PHASE 4 STEP 5D
 def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
     updated_claim = update_result["updated_claim"]
     red_flags = normalize_red_flags(updated_claim.get("red_flags"))
@@ -299,6 +317,8 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
     return {
         "ok": True,
         "claim_id": claim_id,
+        "ai_result": update_result.get("ai_result"),
+        "update_payload": update_result.get("update_payload"),
         "ai_confidence": updated_claim.get("ai_confidence"),
         "source_count": updated_claim.get("source_count"),
         "source_quality": updated_claim.get("source_quality"),
@@ -386,33 +406,33 @@ def ai_precheck(payload: AiPrecheckRequest):
         raise HTTPException(status_code=400, detail="claim_id is required")
 
     payload.claim_id = claim_id
-    analysis = analyze_claim(payload)
+    ai_result = analyze_claim_with_openai(
+        title=payload.title,
+        description=payload.description,
+        source_url=payload.source_url,
+        category=payload.category,
+    )
     print("[ai/precheck] called", flush=True)
     print(f"[ai/precheck] OPENAI_MODEL={get_openai_model()}", flush=True)
     print(f"[ai/precheck] claim_id={payload.claim_id}", flush=True)
     print(f"[ai/precheck] source_url={payload.source_url}", flush=True)
-    print(f"[ai/precheck] ai_status={analysis['ai_status']}", flush=True)
-    print(f"[ai/precheck] ai_confidence={analysis['ai_confidence']}", flush=True)
-    print(f"[ai/precheck] source_quality={analysis['source_quality']}", flush=True)
+    print(f"[ai/precheck] ai_status={ai_result['ai_status']}", flush=True)
+    print(f"[ai/precheck] ai_confidence={ai_result['ai_confidence']}", flush=True)
+    print(f"[ai/precheck] source_quality={ai_result['source_quality']}", flush=True)
     print("[ai/precheck] OpenAI analysis completed", flush=True)
-    update_result = update_claim_ai_fields(payload.claim_id, analysis, "ai/precheck")
+    update_result = update_claim_ai_fields(payload.claim_id, ai_result, "ai/precheck")
 
     if not update_result.get("ok"):
         print(f"[ai/precheck] Supabase update failure: {update_result}", flush=True)
-        error_update = mark_claim_ai_error(payload.claim_id)
-
-        if error_update:
-            print(f"[ai/precheck] Supabase ERROR status update failure: {error_update}", flush=True)
-        else:
-            print("[ai/precheck] Supabase ERROR status update success", flush=True)
-
         return {
             "ok": False,
             "claim_id": payload.claim_id,
             "error": update_result.get("error"),
             "details": update_result.get("details"),
             "hint": update_result.get("hint"),
+            "ai_result": update_result.get("ai_result"),
             "update_payload": update_result.get("update_payload"),
+            "updated_claim": update_result.get("updated_claim"),
         }
 
     print("[ai/precheck] Supabase update success", flush=True)
@@ -440,12 +460,18 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
         previous_status = claim.get("ai_status") or "PENDING"
         print(f"[ai/precheck/retry] previous_ai_status={previous_status}", flush=True)
 
-        analysis = analyze_claim(build_precheck_payload_from_claim(claim))
-        print(f"[ai/precheck/retry] new_ai_status={analysis['ai_status']}", flush=True)
-        print(f"[ai/precheck/retry] ai_confidence={analysis['ai_confidence']}", flush=True)
-        print(f"[ai/precheck/retry] source_quality={analysis['source_quality']}", flush=True)
+        retry_payload = build_precheck_payload_from_claim(claim)
+        ai_result = analyze_claim_with_openai(
+            title=retry_payload.title,
+            description=retry_payload.description,
+            source_url=retry_payload.source_url,
+            category=retry_payload.category,
+        )
+        print(f"[ai/precheck/retry] new_ai_status={ai_result['ai_status']}", flush=True)
+        print(f"[ai/precheck/retry] ai_confidence={ai_result['ai_confidence']}", flush=True)
+        print(f"[ai/precheck/retry] source_quality={ai_result['source_quality']}", flush=True)
         print("[ai/precheck/retry] OpenAI analysis completed", flush=True)
-        update_result = update_claim_ai_fields(claim_id, analysis, "ai/precheck/retry")
+        update_result = update_claim_ai_fields(claim_id, ai_result, "ai/precheck/retry")
 
         if not update_result.get("ok"):
             print(f"[ai/precheck/retry] Supabase update failure: {update_result}", flush=True)
@@ -455,7 +481,9 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
                 "error": update_result.get("error"),
                 "details": update_result.get("details"),
                 "hint": update_result.get("hint"),
+                "ai_result": update_result.get("ai_result"),
                 "update_payload": update_result.get("update_payload"),
+                "updated_claim": update_result.get("updated_claim"),
             }
 
         print("[ai/precheck/retry] Supabase update success", flush=True)
