@@ -4,6 +4,7 @@
 # PHASE 4 STEP 4
 # PHASE 4 STEP 5
 # PHASE 4 STEP 5B
+# PHASE 4 STEP 5C
 import os
 from datetime import datetime
 from typing import Literal
@@ -127,6 +128,7 @@ def get_supabase_project_ref() -> str:
 
 
 # PHASE 4 STEP 5B
+# PHASE 4 STEP 5C
 def normalize_red_flags(red_flags: object) -> list[str]:
     if red_flags is None:
         return []
@@ -141,6 +143,7 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 
 
 # PHASE 4 STEP 5B
+# PHASE 4 STEP 5C
 def build_claim_ai_update_payload(analysis: dict) -> dict:
     return {
         "ai_confidence": analysis["ai_confidence"],
@@ -175,12 +178,29 @@ def format_supabase_error(error: Exception) -> dict:
     }
 
 
+# PHASE 4 STEP 5C
+def format_supabase_response_error(error: object) -> dict:
+    if isinstance(error, dict):
+        return {
+            "error": str(error.get("message") or error),
+            "details": None if error.get("details") is None else str(error.get("details")),
+            "hint": None if error.get("hint") is None else str(error.get("hint")),
+        }
+
+    return {
+        "error": str(getattr(error, "message", None) or error),
+        "details": None if getattr(error, "details", None) is None else str(getattr(error, "details")),
+        "hint": None if getattr(error, "hint", None) is None else str(getattr(error, "hint")),
+    }
+
+
 # PHASE 4 STEP 5B
+# PHASE 4 STEP 5C
 def update_claim_ai_fields(claim_id: str, analysis: dict, endpoint_label: str) -> dict:
     update_payload = build_claim_ai_update_payload(analysis)
     print(f"[{endpoint_label}] Supabase project_ref:", get_supabase_project_ref(), flush=True)
     print(f"[{endpoint_label}] claim_id:", claim_id, flush=True)
-    print(f"[{endpoint_label}] update_payload:", update_payload, flush=True)
+    print(f"[{endpoint_label}] update payload:", update_payload, flush=True)
 
     try:
         supabase = get_supabase_client()
@@ -188,8 +208,24 @@ def update_claim_ai_fields(claim_id: str, analysis: dict, endpoint_label: str) -
             supabase.table("claims")
             .update(update_payload)
             .eq("id", claim_id)
+            .execute()
+        )
+        print(f"[{endpoint_label}] update result:", update_result.data, flush=True)
+
+        update_error = getattr(update_result, "error", None)
+        if update_error:
+            formatted_error = format_supabase_response_error(update_error)
+            print(f"[{endpoint_label}] update_error:", formatted_error, flush=True)
+            return {
+                "ok": False,
+                "update_payload": update_payload,
+                **formatted_error,
+            }
+
+        fetch_result = (
+            supabase.table("claims")
             .select("id, ai_status, ai_confidence, source_quality, red_flags, ai_summary, source_count, updated_at")
-            .single()
+            .eq("id", claim_id)
             .execute()
         )
     except Exception as error:
@@ -201,17 +237,27 @@ def update_claim_ai_fields(claim_id: str, analysis: dict, endpoint_label: str) -
             **formatted_error,
         }
 
-    updated_claim = update_result.data
+    fetch_error = getattr(fetch_result, "error", None)
+    if fetch_error:
+        formatted_error = format_supabase_response_error(fetch_error)
+        print(f"[{endpoint_label}] fetch_error:", formatted_error, flush=True)
+        return {
+            "ok": False,
+            "update_payload": update_payload,
+            **formatted_error,
+        }
+
+    updated_claim = fetch_result.data
     if isinstance(updated_claim, list):
         updated_claim = updated_claim[0] if updated_claim else None
 
-    print(f"[{endpoint_label}] update_result.data:", updated_claim, flush=True)
+    print(f"[{endpoint_label}] fetched updated claim:", updated_claim, flush=True)
 
     if not updated_claim:
         return {
             "ok": False,
             "claim_id": claim_id,
-            "error": "Supabase update returned no row",
+            "error": "Supabase update ran but updated claim could not be fetched",
             "update_payload": update_payload,
         }
 
@@ -245,6 +291,7 @@ def mark_claim_ai_error(claim_id: str) -> str | None:
 
 
 # PHASE 4 STEP 5B
+# PHASE 4 STEP 5C
 def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
     updated_claim = update_result["updated_claim"]
     red_flags = normalize_red_flags(updated_claim.get("red_flags"))
@@ -258,6 +305,9 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "red_flags": red_flags,
         "ai_summary": updated_claim.get("ai_summary"),
         "ai_status": updated_claim.get("ai_status"),
+        "error": None,
+        "details": None,
+        "hint": None,
         "supabase_updated": True,
         "updated_claim": {
             **updated_claim,
