@@ -1,4 +1,5 @@
 // PHASE 1 STEP 1
+// PHASE 4 STEP 7
 import type { User } from "./user";
 import type { SourceQuality, VerificationMode } from "./verification";
 
@@ -11,6 +12,9 @@ export type ClaimStatus =
   | "NEEDS_MORE_EVIDENCE";
 
 export type VoteOption = "TRUE" | "FAKE" | "NOT_SURE";
+
+// PHASE 4 STEP 7
+export type ClaimType = "FACTUAL" | "OPINION" | "SATIRE" | "QUESTION" | "PROMOTION" | "UNCLEAR";
 
 // PHASE 3 STEP 17
 export interface ClaimVote {
@@ -85,6 +89,7 @@ export interface AiCheck {
     | "LIKELY_TRUE"
     | "LIKELY_FAKE"
     | "NEEDS_MORE_EVIDENCE"
+    | "NOT_FACT_CHECKABLE"
     // PHASE 4 STEP 3
     | "ERROR";
   confidence: number | null;
@@ -109,6 +114,8 @@ export interface Claim {
   // PHASE 4 STEP 6
   aiStatus: AiCheck["status"];
   aiConfidence: number | null;
+  // PHASE 4 STEP 7
+  claimType: ClaimType;
   // PHASE 2 STEP 2
   category?: string;
   votesTrue: number;

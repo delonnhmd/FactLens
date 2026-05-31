@@ -1,0 +1,43 @@
+{
+  "allowed_source_quality": [
+    "official",
+    "mainstream",
+    "blog",
+    "unknown"
+  ],
+  "rules": {
+    "official": [
+      ".gov",
+      ".edu",
+      "who.int",
+      "cdc.gov",
+      "fda.gov",
+      "sec.gov",
+      "federalreserve.gov"
+    ],
+    "mainstream": [
+      "reuters.com",
+      "apnews.com",
+      "bbc.com",
+      "npr.org",
+      "cnn.com",
+      "nbcnews.com",
+      "cbsnews.com",
+      "abcnews.go.com",
+      "nytimes.com",
+      "washingtonpost.com"
+    ],
+    "blog": [
+      "personal blogs",
+      "affiliate articles",
+      "medium posts",
+      "unsourced newsletters"
+    ],
+    "unknown": [
+      "unrecognized website",
+      "random domain",
+      "missing source",
+      "social-only source without clear evidence"
+    ]
+  }
+}

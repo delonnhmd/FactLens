@@ -1,0 +1,40 @@
+{
+  "allowed_claim_type": [
+    "FACTUAL",
+    "OPINION",
+    "SATIRE",
+    "QUESTION",
+    "PROMOTION",
+    "UNCLEAR"
+  ],
+  "rules": {
+    "FACTUAL": "Can be verified with evidence.",
+    "OPINION": "Subjective preference, quality judgment, or feeling.",
+    "SATIRE": "Joke or parody.",
+    "QUESTION": "Asks instead of claims.",
+    "PROMOTION": "Mainly advertising or affiliate content.",
+    "UNCLEAR": "Too vague to classify."
+  },
+  "examples": [
+    {
+      "claim": "Solo Leveling is good",
+      "claim_type": "OPINION"
+    },
+    {
+      "claim": "Coffee without sugar helps burn fat",
+      "claim_type": "FACTUAL"
+    },
+    {
+      "claim": "Is Bitcoin going up tomorrow?",
+      "claim_type": "QUESTION"
+    },
+    {
+      "claim": "Buy this token now",
+      "claim_type": "PROMOTION"
+    },
+    {
+      "claim": "This should be done soon",
+      "claim_type": "UNCLEAR"
+    }
+  ]
+}

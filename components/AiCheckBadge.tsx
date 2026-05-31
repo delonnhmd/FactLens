@@ -2,6 +2,7 @@
 // PHASE 4 STEP 3
 // PHASE 4 STEP 4
 // PHASE 4 STEP 6
+// PHASE 4 STEP 7
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
@@ -15,6 +16,7 @@ const aiCheckLabels: Record<AiCheck["status"], string> = {
   LIKELY_TRUE: "Complete",
   LIKELY_FAKE: "Complete",
   NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+  NOT_FACT_CHECKABLE: "Not Fact-Checkable",
   ERROR: "Error",
 };
 
@@ -46,6 +48,10 @@ const stateColors: Record<AiCheck["status"], { backgroundColor: string; color: s
   NEEDS_MORE_EVIDENCE: {
     backgroundColor: theme.colors.dangerBg,
     color: theme.colors.danger,
+  },
+  NOT_FACT_CHECKABLE: {
+    backgroundColor: theme.colors.warningBg,
+    color: theme.colors.warning,
   },
   ERROR: {
     backgroundColor: theme.colors.dangerBg,

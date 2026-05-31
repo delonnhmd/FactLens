@@ -4,6 +4,7 @@
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
 // PHASE 4 STEP 6
+// PHASE 4 STEP 7
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -138,12 +139,29 @@ function mapAiStatus(status: unknown): Claim["aiStatus"] {
     status === "LIKELY_TRUE" ||
     status === "LIKELY_FAKE" ||
     status === "NEEDS_MORE_EVIDENCE" ||
+    status === "NOT_FACT_CHECKABLE" ||
     status === "ERROR"
   ) {
     return status;
   }
 
   return "PENDING";
+}
+
+// PHASE 4 STEP 7
+function mapClaimType(claimType: unknown): Claim["claimType"] {
+  if (
+    claimType === "FACTUAL" ||
+    claimType === "OPINION" ||
+    claimType === "SATIRE" ||
+    claimType === "QUESTION" ||
+    claimType === "PROMOTION" ||
+    claimType === "UNCLEAR"
+  ) {
+    return claimType;
+  }
+
+  return "UNCLEAR";
 }
 
 function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
@@ -192,6 +210,7 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const updatedClaim = result.updated_claim ?? {};
   const aiStatus = mapAiStatus(updatedClaim.ai_status ?? result.ai_status ?? claim.aiStatus);
   const aiConfidence = getNumberField(updatedClaim.ai_confidence ?? result.ai_confidence) ?? claim.aiConfidence;
+  const claimType = mapClaimType(updatedClaim.claim_type ?? result.claim_type ?? claim.claimType);
   const sourceQuality = mapSourceQuality(updatedClaim.source_quality ?? result.source_quality ?? claim.sourceQuality);
   const sourceCount = getNumberField(updatedClaim.source_count ?? result.source_count) ?? claim.sourceCount;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
@@ -201,6 +220,7 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     ...claim,
     aiStatus,
     aiConfidence,
+    claimType,
     sourceQuality,
     sourceCount,
     redFlags,
@@ -731,6 +751,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         const createdAtMs = new Date(claim.createdAt).getTime();
         const isRecent = Number.isFinite(createdAtMs) && createdAtMs >= twentyFourHoursAgo;
         const aiStatus = claim.aiCheck.status;
+        // PHASE 4 STEP 7
+        console.log("[claim] claimType:", claim.claimType);
 
         return isRecent && (aiStatus === "PENDING" || aiStatus === "ERROR");
       })

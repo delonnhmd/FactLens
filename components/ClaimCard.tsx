@@ -1,6 +1,8 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
+// PHASE 4 STEP 7
+// PHASE 4 STEP 8
 import { memo, useCallback, useState } from "react";
 import { Alert, Image, TouchableOpacity, View, Text, StyleSheet, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -69,6 +71,19 @@ function formatSourceQuality(value: string | null | undefined): string {
   return value.replace(/_/g, " ");
 }
 
+// PHASE 4 STEP 7
+// PHASE 4 STEP 8
+function formatClaimType(value: string | null | undefined): string {
+  if (!value) {
+    return "Unclear";
+  }
+
+  return value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
@@ -122,6 +137,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     claim.aiSummary ??
     claim.aiCheck.reason ??
     "AI pre-check is pending. Community voting and evidence are still needed.";
+  // PHASE 4 STEP 7
+  const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
 
   // PHASE 3 STEP 6
   const handleSubmitReport = useCallback(async () => {
@@ -222,6 +239,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
             <SourceQualityBadge quality={sourceQuality} />
             <AiCheckBadge status={claim.aiCheck.status} />
+            <Text style={styles.claimTypeBadge}>{formatClaimType(claim.claimType)}</Text>
             <Text style={styles.evidencePill}>{evidenceLabel}</Text>
             {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for review</Text> : null}
           </View>
@@ -236,9 +254,15 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             <Text style={styles.aiSignalText}>
               AI confidence {formatPercent(claim.aiCheck.confidence)} · Source {formatSourceQuality(claim.sourceQuality)}
             </Text>
+            <Text style={styles.aiSignalText}>Claim type: {formatClaimType(claim.claimType)}</Text>
             <Text style={styles.aiSignalText} numberOfLines={2}>{aiSummary}</Text>
             {claim.redFlags.length > 0 ? (
               <Text style={styles.aiRedFlags} numberOfLines={2}>Red flags: {claim.redFlags.join(", ")}</Text>
+            ) : null}
+            {isNotFactCheckable ? (
+              <Text style={styles.notFactCheckableWarning}>
+                This appears to be an opinion or non-factual post. FactLens cannot verify it as True or Fake.
+              </Text>
             ) : null}
             <Text style={styles.aiDisclaimer}>
               AI pre-check is only a risk signal. Community voting decides the final result.
@@ -535,6 +559,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
   },
+  notFactCheckableWarning: {
+    color: theme.colors.warning,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 15,
+  },
   aiDisclaimer: {
     color: theme.colors.subtext,
     fontSize: 11,
@@ -562,6 +592,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.dangerBg,
     borderRadius: 999,
     color: theme.colors.danger,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  claimTypeBadge: {
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: 999,
+    color: theme.colors.warning,
     fontSize: 11,
     fontWeight: "500",
     paddingHorizontal: 9,

@@ -1,5 +1,7 @@
 # PHASE 4 STEP 4
 # PHASE 4 STEP 5
+# PHASE 4 STEP 7
+# PHASE 4 STEP 8
 import json
 import os
 from typing import Literal
@@ -11,12 +13,26 @@ try:
 except ImportError:  # pragma: no cover - Render installs this from requirements.txt.
     OpenAI = None
 
+try:
+    from services.ai_library_loader import load_factlens_ai_library
+except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
+    from backend.services.ai_library_loader import load_factlens_ai_library
+
 
 SourceQuality = Literal["official", "mainstream", "blog", "unknown"]
-AiStatus = Literal["LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "ERROR"]
+ClaimType = Literal["FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"]
+AiStatus = Literal[
+    "LOW_RISK",
+    "MEDIUM_RISK",
+    "HIGH_RISK",
+    "NEEDS_MORE_EVIDENCE",
+    "NOT_FACT_CHECKABLE",
+    "ERROR",
+]
 
 
 class FactLensAiPrecheckResult(BaseModel):
+    claim_type: ClaimType
     ai_confidence: float
     source_count: int
     source_quality: SourceQuality
@@ -65,7 +81,62 @@ SUSPICIOUS_TERMS = [
 ]
 
 SOURCE_QUALITIES = {"official", "mainstream", "blog", "unknown"}
-AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "ERROR"}
+CLAIM_TYPES = {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}
+AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "NOT_FACT_CHECKABLE", "ERROR"}
+
+
+# PHASE 4 STEP 7
+def _classify_non_fact_checkable(title: str, description: str) -> ClaimType | None:
+    text = f"{title} {description}".strip().lower()
+    title_text = title.strip()
+
+    if not text:
+        return "UNCLEAR"
+
+    if title_text.endswith("?") or text.startswith(("is ", "are ", "can ", "could ", "should ", "do ", "does ", "did ", "what ", "why ", "how ")):
+        return "QUESTION"
+
+    promotion_terms = ["buy now", "use my code", "promo code", "discount", "sponsored", "affiliate", "subscribe to"]
+    if any(term in text for term in promotion_terms):
+        return "PROMOTION"
+
+    satire_terms = ["satire", "parody", "joke", "meme"]
+    if any(term in text for term in satire_terms):
+        return "SATIRE"
+
+    opinion_terms = [
+        "is good",
+        "is bad",
+        "is better",
+        "is worse",
+        "boring",
+        "amazing",
+        "awesome",
+        "terrible",
+        "best",
+        "worst",
+        "i like",
+        "i hate",
+        "overrated",
+        "underrated",
+    ]
+    if any(term in text for term in opinion_terms):
+        return "OPINION"
+
+    return None
+
+
+def _not_fact_checkable_analysis(claim_type: ClaimType) -> dict:
+    type_label = claim_type.lower().replace("_", " ")
+    return {
+        "claim_type": claim_type,
+        "ai_confidence": 0.5,
+        "source_count": 0,
+        "source_quality": "unknown",
+        "red_flags": [f"Claim type is {type_label}, not a factual news claim"],
+        "ai_summary": "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake.",
+        "ai_status": "NOT_FACT_CHECKABLE",
+    }
 
 
 def _fallback_source_risk_analysis(
@@ -83,6 +154,14 @@ def _fallback_source_risk_analysis(
     source_quality: SourceQuality = "unknown"
     ai_summary = "No strong source signal found. Community voting and evidence are needed."
     ai_status: AiStatus = "NEEDS_MORE_EVIDENCE"
+    claim_type: ClaimType = "FACTUAL"
+
+    non_fact_checkable_type = _classify_non_fact_checkable(title, description)
+    if non_fact_checkable_type and non_fact_checkable_type != "UNCLEAR":
+        return _not_fact_checkable_analysis(non_fact_checkable_type)
+
+    if non_fact_checkable_type == "UNCLEAR":
+        claim_type = "UNCLEAR"
 
     if not source_url_lower:
         ai_confidence = 0.35
@@ -117,6 +196,7 @@ def _fallback_source_risk_analysis(
         red_flags.append("OpenAI API key not configured")
 
     return {
+        "claim_type": claim_type,
         "ai_confidence": round(ai_confidence, 2),
         "source_count": source_count,
         "source_quality": source_quality,
@@ -128,6 +208,7 @@ def _fallback_source_risk_analysis(
 
 def _error_analysis() -> dict:
     return {
+        "claim_type": "UNCLEAR",
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
@@ -150,9 +231,13 @@ def _clamp_confidence(value: object) -> float:
 
 
 def _normalize_analysis(raw_result: dict) -> dict:
+    claim_type = str(raw_result.get("claim_type") or "UNCLEAR").upper()
     source_quality = str(raw_result.get("source_quality") or "unknown").lower()
     ai_status = str(raw_result.get("ai_status") or "NEEDS_MORE_EVIDENCE").upper()
     red_flags = raw_result.get("red_flags")
+
+    if claim_type not in CLAIM_TYPES:
+        claim_type = "UNCLEAR"
 
     if source_quality not in SOURCE_QUALITIES:
         source_quality = "unknown"
@@ -168,13 +253,28 @@ def _normalize_analysis(raw_result: dict) -> dict:
     except (TypeError, ValueError):
         source_count = 0
 
+    ai_confidence = _clamp_confidence(raw_result.get("ai_confidence"))
+
+    if claim_type in {"OPINION", "QUESTION", "SATIRE", "PROMOTION"}:
+        ai_status = "NOT_FACT_CHECKABLE"
+        ai_confidence = 0.5
+        source_quality = "unknown"
+        source_count = 0
+
     ai_summary = str(raw_result.get("ai_summary") or "").strip()
 
     if not ai_summary:
-        ai_summary = "AI pre-check could not find enough support. Community voting and evidence are still needed."
+        if ai_status == "NOT_FACT_CHECKABLE":
+            ai_summary = "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake."
+        else:
+            ai_summary = "AI pre-check could not find enough support. Community voting and evidence are still needed."
+
+    if ai_status == "NOT_FACT_CHECKABLE" and not red_flags:
+        red_flags = [f"Claim type is {claim_type.lower()}, not a factual news claim"]
 
     return {
-        "ai_confidence": _clamp_confidence(raw_result.get("ai_confidence")),
+        "claim_type": claim_type,
+        "ai_confidence": ai_confidence,
         "source_count": max(source_count, 0),
         "source_quality": source_quality,
         "red_flags": [str(flag) for flag in red_flags[:8]],
@@ -208,14 +308,26 @@ def _normalize_connection_message(value: object) -> str:
 
 
 def _build_prompt(title: str, description: str, source_url: str, category: str) -> list[dict]:
+    # PHASE 4 STEP 8
+    ai_library = load_factlens_ai_library()
+    ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
     system_prompt = (
         "You are the AI pre-check engine for FactLens. "
+        "Use the FactLens AI Teaching Library below as the highest priority platform rule set. "
         "You do not decide the final truth. You provide risk signals only. "
-        "Analyze the claim, source URL, and wording. Return only JSON. "
+        "Analyze the claim, source URL, and wording. Return only valid JSON. "
+        "Do not make final verdicts. "
+        "AI is risk signal only. "
+        "Before judging support, classify claim_type as FACTUAL, OPINION, SATIRE, QUESTION, PROMOTION, or UNCLEAR. "
+        "OPINION means subjective taste, preference, quality judgment, or personal feeling, such as 'Solo Leveling is good', 'This movie is boring', or 'Bitcoin is better than gold'. "
+        "FACTUAL means it can be verified by evidence, such as 'Coffee improves memory' or 'City council approved a transit program'. "
+        "QUESTION means the user asks a question instead of making a claim. PROMOTION means advertising or self-promotion. SATIRE means joke, parody, or satire. UNCLEAR means too vague to classify. "
+        "If claim_type is OPINION, QUESTION, SATIRE, or PROMOTION, set ai_status to NOT_FACT_CHECKABLE, ai_confidence to 0.5, source_count to 0, source_quality to unknown, explain why in red_flags, and say in ai_summary that it is not a factual claim that can be verified as true or fake. "
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "
-        "No live search is available in this call, so source_count must be 0 unless the submitted text explicitly mentions corroborating sources."
+        "No live search is available in this call, so source_count must be 0 unless the submitted text explicitly mentions corroborating sources. "
+        f"FactLens AI Teaching Library: {ai_library_json}"
     )
     user_prompt = (
         f"Title: {title or ''}\n"

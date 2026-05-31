@@ -2,6 +2,8 @@
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
 // PHASE 4 STEP 6
+// PHASE 4 STEP 7
+// PHASE 4 STEP 8
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -109,6 +111,19 @@ function formatSourceQualityLabel(value: string | null | undefined): string {
   return value.replace(/_/g, " ");
 }
 
+// PHASE 4 STEP 7
+// PHASE 4 STEP 8
+function formatClaimType(value: string | null | undefined): string {
+  if (!value) {
+    return "Unclear";
+  }
+
+  return value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -189,6 +204,7 @@ export default function ClaimDetailScreen() {
           totalVotes: loadedClaim.totalVotes,
           aiStatus: loadedClaim.aiCheck.status,
           aiConfidence: loadedClaim.aiCheck.confidence,
+          claimType: loadedClaim.claimType,
         });
       }
 
@@ -557,6 +573,8 @@ export default function ClaimDetailScreen() {
     claim.aiSummary ??
     claim.aiCheck.reason ??
     "AI pre-check is pending. Community voting and evidence are still needed.";
+  // PHASE 4 STEP 7
+  const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
   // PHASE 4 STEP 3
   const canRetryAiPrecheck =
     claim.aiCheck.status === "PENDING" ||
@@ -614,6 +632,7 @@ export default function ClaimDetailScreen() {
               {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
               <SourceQualityBadge quality={mainSourceQuality} />
               <AiCheckBadge status={claim.aiCheck.status} />
+              <Text style={styles.claimTypeBadge}>{formatClaimType(claim.claimType)}</Text>
               {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for review</Text> : null}
             </View>
             <View style={styles.sourceLinkRow}>
@@ -637,10 +656,19 @@ export default function ClaimDetailScreen() {
                   <Text style={styles.aiDetailLabel}>Sources found</Text>
                   <Text style={styles.aiDetailValue}>{claim.sourceCount}</Text>
                 </View>
+                <View style={styles.aiDetailItem}>
+                  <Text style={styles.aiDetailLabel}>Claim type</Text>
+                  <Text style={styles.aiDetailValue}>{formatClaimType(claim.claimType)}</Text>
+                </View>
               </View>
               <Text style={styles.aiText}>{aiSummary}</Text>
               {claim.redFlags.length > 0 ? (
                 <Text style={styles.aiRedFlags}>Red flags: {claim.redFlags.join(", ")}</Text>
+              ) : null}
+              {isNotFactCheckable ? (
+                <Text style={styles.notFactCheckableWarning}>
+                  This appears to be an opinion or non-factual post. FactLens cannot verify it as True or Fake.
+                </Text>
               ) : null}
               <Text style={styles.aiDisclaimer}>
                 AI pre-check is only a risk signal. Community voting decides the final result.
@@ -1267,6 +1295,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
+  notFactCheckableWarning: {
+    color: theme.colors.warning,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
   flaggedBadge: {
     alignSelf: "flex-start",
     backgroundColor: theme.colors.dangerBg,
@@ -1299,6 +1333,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.tagBg,
     borderRadius: 999,
     color: theme.colors.tagText,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  claimTypeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.warningBg,
+    borderRadius: 999,
+    color: theme.colors.warning,
     fontSize: 11,
     fontWeight: "500",
     paddingHorizontal: 9,

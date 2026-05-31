@@ -1,0 +1,39 @@
+{
+  "confidence_guide": [
+    {
+      "range": "0.80-1.00",
+      "meaning": "Strongly supported by official/mainstream evidence.",
+      "status": "LOW_RISK"
+    },
+    {
+      "range": "0.60-0.79",
+      "meaning": "Some support but not fully proven.",
+      "status": "LOW_RISK or MEDIUM_RISK"
+    },
+    {
+      "range": "0.40-0.59",
+      "meaning": "Unclear, mixed, or weak evidence.",
+      "status": "MEDIUM_RISK or NEEDS_MORE_EVIDENCE"
+    },
+    {
+      "range": "0.20-0.39",
+      "meaning": "Suspicious or unsupported.",
+      "status": "HIGH_RISK or NEEDS_MORE_EVIDENCE"
+    },
+    {
+      "range": "0.00-0.19",
+      "meaning": "Very weak, misleading, or likely unsupported.",
+      "status": "HIGH_RISK"
+    }
+  ],
+  "non_fact_checkable": {
+    "claim_type": [
+      "OPINION",
+      "QUESTION",
+      "PROMOTION",
+      "SATIRE"
+    ],
+    "ai_confidence": 0.5,
+    "ai_status": "NOT_FACT_CHECKABLE"
+  }
+}

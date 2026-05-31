@@ -7,6 +7,8 @@
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
 # PHASE 4 STEP 5F-2
+# PHASE 4 STEP 7
+# PHASE 4 STEP 8
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -25,6 +27,7 @@ try:
         get_openai_model,
         test_openai_connection,
     )
+    from services.ai_library_loader import load_factlens_ai_library
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
@@ -32,6 +35,7 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         get_openai_model,
         test_openai_connection,
     )
+    from backend.services.ai_library_loader import load_factlens_ai_library
 
 
 load_dotenv()
@@ -47,7 +51,16 @@ app.add_middleware(
 
 
 OfficialQuality = Literal["official", "mainstream", "blog", "unknown"]
-AiStatus = Literal["PENDING", "LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "ERROR"]
+ClaimType = Literal["FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"]
+AiStatus = Literal[
+    "PENDING",
+    "LOW_RISK",
+    "MEDIUM_RISK",
+    "HIGH_RISK",
+    "NEEDS_MORE_EVIDENCE",
+    "NOT_FACT_CHECKABLE",
+    "ERROR",
+]
 
 
 # PHASE 4 STEP 5F-2
@@ -110,6 +123,8 @@ class AiPrecheckTestRequest(BaseModel):
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
+    # PHASE 4 STEP 7
+    claim_type: ClaimType | None = None
     ai_confidence: float | None = None
     source_count: int | None = None
     source_quality: OfficialQuality | None = None
@@ -147,6 +162,25 @@ def debug_supabase_role():
         "supabase_url_configured": bool(supabase_url),
         "service_role_key_configured": bool(service_role_key),
         "key_role": get_key_role(service_role_key),
+    }
+
+
+# PHASE 4 STEP 8
+@app.get("/ai/library")
+def ai_library():
+    library = load_factlens_ai_library()
+    sections = [
+        "factlens_rules",
+        "claim_type_rules",
+        "source_quality_rules",
+        "red_flag_rules",
+        "confidence_rules",
+    ]
+
+    return {
+        "ok": True,
+        "rules_loaded": all(section in library for section in sections),
+        "sections": sections,
     }
 
 
@@ -200,6 +234,8 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 # PHASE 4 STEP 5D
 def build_claim_ai_update_payload(analysis: dict) -> dict:
     return {
+        # PHASE 4 STEP 7
+        "claim_type": analysis.get("claim_type", "UNCLEAR"),
         "ai_status": analysis["ai_status"],
         "ai_confidence": analysis["ai_confidence"],
         "source_quality": analysis["source_quality"],
@@ -280,7 +316,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, ai_status, ai_confidence, source_quality, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, red_flags, ai_summary, source_count, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -338,6 +374,8 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 # PHASE 4 STEP 3
 def build_ai_error_analysis() -> dict:
     return {
+        # PHASE 4 STEP 7
+        "claim_type": "UNCLEAR",
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
@@ -370,6 +408,8 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "claim_id": claim_id,
         "ai_result": update_result.get("ai_result"),
         "update_payload": update_result.get("update_payload"),
+        # PHASE 4 STEP 7
+        "claim_type": updated_claim.get("claim_type"),
         "ai_confidence": updated_claim.get("ai_confidence"),
         "source_count": updated_claim.get("source_count"),
         "source_quality": updated_claim.get("source_quality"),
@@ -467,6 +507,8 @@ def ai_precheck(payload: AiPrecheckRequest):
     print(f"[ai/precheck] OPENAI_MODEL={get_openai_model()}", flush=True)
     print(f"[ai/precheck] claim_id={payload.claim_id}", flush=True)
     print(f"[ai/precheck] source_url={payload.source_url}", flush=True)
+    # PHASE 4 STEP 7
+    print("[ai] claim_type:", ai_result.get("claim_type"), flush=True)
     print(f"[ai/precheck] ai_status={ai_result['ai_status']}", flush=True)
     print(f"[ai/precheck] ai_confidence={ai_result['ai_confidence']}", flush=True)
     print(f"[ai/precheck] source_quality={ai_result['source_quality']}", flush=True)
@@ -518,6 +560,8 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
             source_url=retry_payload.source_url,
             category=retry_payload.category,
         )
+        # PHASE 4 STEP 7
+        print("[ai] claim_type:", ai_result.get("claim_type"), flush=True)
         print(f"[ai/precheck/retry] new_ai_status={ai_result['ai_status']}", flush=True)
         print(f"[ai/precheck/retry] ai_confidence={ai_result['ai_confidence']}", flush=True)
         print(f"[ai/precheck/retry] source_quality={ai_result['source_quality']}", flush=True)

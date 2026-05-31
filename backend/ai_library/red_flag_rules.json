@@ -1,0 +1,18 @@
+{
+  "red_flags": [
+    "missing source URL",
+    "source not authoritative",
+    "no corroborating evidence",
+    "vague claim",
+    "opinion presented as fact",
+    "exaggerated wording",
+    "miracle cure language",
+    "anonymous source",
+    "viral rumor wording",
+    "financial hype",
+    "political manipulation language",
+    "old/outdated source",
+    "source does not support claim",
+    "title overstates source"
+  ]
+}

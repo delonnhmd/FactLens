@@ -7,6 +7,7 @@
 // PHASE 3 STEP 29
 // PHASE 3 STEP 32
 // PHASE 4 STEP 6
+// PHASE 4 STEP 7
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -25,7 +26,7 @@ import {
   getVerificationVerdictReason,
   mapVerificationVerdictToStatus,
 } from "./verificationEngine";
-import type { Claim, ClaimStatus, AiCheck } from "../types/claim";
+import type { Claim, ClaimStatus, AiCheck, ClaimType } from "../types/claim";
 import type { SourceQuality, VerificationMode, VerificationVote } from "../types/verification";
 import type { User as AppUser } from "../types/user";
 import type { Profile } from "./profileService";
@@ -86,6 +87,8 @@ export interface ClaimRow {
   votes_fake: number | null;
   votes_unsure: number | null;
   status: string | null;
+  // PHASE 4 STEP 7
+  claim_type?: string | null;
   ai_status: string | null;
   ai_confidence: number | null;
   ai_reason: string | null;
@@ -295,6 +298,8 @@ function mapAiStatus(status: string | null): ClaimAiStatus {
     status === "LIKELY_TRUE" ||
     status === "LIKELY_FAKE" ||
     status === "NEEDS_MORE_EVIDENCE" ||
+    // PHASE 4 STEP 7
+    status === "NOT_FACT_CHECKABLE" ||
     // PHASE 4 STEP 3
     status === "ERROR"
   ) {
@@ -302,6 +307,22 @@ function mapAiStatus(status: string | null): ClaimAiStatus {
   }
 
   return "PENDING";
+}
+
+// PHASE 4 STEP 7
+function mapClaimType(claimType: string | null | undefined): ClaimType {
+  if (
+    claimType === "FACTUAL" ||
+    claimType === "OPINION" ||
+    claimType === "SATIRE" ||
+    claimType === "QUESTION" ||
+    claimType === "PROMOTION" ||
+    claimType === "UNCLEAR"
+  ) {
+    return claimType;
+  }
+
+  return "UNCLEAR";
 }
 
 // PHASE 3 STEP 17
@@ -465,8 +486,10 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   const expiresAt = isValidDateString(row.expires_at) ? row.expires_at : createdAt;
   const aiFlags = mapStringList(row.red_flags);
   // PHASE 4 STEP 6
+  // PHASE 4 STEP 7
   const aiStatus = mapAiStatus(row.ai_status);
   const aiConfidence = row.ai_confidence ?? null;
+  const claimType = mapClaimType(row.claim_type);
   const sourceQuality = mapSourceQuality(row.source_quality);
   const sourceCount = row.source_count ?? 0;
   const aiSummary = row.ai_summary ?? row.ai_reason ?? null;
@@ -510,6 +533,7 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     aiCheck,
     aiStatus,
     aiConfidence,
+    claimType,
     category: row.category ?? "Other",
     votesTrue,
     votesFake,
@@ -604,6 +628,7 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     },
     aiStatus: "PENDING",
     aiConfidence: null,
+    claimType: mapClaimType(row.claim_type),
     category: row.category ?? "Other",
     votesTrue: row.votes_true ?? 0,
     votesFake: row.votes_fake ?? 0,
@@ -684,6 +709,8 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     verdict_calculated_at: null,
     status: "OPEN",
     ai_status: "PENDING",
+    // PHASE 4 STEP 7
+    claim_type: "UNCLEAR",
     ai_confidence: null,
     ai_reason: null,
     report_count: 0,

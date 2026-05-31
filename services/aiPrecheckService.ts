@@ -2,12 +2,14 @@
 // PHASE 4 STEP 2
 // PHASE 4 STEP 3
 // PHASE 4 STEP 6
+// PHASE 4 STEP 7
 import { API_CONFIG, getBackendUrl } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
 export interface AiPrecheckResponse {
   ok: boolean;
   claim_id: string;
+  claim_type?: string | null;
   ai_result?: Record<string, unknown> | null;
   ai_confidence?: number | null;
   source_count?: number | null;
@@ -70,6 +72,7 @@ async function postAiPrecheck(
     return {
       ok: Boolean(data.ok),
       claim_id: data.claim_id ?? claimId,
+      claim_type: data.claim_type ?? null,
       ai_result: data.ai_result ?? null,
       ai_confidence: data.ai_confidence ?? null,
       source_count: data.source_count ?? null,
