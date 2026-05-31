@@ -6,6 +6,7 @@
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
+# PHASE 4 STEP 5F-2
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -47,6 +48,42 @@ app.add_middleware(
 
 OfficialQuality = Literal["official", "mainstream", "blog", "unknown"]
 AiStatus = Literal["PENDING", "LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "ERROR"]
+
+
+# PHASE 4 STEP 5F-2
+def get_key_role(token: str | None) -> str:
+    try:
+        import base64
+        import json
+
+        if not token:
+            return "missing"
+
+        if token.startswith("sb_secret_"):
+            return "secret_key"
+
+        if token.startswith("sb_publishable_"):
+            return "publishable_key"
+
+        parts = token.split(".")
+        if len(parts) < 2:
+            return "unknown"
+
+        payload = parts[1]
+        payload += "=" * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload.encode())
+        data = json.loads(decoded)
+        return data.get("role", "unknown")
+    except Exception:
+        return "decode_error"
+
+
+# PHASE 4 STEP 5F-2
+print(
+    "[supabase] service role key role:",
+    get_key_role(os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")),
+    flush=True,
+)
 
 
 class AiPrecheckRequest(BaseModel):
@@ -97,6 +134,20 @@ def home():
 @app.get("/health")
 def health():
     return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-5"}
+
+
+# PHASE 4 STEP 5F-2
+@app.get("/debug/supabase-role")
+def debug_supabase_role():
+    supabase_url = os.environ.get("SUPABASE_URL", "")
+    service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+    return {
+        "ok": True,
+        "supabase_url_configured": bool(supabase_url),
+        "service_role_key_configured": bool(service_role_key),
+        "key_role": get_key_role(service_role_key),
+    }
 
 
 def analyze_claim(payload: AiPrecheckRequest) -> dict:
