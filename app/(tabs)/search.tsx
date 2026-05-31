@@ -1,23 +1,25 @@
 // PHASE 3 STEP 14
-// Search screen placeholder
+// FactLens UI redesign
 
 import { SafeAreaView, Text, TextInput, View, StyleSheet } from 'react-native';
+import { Header } from '../../components/Header';
+import { theme } from '../../constants/theme';
 
 export default function SearchScreen() {
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Search</Text>
-      <Text style={styles.subtitle}>Search claims, sources, and topics.</Text>
+      <Header title="Search" subtitle="Search claims, sources, and topics" />
+      <View style={styles.content}>
+        <View style={styles.searchBox}>
+          <TextInput
+            placeholder="Search claims, sources, topics..."
+            placeholderTextColor={theme.colors.muted}
+            style={styles.input}
+          />
+        </View>
 
-      <View style={styles.searchBox}>
-        <TextInput
-          placeholder="Search claims, sources, topics..."
-          placeholderTextColor="#9CA3AF"
-          style={styles.input}
-        />
+        <Text style={styles.empty}>Search results will appear here.</Text>
       </View>
-
-      <Text style={styles.empty}>Search results will appear here.</Text>
     </SafeAreaView>
   );
 }
@@ -25,35 +27,26 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.card,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#6B7280',
+  content: {
+    padding: 10,
   },
   searchBox: {
-    marginTop: 18,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
     paddingHorizontal: 14,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background,
   },
   input: {
     height: 48,
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 14,
+    color: theme.colors.text,
   },
   empty: {
     marginTop: 24,
-    color: '#6B7280',
-    fontSize: 15,
+    color: theme.colors.subtext,
+    fontSize: 14,
   },
 });

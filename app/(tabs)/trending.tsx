@@ -32,11 +32,11 @@ type TrendingFilter =
 
 const trendingFilters: Array<{ label: string; value: TrendingFilter }> = [
   { label: "All", value: "ALL" },
-  { label: "Open Voting", value: "OPEN" },
+  { label: "Open voting", value: "OPEN" },
   { label: "Closed", value: "CLOSED" },
-  { label: "Needs More Evidence", value: "NEEDS_MORE_EVIDENCE" },
-  { label: "Community Says True", value: "COMMUNITY_TRUE" },
-  { label: "Community Says Fake", value: "COMMUNITY_FAKE" },
+  { label: "Needs more evidence", value: "NEEDS_MORE_EVIDENCE" },
+  { label: "Community says true", value: "COMMUNITY_TRUE" },
+  { label: "Community says fake", value: "COMMUNITY_FAKE" },
 ];
 
 // PHASE 3 STEP 11
@@ -175,7 +175,7 @@ export default function TrendingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Trending Claims" subtitle="Claims with the most activity right now" />
+      <Header title="Trending claims" subtitle="Claims with the most activity right now" />
       <FlatList
         data={trendingClaims}
         keyExtractor={({ claim }) => claim.id}
@@ -196,8 +196,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
   },
   content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: 10,
+    paddingTop: 10,
     paddingBottom: theme.spacing.xl,
   },
   filterRow: {
@@ -208,22 +208,22 @@ const styles = StyleSheet.create({
   filterButton: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderRadius: 999,
+    borderWidth: 0.5,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   filterButtonSelected: {
-    backgroundColor: "#E0E7FF",
-    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.tagBg,
+    borderColor: theme.colors.tagBg,
   },
   filterText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   filterTextSelected: {
-    color: theme.colors.primary,
+    color: theme.colors.tagText,
   },
   trendingItem: {
     marginBottom: theme.spacing.md,
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   scoreLabel: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   statePanel: {
@@ -248,11 +248,11 @@ const styles = StyleSheet.create({
   stateText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   errorPanel: {
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FECACA",
+    backgroundColor: theme.colors.dangerBg,
+    borderColor: theme.colors.dangerBg,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
@@ -261,6 +261,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });

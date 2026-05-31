@@ -1,28 +1,30 @@
 // PHASE 2 STEP 5
+// FactLens UI redesign
 import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
 import type { SourceQuality, SourceQualityLabel } from "../services/sourceQuality";
 
 const qualityColors: Record<SourceQualityLabel, { backgroundColor: string; color: string; borderColor: string }> = {
   "Strong Source": {
-    backgroundColor: "#DCFCE7",
-    color: theme.colors.success,
-    borderColor: "#BBF7D0",
+    backgroundColor: theme.colors.sourceBg,
+    color: theme.colors.sourceText,
+    borderColor: theme.colors.sourceBg,
   },
   "Medium Source": {
-    backgroundColor: "#E0E7FF",
-    color: theme.colors.primary,
-    borderColor: "#BFDBFE",
+    backgroundColor: theme.colors.sourceBg,
+    color: theme.colors.sourceText,
+    borderColor: theme.colors.sourceBg,
   },
   "Weak Source": {
-    backgroundColor: "#FFEDD5",
-    color: "#C2410C",
-    borderColor: "#FED7AA",
+    backgroundColor: theme.colors.warningBg,
+    color: theme.colors.warning,
+    borderColor: theme.colors.warningBg,
   },
   "Unknown Source": {
-    backgroundColor: "#F3F4F6",
+    backgroundColor: theme.colors.secondarySurface,
     color: theme.colors.subtext,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.secondarySurface,
   },
 };
 
@@ -44,6 +46,7 @@ export function SourceQualityBadge({ quality, showScore = false }: SourceQuality
         },
       ]}
     >
+      <Ionicons name="checkmark-circle-outline" size={12} color={colors.color} />
       <Text style={[styles.text, { color: colors.color }]}>
         {quality.label}
         {showScore ? ` - ${quality.score}/100` : ""}
@@ -54,14 +57,17 @@ export function SourceQualityBadge({ quality, showScore = false }: SourceQuality
 
 const styles = StyleSheet.create({
   badge: {
+    alignItems: "center",
     alignSelf: "flex-start",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   text: {
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
   },
 });

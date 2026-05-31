@@ -75,7 +75,14 @@ export interface ClaimMedia {
 }
 
 export interface AiCheck {
-  status: "PENDING" | "LIKELY_TRUE" | "LIKELY_FAKE" | "NEEDS_MORE_EVIDENCE";
+  // PHASE 4 STEP 1
+  status:
+    | "PENDING"
+    | "LOW_RISK"
+    | "MEDIUM_RISK"
+    | "LIKELY_TRUE"
+    | "LIKELY_FAKE"
+    | "NEEDS_MORE_EVIDENCE";
   confidence: number | null;
   reason: string | null;
   // PHASE 3 STEP 25

@@ -1,4 +1,5 @@
 // PHASE 1 STEP 4
+// FactLens UI redesign
 import { View, Text, StyleSheet } from "react-native";
 import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,7 +23,7 @@ export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderP
         <Ionicons 
           name={rightIcon} 
           size={24} 
-          color={theme.colors.primary} 
+          color="rgba(255, 255, 255, 0.7)" 
           onPress={onRightIconPress}
           style={styles.icon}
         />
@@ -35,9 +36,8 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.navy,
+    borderBottomWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -46,14 +46,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: theme.typography.largeTitle.fontSize,
-    fontWeight: theme.typography.largeTitle.fontWeight,
-    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: "500",
+    color: theme.colors.background,
   },
   subtitle: {
     marginTop: theme.spacing.xs,
-    fontSize: theme.typography.small.fontSize,
-    color: theme.colors.subtext,
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.7)",
   },
   icon: {
     marginLeft: theme.spacing.md,

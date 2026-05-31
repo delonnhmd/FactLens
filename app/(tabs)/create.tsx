@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   gateTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   gateText: {
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   avatarText: {
     color: theme.colors.primary,
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   accountTextWrap: {
     flex: 1,
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
   accountName: {
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   accountMeta: {
     color: theme.colors.subtext,
@@ -545,7 +545,7 @@ const styles = StyleSheet.create({
   accountScore: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.xs,
   },
   verifiedBadge: {
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -570,12 +570,12 @@ const styles = StyleSheet.create({
   warningText: {
     color: theme.colors.warning,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   generalError: {
     color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   fieldGroup: {
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
   label: {
     color: theme.colors.text,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   titleInput: {
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.text,
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: "500",
     lineHeight: 30,
     minHeight: 96,
     paddingHorizontal: theme.spacing.md,
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   counterTextError: {
     color: theme.colors.danger,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   errorText: {
     color: theme.colors.danger,
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
   categoryButtonText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   categoryButtonTextSelected: {
     color: theme.colors.primary,
@@ -693,12 +693,12 @@ const styles = StyleSheet.create({
   removeImageButtonText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   imageButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   videoPreviewPanel: {
     backgroundColor: theme.colors.card,
@@ -712,7 +712,7 @@ const styles = StyleSheet.create({
   videoDetectedText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   videoThumbnail: {
     backgroundColor: theme.colors.background,
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
   profileGateMessage: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   button: {
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   secondaryButton: {
     alignItems: "center",
@@ -754,6 +754,6 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });

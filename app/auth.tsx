@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.text,
     fontSize: theme.typography.largeTitle.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   subtitle: {
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   label: {
     color: theme.colors.text,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   input: {
@@ -191,13 +191,13 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   messageText: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   button: {
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   secondaryButton: {
     alignItems: "center",
@@ -222,6 +222,6 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });

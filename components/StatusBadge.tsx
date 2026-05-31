@@ -1,4 +1,5 @@
 // PHASE 1 STEP 4
+// FactLens UI redesign
 import { View, Text, StyleSheet } from "react-native";
 import type { ClaimStatus } from "../types/claim";
 import { theme } from "../constants/theme";
@@ -7,27 +8,27 @@ import { theme } from "../constants/theme";
 const statusConfig: Record<ClaimStatus, { label: string; backgroundColor: string; color: string }> = {
   OPEN: {
     label: "Open",
-    backgroundColor: "#E0E7FF",
-    color: theme.colors.primary,
+    backgroundColor: theme.colors.phaseBg,
+    color: theme.colors.phaseText,
   },
   VOTING_CLOSED: {
-    label: "Voting Closed",
-    backgroundColor: "#F3F4F6",
+    label: "Voting closed",
+    backgroundColor: theme.colors.secondarySurface,
     color: theme.colors.subtext,
   },
   COMMUNITY_TRUE: {
-    label: "Community Says True",
-    backgroundColor: "#DCFCE7",
+    label: "Community says true",
+    backgroundColor: theme.colors.successBg,
     color: theme.colors.success,
   },
   COMMUNITY_FAKE: {
-    label: "Community Says Fake",
-    backgroundColor: "#FEE2E2",
+    label: "Community says fake",
+    backgroundColor: theme.colors.dangerBg,
     color: theme.colors.danger,
   },
   NEEDS_MORE_EVIDENCE: {
-    label: "Needs More Evidence",
-    backgroundColor: "#FEF3C7",
+    label: "Needs more evidence",
+    backgroundColor: theme.colors.warningBg,
     color: theme.colors.warning,
   },
 };
@@ -48,12 +49,12 @@ export function StatusBadge({ status }: StatusBadgeProps) {
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: theme.radius.sm,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   text: {
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
   },
 });

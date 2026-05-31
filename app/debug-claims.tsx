@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "800",
+    fontWeight: "500",
   },
   secondaryButton: {
     alignItems: "center",
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "800",
+    fontWeight: "500",
   },
   panel: {
     backgroundColor: theme.colors.background,
@@ -158,18 +158,18 @@ const styles = StyleSheet.create({
   label: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "800",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   value: {
     color: theme.colors.text,
     fontSize: theme.typography.title.fontSize,
-    fontWeight: "800",
+    fontWeight: "500",
   },
   panelText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.sm,
   },
   mono: {

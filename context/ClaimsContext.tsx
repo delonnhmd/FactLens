@@ -28,6 +28,7 @@ import {
   fetchUserVoteForClaim,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
+import { runAiPrecheckForClaim } from "../services/aiPrecheckService";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
 import {
   addEvidence as addRemoteEvidence,
@@ -541,6 +542,31 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       ...currentClaimsState.filter((claim) => claim.id !== createdClaim.id),
     ]);
     setClaimOffset((currentOffset) => currentOffset + 1);
+
+    // PHASE 4 STEP 1
+    try {
+      const precheckResult = await runAiPrecheckForClaim(createdClaim);
+
+      if (!precheckResult.ok) {
+        console.log("[ai precheck warning]", precheckResult.error ?? "AI pre-check did not complete.");
+        return createdClaim;
+      }
+
+      const refreshedClaimResult = await fetchRemoteClaimById(createdClaim.id);
+
+      if (refreshedClaimResult.claim) {
+        const refreshedClaim = mergeLocalClaimState(refreshedClaimResult.claim, createdClaim);
+
+        setClaims((currentClaimsState) =>
+          currentClaimsState.map((claim) => (claim.id === createdClaim.id ? refreshedClaim : claim)),
+        );
+
+        return refreshedClaim;
+      }
+    } catch (precheckError) {
+      console.log("[ai precheck warning]", precheckError instanceof Error ? precheckError.message : precheckError);
+    }
+
     return createdClaim;
   }, [currentUser, ensureProfile, isVerified, profile]);
 

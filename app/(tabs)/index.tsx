@@ -301,13 +301,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
   },
   content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: 10,
+    paddingTop: 10,
     paddingBottom: theme.spacing.xl,
   },
   successBanner: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBg,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
@@ -317,13 +317,13 @@ const styles = StyleSheet.create({
   successText: {
     color: theme.colors.success,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   searchInput: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
     marginBottom: theme.spacing.md,
@@ -333,13 +333,11 @@ const styles = StyleSheet.create({
   // PHASE 3 STEP 12
   liveText: {
     alignSelf: "flex-start",
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    backgroundColor: theme.colors.successBg,
+    borderRadius: 999,
     color: theme.colors.success,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
@@ -352,22 +350,22 @@ const styles = StyleSheet.create({
   categoryChip: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderRadius: 999,
+    borderWidth: 0.5,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   categoryChipSelected: {
-    backgroundColor: "#E0E7FF",
-    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.tagBg,
+    borderColor: theme.colors.tagBg,
   },
   categoryChipText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   categoryChipTextSelected: {
-    color: theme.colors.primary,
+    color: theme.colors.tagText,
   },
   statePanel: {
     alignItems: "center",
@@ -383,11 +381,11 @@ const styles = StyleSheet.create({
   stateText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   errorPanel: {
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FECACA",
+    backgroundColor: theme.colors.dangerBg,
+    borderColor: theme.colors.dangerBg,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
@@ -396,13 +394,13 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "600",
+    fontWeight: "500",
     marginTop: theme.spacing.xs,
   },
   errorTitle: {
     color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "800",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   retryButton: {
@@ -417,7 +415,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: theme.colors.background,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "800",
+    fontWeight: "500",
   },
   footerLoader: {
     alignItems: "center",

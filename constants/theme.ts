@@ -1,17 +1,32 @@
 // PHASE 1 STEP 4
+// FactLens UI redesign
 export const theme = {
   colors: {
-    primary: "#2563EB",
-    success: "#22C55E",
-    danger: "#EF4444",
-    warning: "#F59E0B",
+    navy: "#0D1B3E",
+    primary: "#0D1B3E",
+    success: "#1D9E75",
+    successBg: "#E1F5EE",
+    danger: "#E24B4A",
+    dangerBg: "#FCEBEB",
+    warning: "#EF9F27",
+    warningBg: "#FAEEDA",
+    ai: "#534AB7",
+    aiBg: "#EEEDFE",
+    tagBg: "#EAF3DE",
+    tagText: "#27500A",
+    sourceBg: "#E6F1FB",
+    sourceText: "#0C447C",
+    phaseBg: "#EEEDFE",
+    phaseText: "#3C3489",
+    link: "#185FA5",
     background: "#FFFFFF",
-    card: "#F8FAFC",
-    text: "#111827",
-    subtext: "#6B7280",
-    muted: "#9CA3AF",
-    border: "#E5E7EB",
-    lightBorder: "#F3F4F6",
+    card: "#F4F6F8",
+    secondarySurface: "#F4F6F8",
+    text: "#172033",
+    subtext: "#667085",
+    muted: "#98A2B3",
+    border: "#D0D5DD",
+    lightBorder: "#E4E7EC",
   },
 
   spacing: {
@@ -44,33 +59,18 @@ export const theme = {
     title: {
       fontSize: 20,
       lineHeight: 28,
-      fontWeight: "700" as const,
+      fontWeight: "500" as const,
     },
     largeTitle: {
       fontSize: 28,
       lineHeight: 36,
-      fontWeight: "700" as const,
+      fontWeight: "500" as const,
     },
   },
 
   shadows: {
-    light: {
-      shadowColor: "#000000",
-      shadowOpacity: 0.04,
-      shadowRadius: 8,
-      elevation: 2,
-    },
-    medium: {
-      shadowColor: "#000000",
-      shadowOpacity: 0.06,
-      shadowRadius: 12,
-      elevation: 3,
-    },
-    heavy: {
-      shadowColor: "#000000",
-      shadowOpacity: 0.1,
-      shadowRadius: 16,
-      elevation: 4,
-    },
+    light: {},
+    medium: {},
+    heavy: {},
   },
 };

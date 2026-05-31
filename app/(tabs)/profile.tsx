@@ -83,7 +83,7 @@ export default function ProfileScreen() {
             <Text style={styles.title}>No account signed in</Text>
             <Text style={styles.subtitle}>Log in or create an account to post verified news claims.</Text>
             <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={() => router.push("/auth")}>
-              <Text style={styles.buttonText}>Log in or Create Account</Text>
+              <Text style={styles.buttonText}>Log in or create account</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -97,7 +97,7 @@ export default function ProfileScreen() {
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
                   <Text style={styles.displayName}>{displayName}</Text>
-                  {isVerified ? <Text style={styles.verifiedBadge}>Email Verified</Text> : null}
+                  {isVerified ? <Text style={styles.verifiedBadge}>Email verified</Text> : null}
                 </View>
                 <Text style={styles.username}>@{username}</Text>
               </View>
@@ -114,7 +114,7 @@ export default function ProfileScreen() {
                   FactLens could not find your public profile row. Create it from your auth metadata.
                 </Text>
                 <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateMissingProfile}>
-                  <Text style={styles.buttonText}>Fix Profile</Text>
+                  <Text style={styles.buttonText}>Fix profile</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -138,7 +138,7 @@ export default function ProfileScreen() {
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Reputation score</Text>
-              <Text style={styles.detailValue}>{profile?.reputation_score ?? 0}</Text>
+              <Text style={styles.reputationBadge}>{profile?.reputation_score ?? 0}</Text>
             </View>
 
             <View style={styles.detailRow}>
@@ -147,11 +147,11 @@ export default function ProfileScreen() {
             </View>
 
             <TouchableOpacity style={styles.debugButton} activeOpacity={0.8} onPress={() => router.push("/debug-claims")}>
-              <Text style={styles.debugButtonText}>Open Claims Debug</Text>
+              <Text style={styles.debugButtonText}>Open claims debug</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.signOutButton} activeOpacity={0.8} onPress={handleSignOut}>
-              <Text style={styles.signOutButtonText}>Sign Out</Text>
+              <Text style={styles.signOutButtonText}>Sign out</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -166,26 +166,25 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
   },
   content: {
-    padding: theme.spacing.lg,
+    padding: 10,
   },
   card: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
-    padding: theme.spacing.lg,
-    ...theme.shadows.light,
-    borderWidth: 1,
+    padding: 14,
+    borderWidth: 0.5,
     borderColor: theme.colors.lightBorder,
   },
   title: {
     color: theme.colors.text,
     fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   subtitle: {
     color: theme.colors.subtext,
-    fontSize: theme.typography.body.fontSize,
-    lineHeight: theme.typography.body.lineHeight,
+    fontSize: 14,
+    lineHeight: 20,
     marginBottom: theme.spacing.md,
   },
   profileHeader: {
@@ -196,7 +195,7 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: "#E0E7FF",
+    backgroundColor: theme.colors.phaseBg,
     borderRadius: 28,
     height: 56,
     justifyContent: "center",
@@ -205,7 +204,7 @@ const styles = StyleSheet.create({
   avatarText: {
     color: theme.colors.primary,
     fontSize: 24,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   identity: {
     flex: 1,
@@ -220,22 +219,20 @@ const styles = StyleSheet.create({
   displayName: {
     color: theme.colors.text,
     fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   username: {
     color: theme.colors.subtext,
     fontSize: theme.typography.body.fontSize,
   },
   verifiedBadge: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    backgroundColor: theme.colors.successBg,
+    borderRadius: 999,
     color: theme.colors.success,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   missingProfilePanel: {
     backgroundColor: theme.colors.card,
@@ -248,42 +245,52 @@ const styles = StyleSheet.create({
   missingProfileTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   detailRow: {
     borderTopColor: theme.colors.lightBorder,
-    borderTopWidth: 1,
+    borderTopWidth: 0.5,
     paddingVertical: theme.spacing.md,
   },
   detailLabel: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   detailValue: {
     color: theme.colors.text,
-    fontSize: theme.typography.body.fontSize,
+    fontSize: 14,
+  },
+  reputationBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.navy,
+    borderRadius: 999,
+    color: theme.colors.background,
+    fontSize: 18,
+    fontWeight: "500",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   successText: {
     color: theme.colors.success,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   warningText: {
     color: theme.colors.warning,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   messageText: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   button: {
@@ -295,7 +302,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   signOutButton: {
     alignItems: "center",
@@ -308,7 +315,7 @@ const styles = StyleSheet.create({
   signOutButtonText: {
     color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   debugButton: {
     alignItems: "center",
@@ -321,6 +328,6 @@ const styles = StyleSheet.create({
   debugButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });

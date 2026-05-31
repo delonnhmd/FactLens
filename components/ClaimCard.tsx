@@ -2,33 +2,35 @@
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
 import { memo, useCallback, useState } from "react";
-import { Alert, Image, Share, TouchableOpacity, View, Text, StyleSheet, TextInput } from "react-native";
+import { Alert, Image, TouchableOpacity, View, Text, StyleSheet, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ReportReason, VoteOption } from "../types/claim";
 import { StatusBadge } from "./StatusBadge";
 import { SourceQualityBadge } from "./SourceQualityBadge";
 import { VoteButtons, getVoteOptionLabel } from "./VoteButtons";
-import { reportReasons } from "../constants/reportReasons";
+import { AiCheckBadge } from "./AiCheckBadge";
+import { PhaseStatusRow } from "./PhaseStatusRow";
+import { VoteBreakdownBars } from "./VoteBreakdownBars";
 import { theme } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
 import { getSourceQuality } from "../services/sourceQuality";
-import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
-
-// PHASE 2 STEP 8
-const aiCheckLabels = {
-  PENDING: "Pending",
-  LIKELY_TRUE: "Likely True",
-  LIKELY_FAKE: "Likely Fake",
-  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
-};
+import { getVoteAcceptUntil } from "../utils/verificationTiming";
 
 // PHASE 3 STEP 10
 const verdictLabels = {
-  COMMUNITY_TRUE: "Community Says True",
-  COMMUNITY_FAKE: "Community Says Fake",
-  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+  COMMUNITY_TRUE: "Community says true",
+  COMMUNITY_FAKE: "Community says fake",
+  NEEDS_MORE_EVIDENCE: "Needs more evidence",
 };
+
+const compactReportReasons: Array<{ label: string; value: ReportReason }> = [
+  { label: "Spam", value: "Spam" },
+  { label: "Fake source", value: "Fake source" },
+  { label: "Misleading", value: "Misleading title" },
+  { label: "Duplicate", value: "Duplicate claim" },
+  { label: "Abuse", value: "Harassment or abuse" },
+];
 
 // PHASE 2 STEP 9
 function getRelativeTime(createdAt: string): string {
@@ -59,6 +61,14 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(normalized * 100)}%`;
 }
 
+function formatSourceQuality(value: string | null | undefined): string {
+  if (!value) {
+    return "unknown";
+  }
+
+  return value.replace(/_/g, " ");
+}
+
 interface ClaimCardProps {
   claim: Claim;
   onPress?: () => void;
@@ -72,9 +82,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // PHASE 3 STEP 4
   const { isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 6
-  const [showReportForm, setShowReportForm] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState<ReportReason>("Spam");
-  const [reportNote, setReportNote] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
   // PHASE 3 STEP 6
   const [reportError, setReportError] = useState("");
@@ -86,7 +94,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
   // PHASE 3 STEP 22
   const voteWindowClosesAt = getVoteAcceptUntil(claim);
-  const scoreLockAt = getScoreLockAt(claim);
   // PHASE 3 STEP 22
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
   const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
@@ -110,7 +117,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
-  const currentVerdict = verdictTitle ?? (claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
+  const aiSummary =
+    claim.aiCheck.sourceNotes ??
+    claim.aiSummary ??
+    claim.aiCheck.reason ??
+    "AI pre-check is pending. Community voting and evidence are still needed.";
 
   // PHASE 3 STEP 6
   const handleSubmitReport = useCallback(async () => {
@@ -118,17 +129,15 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     setReportSubmitting(true);
 
     try {
-      await onReport(claim.id, selectedReportReason, reportNote);
-      setReportNote("");
+      await onReport(claim.id, selectedReportReason, "");
       setSelectedReportReason("Spam");
-      setShowReportForm(false);
       setReportSuccess(true);
     } catch (error) {
       setReportError(error instanceof Error ? error.message : "We could not save this report. Please try again.");
     } finally {
       setReportSubmitting(false);
     }
-  }, [claim.id, onReport, reportNote, selectedReportReason]);
+  }, [claim.id, onReport, selectedReportReason]);
 
   const handleVote = useCallback(async (vote: VoteOption) => {
     setVoteError("");
@@ -142,20 +151,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     }
   }, [claim.id, onVote]);
 
-  const handleShareClaim = useCallback(async () => {
-    const message = `Check this claim on FactLens: ${claim.title} ${claim.shareUrl}`;
-
-    try {
-      await Share.share({
-        title: claim.title,
-        message,
-        url: claim.shareUrl,
-      });
-    } catch {
-      Alert.alert("Share", message);
-    }
-  }, [claim.shareUrl, claim.title]);
-
   const voteMessage = !votingOpen
     ? ""
     : !isAuthenticated
@@ -165,138 +160,117 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         : claim.userVote
           ? "You already voted on this post."
           : "Choose one option before voting closes.";
+  const phaseLabel = claim.phase4Locked
+    ? "Phase 4 · Locked"
+    : `Phase ${claim.currentPhase} · ${votingOpen ? "Voting" : "Locking"}`;
+  const timeLabel = votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed";
 
   return (
     <View style={styles.card}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.9} disabled={!onPress}>
-        <View style={styles.headerRow}>
-          <View style={styles.titleWrapper}>
+        <View style={styles.body}>
+          <View style={styles.authorRow}>
+            <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
+            {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
+            <Text style={styles.authorMeta}>
+              @{claim.authorUsername} · {getRelativeTime(claim.createdAt)}
+            </Text>
+          </View>
+
+          <View style={styles.titleRowCompact}>
             <Text style={styles.title}>{claim.title}</Text>
+            <StatusBadge status={claim.status} />
           </View>
-          <StatusBadge status={claim.status} />
-        </View>
 
-        <View style={styles.authorRow}>
-          <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
-          {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
-          <Text style={styles.authorMeta}>
-            @{claim.authorUsername} - {getRelativeTime(claim.createdAt)}
+          <Text style={styles.description} numberOfLines={3}>
+            {claim.description}
           </Text>
-        </View>
 
-        <Text style={styles.description} numberOfLines={3}>
-          {claim.description}
-        </Text>
-        {/* PHASE 3 STEP 7 */}
-        {claim.media.imageUrl ? (
-          <Image source={{ uri: claim.media.imageUrl }} style={styles.claimImage} resizeMode="cover" />
-        ) : null}
-        {/* PHASE 3 STEP 8 */}
-        {mediaUrl && mediaPlatform ? (
-          <View style={styles.videoPreview}>
-            <View style={styles.videoPreviewHeader}>
-              <Text style={styles.videoPlatformBadge}>{mediaPlatform}</Text>
-              <Text style={styles.videoPreviewText} numberOfLines={1}>
-                {mediaUrl}
-              </Text>
-            </View>
-            {claim.media.youtubeThumbnailUrl ? (
-              <View style={styles.thumbnailWrap}>
-                <Image
-                  source={{ uri: claim.media.youtubeThumbnailUrl }}
-                  style={styles.videoThumbnail}
-                  resizeMode="cover"
-                />
-                <View style={styles.playOverlay}>
-                  <Ionicons name="play" size={22} color={theme.colors.background} />
+          {claim.media.imageUrl ? (
+            <Image source={{ uri: claim.media.imageUrl }} style={styles.claimImage} resizeMode="cover" />
+          ) : null}
+
+          {mediaUrl && mediaPlatform ? (
+            <View style={styles.videoPreview}>
+              <View style={styles.videoPreviewHeader}>
+                <Text style={styles.videoPlatformBadge}>{mediaPlatform}</Text>
+                <Text style={styles.videoPreviewText} numberOfLines={1}>
+                  {mediaUrl}
+                </Text>
+              </View>
+              {claim.media.youtubeThumbnailUrl ? (
+                <View style={styles.thumbnailWrap}>
+                  <Image
+                    source={{ uri: claim.media.youtubeThumbnailUrl }}
+                    style={styles.videoThumbnail}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.playOverlay}>
+                    <Ionicons name="play" size={22} color={theme.colors.background} />
+                  </View>
                 </View>
-              </View>
-            ) : (
-              <View style={styles.videoLinkBox}>
-                <Ionicons name="play-circle-outline" size={22} color={theme.colors.primary} />
-                <Text style={styles.videoLinkBoxText}>{mediaPlatform} attached</Text>
-              </View>
-            )}
+              ) : (
+                <View style={styles.videoLinkBox}>
+                  <Ionicons name="play-circle-outline" size={22} color={theme.colors.primary} />
+                  <Text style={styles.videoLinkBoxText}>{mediaPlatform} attached</Text>
+                </View>
+              )}
+            </View>
+          ) : null}
+
+          <View style={styles.metaWrap}>
+            {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
+            <SourceQualityBadge quality={sourceQuality} />
+            <AiCheckBadge status={claim.aiCheck.status} />
+            <Text style={styles.evidencePill}>{evidenceLabel}</Text>
+            {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for review</Text> : null}
           </View>
-        ) : null}
-        {/* PHASE 2 STEP 2 */}
-        {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
-        <Text style={styles.source} numberOfLines={1}>
-          Source: {claim.sourceUrl}
-        </Text>
-        <View style={styles.qualityRow}>
-          <Text style={styles.qualityLabel}>Source Quality:</Text>
-          <SourceQualityBadge quality={sourceQuality} />
-        </View>
-        <View style={styles.aiBadge}>
-          <Text style={styles.aiBadgeText}>AI Check: {aiCheckLabels[claim.aiCheck.status]}</Text>
-        </View>
-        <Text style={styles.evidenceCount}>{evidenceLabel}</Text>
-        {claim.reportCount > 0 || claim.isFlagged ? (
-          <View style={styles.reportMetaRow}>
-            {claim.reportCount > 0 ? (
-              <Text style={styles.reportCount}>
-                {claim.reportCount} {claim.reportCount === 1 ? "report" : "reports"}
-              </Text>
+
+          <View style={styles.sourceRow}>
+            <Ionicons name="link-outline" size={13} color={theme.colors.link} />
+            <Text style={styles.source} numberOfLines={1}>
+              {claim.sourceUrl}
+            </Text>
+          </View>
+          <View style={styles.aiSignalPanel}>
+            <Text style={styles.aiSignalText}>
+              AI confidence {formatPercent(claim.aiCheck.confidence)} · Source {formatSourceQuality(claim.sourceQuality)}
+            </Text>
+            <Text style={styles.aiSignalText} numberOfLines={2}>{aiSummary}</Text>
+            {claim.redFlags.length > 0 ? (
+              <Text style={styles.aiRedFlags} numberOfLines={2}>Red flags: {claim.redFlags.join(", ")}</Text>
             ) : null}
-            {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for Review</Text> : null}
+            <Text style={styles.aiDisclaimer}>
+              AI pre-check is only a risk signal. Community voting decides the final result.
+            </Text>
           </View>
-        ) : null}
+        </View>
       </TouchableOpacity>
 
-      <View style={styles.windowRow}>
-        <Text style={[styles.windowText, !votingOpen && styles.closedText]}>
-          {votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed"}
+      <PhaseStatusRow timeLabel={timeLabel} phaseLabel={phaseLabel} />
+
+      <View style={styles.scorePreviewRow}>
+        <Text style={styles.scorePreviewText}>{claim.mode === "test" ? "Test mode" : "Production mode"}</Text>
+        <Text style={styles.scorePreviewText}>Final {formatPercent(claim.finalScore)}</Text>
+        <Text style={styles.scorePreviewText}>
+          Min votes {finalTotalVotes}/{claim.minVotesRequired}
         </Text>
       </View>
 
-      <View style={styles.verificationPanel}>
-        <View style={styles.verificationRow}>
-          <Text style={styles.verificationText}>Mode: {claim.mode === "test" ? "Test" : "Production"}</Text>
-          <Text style={styles.verificationText}>Phase {claim.currentPhase}</Text>
-        </View>
-        <Text style={styles.verificationText}>Vote closes: {new Date(voteWindowClosesAt).toLocaleTimeString()}</Text>
-        <Text style={styles.verificationText}>Score locks: {new Date(scoreLockAt).toLocaleTimeString()}</Text>
-        <View style={styles.verificationRow}>
-          <Text style={styles.verificationText}>AI {formatPercent(claim.aiCheck.confidence)}</Text>
-          <Text style={styles.verificationText}>Community {formatPercent(claim.weightedCommunityScore)}</Text>
-        </View>
-        <View style={styles.verificationRow}>
-          <Text style={styles.verificationStrong}>Final {formatPercent(claim.finalScore)}</Text>
-          <Text style={styles.verificationStrong}>{currentVerdict}</Text>
-        </View>
-        <Text style={styles.verificationText}>
-          Min votes: {finalTotalVotes}/{claim.minVotesRequired}
-        </Text>
-      </View>
+      <VoteBreakdownBars
+        votesTrue={claim.votesTrue}
+        votesFake={claim.votesFake}
+        votesUnsure={claim.votesUnsure}
+        totalVotes={totalVotes}
+      />
 
       {!votingOpen && verdictTitle ? (
         <View style={styles.verdictPanel}>
-          <Text style={styles.verdictLabel}>System Verdict</Text>
+          <Text style={styles.verdictLabel}>System verdict</Text>
           <Text style={styles.verdictTitle}>{verdictTitle}</Text>
           {verdictReason ? <Text style={styles.verdictReason}>{verdictReason}</Text> : null}
-          <Text style={styles.verdictMeta}>{finalTotalVotes} total votes</Text>
         </View>
       ) : null}
-
-      <View style={styles.divider} />
-
-      <View style={styles.voteRow}>
-        <View style={styles.voteItem}>
-          <Text style={styles.voteValue}>{claim.votesTrue}</Text>
-          <Text style={styles.voteLabel}>True</Text>
-        </View>
-        <View style={styles.dividerVertical} />
-        <View style={styles.voteItem}>
-          <Text style={styles.voteValue}>{claim.votesFake}</Text>
-          <Text style={styles.voteLabel}>Fake</Text>
-        </View>
-        <View style={styles.dividerVertical} />
-        <View style={styles.voteItem}>
-          <Text style={styles.voteValue}>{claim.votesUnsure}</Text>
-          <Text style={styles.voteLabel}>Not Sure</Text>
-        </View>
-      </View>
 
       {votingOpen ? (
         <View style={styles.buttonWrap}>
@@ -314,6 +288,50 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         </View>
       ) : null}
 
+      <View style={styles.reportRowCompact}>
+        <Text style={styles.reportInlineLabel}>Flag as</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.reportChipRow}
+          style={styles.reportChipScroller}
+        >
+          {compactReportReasons.map((reason) => {
+            const selected = selectedReportReason === reason.value;
+
+            return (
+              <TouchableOpacity
+                key={reason.value}
+                style={[styles.reportChip, selected && styles.reportChipSelected]}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setSelectedReportReason(reason.value);
+                  setReportSuccess(false);
+                  setReportError("");
+                }}
+              >
+                <Text style={[styles.reportChipText, selected && styles.reportChipTextSelected]}>{reason.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+        <TouchableOpacity
+          style={[styles.reportIconButton, reportSubmitting && styles.disabledButton]}
+          activeOpacity={0.8}
+          disabled={reportSubmitting}
+          onPress={handleSubmitReport}
+        >
+          <Ionicons name="flag-outline" size={14} color={theme.colors.background} />
+        </TouchableOpacity>
+      </View>
+      {claim.reportCount > 0 ? (
+        <Text style={styles.reportCountText}>
+          {claim.reportCount} {claim.reportCount === 1 ? "report" : "reports"}
+        </Text>
+      ) : null}
+      {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
+      {reportError ? <Text style={styles.reportError}>{reportError}</Text> : null}
+
       <View style={styles.actionRow}>
         <TouchableOpacity
           style={styles.actionButton}
@@ -321,87 +339,27 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           disabled={!onPress}
           onPress={onPress}
         >
-          <Ionicons name="chatbubble-outline" size={17} color={theme.colors.subtext} />
-          <Text style={styles.actionText}>Reply / Evidence</Text>
+          <Ionicons name="chatbubble-outline" size={15} color={theme.colors.subtext} />
+          <Text style={styles.actionText}>Reply</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.iconActionButton}
+          style={[styles.actionButton, styles.actionDivider]}
           activeOpacity={0.8}
           onPress={() => Alert.alert("Repost will be added later.")}
         >
-          <Ionicons name="repeat-outline" size={18} color={theme.colors.subtext} />
+          <Ionicons name="repeat-outline" size={15} color={theme.colors.subtext} />
           <Text style={styles.actionText}>Repost</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconActionButton} activeOpacity={0.8} onPress={handleShareClaim}>
-          <Ionicons name="share-outline" size={18} color={theme.colors.subtext} />
-          <Text style={styles.actionText}>Share</Text>
-        </TouchableOpacity>
         <TouchableOpacity
-          style={styles.iconActionButton}
+          style={[styles.actionButton, styles.actionDivider]}
           activeOpacity={0.8}
-          onPress={() => {
-            setShowReportForm((currentValue) => !currentValue);
-            setReportSuccess(false);
-            setReportError("");
-          }}
+          disabled={!onPress}
+          onPress={onPress}
         >
-          <Ionicons name="flag-outline" size={17} color={theme.colors.subtext} />
-          <Text style={styles.actionText}>Report</Text>
+          <Ionicons name="document-text-outline" size={15} color={theme.colors.subtext} />
+          <Text style={styles.actionText}>Evidence</Text>
         </TouchableOpacity>
-        <View style={styles.voteSummary}>
-          <Ionicons name="stats-chart-outline" size={16} color={theme.colors.subtext} />
-          <Text style={styles.actionText}>{totalVotes} votes</Text>
-        </View>
       </View>
-
-      {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
-
-      {showReportForm ? (
-        <View style={styles.reportPanel}>
-          <Text style={styles.reportPanelTitle}>Report claim</Text>
-          <View style={styles.reasonGrid}>
-            {reportReasons.map((reason) => {
-              const selected = selectedReportReason === reason;
-
-              return (
-                <TouchableOpacity
-                  key={reason}
-                  style={[styles.reasonButton, selected && styles.reasonButtonSelected]}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setSelectedReportReason(reason);
-                    setReportSuccess(false);
-                    setReportError("");
-                  }}
-                >
-                  <Text style={[styles.reasonButtonText, selected && styles.reasonButtonTextSelected]}>{reason}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <TextInput
-            value={reportNote}
-            onChangeText={(value) => {
-              setReportNote(value);
-              setReportSuccess(false);
-              setReportError("");
-            }}
-            placeholder="Optional note"
-            placeholderTextColor={theme.colors.muted}
-            style={styles.reportInput}
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.submitReportButton, reportSubmitting && styles.disabledButton]}
-            activeOpacity={0.8}
-            onPress={handleSubmitReport}
-            disabled={reportSubmitting}
-          >
-            <Text style={styles.submitReportButtonText}>{reportSubmitting ? "Submitting..." : "Submit report"}</Text>
-          </TouchableOpacity>
-          {reportError ? <Text style={styles.reportError}>{reportError}</Text> : null}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -413,11 +371,15 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
-    padding: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-    ...theme.shadows.light,
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: theme.colors.lightBorder,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  body: {
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   headerRow: {
     flexDirection: "row",
@@ -430,50 +392,51 @@ const styles = StyleSheet.create({
     marginRight: theme.spacing.md,
   },
   title: {
-    fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "500",
     color: theme.colors.text,
-    lineHeight: theme.typography.title.lineHeight,
+    lineHeight: 21,
+  },
+  titleRowCompact: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
   },
   authorRow: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+    gap: 6,
   },
   authorName: {
     color: theme.colors.text,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
   },
   authorMeta: {
     color: theme.colors.subtext,
-    fontSize: theme.typography.small.fontSize,
+    fontSize: 12,
   },
   verifiedBadge: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    backgroundColor: theme.colors.successBg,
+    borderRadius: 999,
     color: theme.colors.success,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   description: {
-    fontSize: theme.typography.body.fontSize,
+    fontSize: 14,
     color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-    lineHeight: theme.typography.body.lineHeight,
+    lineHeight: 20,
   },
   claimImage: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.sm,
     height: 160,
     maxHeight: 180,
-    marginBottom: theme.spacing.md,
     width: "100%",
   },
   videoPreview: {
@@ -482,7 +445,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
     overflow: "hidden",
   },
   videoPreviewHeader: {
@@ -499,7 +461,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -538,17 +500,50 @@ const styles = StyleSheet.create({
   videoLinkBoxText: {
     color: theme.colors.text,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   source: {
-    fontSize: theme.typography.small.fontSize,
+    color: theme.colors.link,
+    flex: 1,
+    fontSize: 12,
+  },
+  sourceRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  metaWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  aiSignalPanel: {
+    backgroundColor: theme.colors.aiBg,
+    borderRadius: theme.radius.sm,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  aiSignalText: {
+    color: theme.colors.ai,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  aiRedFlags: {
+    color: theme.colors.danger,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  aiDisclaimer: {
     color: theme.colors.subtext,
-    marginBottom: theme.spacing.sm,
+    fontSize: 11,
+    lineHeight: 15,
   },
   evidenceCount: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   reportMetaRow: {
@@ -561,29 +556,27 @@ const styles = StyleSheet.create({
   reportCount: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   flaggedBadge: {
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FECACA",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    backgroundColor: theme.colors.dangerBg,
+    borderRadius: 999,
     color: theme.colors.danger,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   reportSuccess: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.md,
   },
   reportError: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   reportPanel: {
     backgroundColor: theme.colors.card,
@@ -597,7 +590,7 @@ const styles = StyleSheet.create({
   reportPanelTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   reasonGrid: {
     flexDirection: "row",
@@ -618,7 +611,7 @@ const styles = StyleSheet.create({
   reasonButtonText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   reasonButtonTextSelected: {
     color: theme.colors.primary,
@@ -647,7 +640,7 @@ const styles = StyleSheet.create({
   submitReportButtonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   qualityRow: {
     alignItems: "center",
@@ -659,7 +652,7 @@ const styles = StyleSheet.create({
   qualityLabel: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   aiBadge: {
     alignSelf: "flex-start",
@@ -674,20 +667,27 @@ const styles = StyleSheet.create({
   aiBadgeText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   category: {
     alignSelf: "flex-start",
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.lightBorder,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    color: theme.colors.primary,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
-    marginBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.tagBg,
+    borderRadius: 999,
+    color: theme.colors.tagText,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  evidencePill: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.secondarySurface,
+    borderRadius: 999,
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: "400",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   windowRow: {
     flexDirection: "row",
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
   windowText: {
     flex: 1,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     color: theme.colors.primary,
   },
   closedText: {
@@ -724,12 +724,12 @@ const styles = StyleSheet.create({
   verificationText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   verificationStrong: {
     color: theme.colors.text,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   verdictPanel: {
     backgroundColor: theme.colors.card,
@@ -742,13 +742,13 @@ const styles = StyleSheet.create({
   verdictLabel: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   verdictTitle: {
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   verdictReason: {
@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
   verdictMeta: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.sm,
   },
   divider: {
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
   },
   voteValue: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "500",
     color: theme.colors.primary,
   },
   voteLabel: {
@@ -792,7 +792,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.lightBorder,
   },
   buttonWrap: {
-    marginTop: theme.spacing.md,
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   voteMessage: {
     color: theme.colors.subtext,
@@ -802,53 +805,109 @@ const styles = StyleSheet.create({
   userVoteText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   voteError: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.sm,
   },
   voteSuccess: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.sm,
   },
   actionRow: {
     alignItems: "center",
     borderTopColor: theme.colors.lightBorder,
-    borderTopWidth: 1,
+    borderTopWidth: 0.5,
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
-    justifyContent: "space-between",
-    marginTop: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    minHeight: 44,
   },
   actionButton: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+    flex: 1,
+    gap: 3,
+    justifyContent: "center",
+    minHeight: 44,
   },
-  iconActionButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+  actionDivider: {
+    borderLeftColor: theme.colors.lightBorder,
+    borderLeftWidth: 0.5,
   },
   actionText: {
     color: theme.colors.subtext,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "400",
   },
-  voteSummary: {
+  scorePreviewRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingTop: 10,
+  },
+  scorePreviewText: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: "400",
+  },
+  reportRowCompact: {
+    alignItems: "center",
+    backgroundColor: theme.colors.secondarySurface,
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    flexDirection: "row",
+    gap: 8,
+    maxHeight: 40,
+    minHeight: 40,
+    paddingHorizontal: 14,
+  },
+  reportInlineLabel: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: "400",
+  },
+  reportChipScroller: {
+    flex: 1,
+  },
+  reportChipRow: {
+    alignItems: "center",
+    gap: 6,
+  },
+  reportChip: {
+    borderColor: theme.colors.border,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  reportChipSelected: {
+    backgroundColor: theme.colors.dangerBg,
+    borderColor: "#F09595",
+  },
+  reportChipText: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: "400",
+  },
+  reportChipTextSelected: {
+    color: theme.colors.danger,
+  },
+  reportIconButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.danger,
+    borderRadius: 8,
+    justifyContent: "center",
+    padding: 10,
+  },
+  reportCountText: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    paddingHorizontal: 14,
+    paddingTop: 8,
   },
 });

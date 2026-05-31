@@ -3,16 +3,18 @@
 // PHASE 3 STEP 32
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
-import type { DimensionValue } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { EmptyState } from "../../components/EmptyState";
 import { SourceQualityBadge } from "../../components/SourceQualityBadge";
 import { StatusBadge } from "../../components/StatusBadge";
 import { VoteButtons, getVoteOptionLabel } from "../../components/VoteButtons";
+import { AiCheckBadge } from "../../components/AiCheckBadge";
+import { PhaseStatusRow } from "../../components/PhaseStatusRow";
+import { VerdictBanner } from "../../components/VerdictBanner";
+import { VoteBreakdownBars } from "../../components/VoteBreakdownBars";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
-import { reportReasons } from "../../constants/reportReasons";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import { getSourceQuality, type SourceQuality } from "../../services/sourceQuality";
 import { getScoreLockAt, getVoteAcceptUntil } from "../../utils/verificationTiming";
@@ -35,41 +37,41 @@ const evidenceTypeOptions: EvidenceType[] = ["SUPPORTS_TRUE", "SUPPORTS_FAKE", "
 
 const evidenceTypeConfig: Record<EvidenceType, { label: string; backgroundColor: string; color: string }> = {
   SUPPORTS_TRUE: {
-    label: "Supports True",
-    backgroundColor: "#DCFCE7",
+    label: "Supports true",
+    backgroundColor: theme.colors.successBg,
     color: theme.colors.success,
   },
   SUPPORTS_FAKE: {
-    label: "Supports Fake",
-    backgroundColor: "#FEE2E2",
+    label: "Supports fake",
+    backgroundColor: theme.colors.dangerBg,
     color: theme.colors.danger,
   },
   ADDS_CONTEXT: {
-    label: "Adds Context",
-    backgroundColor: "#E0E7FF",
-    color: theme.colors.primary,
+    label: "Adds context",
+    backgroundColor: theme.colors.sourceBg,
+    color: theme.colors.sourceText,
   },
   UNCLEAR: {
     label: "Unclear",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: theme.colors.warningBg,
     color: theme.colors.warning,
   },
 };
 
-// PHASE 2 STEP 8
-const aiCheckLabels = {
-  PENDING: "Pending",
-  LIKELY_TRUE: "Likely True",
-  LIKELY_FAKE: "Likely Fake",
-  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
-};
-
 // PHASE 3 STEP 10
 const verdictLabels = {
-  COMMUNITY_TRUE: "Community Says True",
-  COMMUNITY_FAKE: "Community Says Fake",
-  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
+  COMMUNITY_TRUE: "Community says true",
+  COMMUNITY_FAKE: "Community says fake",
+  NEEDS_MORE_EVIDENCE: "Needs more evidence",
 };
+
+const compactReportReasons: Array<{ label: string; value: ReportReason }> = [
+  { label: "Spam", value: "Spam" },
+  { label: "Fake source", value: "Fake source" },
+  { label: "Misleading", value: "Misleading title" },
+  { label: "Duplicate", value: "Duplicate claim" },
+  { label: "Abuse", value: "Harassment or abuse" },
+];
 
 const CLAIM_REFETCH_DELAY_MS = 300;
 
@@ -96,6 +98,14 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
 function formatPercent(value: number | null | undefined): string {
   const normalized = value === null || value === undefined ? 0.5 : value > 1 ? value / 100 : value;
   return `${Math.round(normalized * 100)}%`;
+}
+
+function formatSourceQualityLabel(value: string | null | undefined): string {
+  if (!value) {
+    return "unknown";
+  }
+
+  return value.replace(/_/g, " ");
 }
 
 export default function ClaimDetailScreen() {
@@ -471,9 +481,9 @@ export default function ClaimDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+            <Ionicons name="arrow-back" size={24} color="rgba(255, 255, 255, 0.7)" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Claim Details</Text>
+          <Text style={styles.headerTitle}>Claim details</Text>
           <View style={styles.headerSpacer} />
         </View>
         <EmptyState message={detailLoading ? "Loading claim..." : detailError || "Claim not found."} />
@@ -511,11 +521,11 @@ export default function ClaimDetailScreen() {
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
-  const voteStats = [
-    { label: "True", value: claim.votesTrue, color: theme.colors.success },
-    { label: "Fake", value: claim.votesFake, color: theme.colors.danger },
-    { label: "Not Sure", value: claim.votesUnsure, color: theme.colors.warning },
-  ];
+  const aiSummary =
+    claim.aiCheck.sourceNotes ??
+    claim.aiSummary ??
+    claim.aiCheck.reason ??
+    "AI pre-check is pending. Community voting and evidence are still needed.";
   const voteMessage = !votingOpen
     ? ""
     : !isAuthenticated
@@ -525,31 +535,79 @@ export default function ClaimDetailScreen() {
         : claim.userVote
           ? "You already voted on this post."
           : "Choose one option before voting closes.";
+  const phaseLabel = claim.phase4Locked
+    ? "Phase 4 · Locked"
+    : `Phase ${claim.currentPhase} · ${votingOpen ? "Voting" : "Locking"}`;
+  const timeLabel = votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed";
+  const shareClaim = () => {
+    Alert.alert("Share link copied.", claim.shareUrl);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          <Ionicons name="arrow-back" size={24} color="rgba(255, 255, 255, 0.7)" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Claim Details</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>Claim details</Text>
+        <TouchableOpacity onPress={shareClaim} hitSlop={8}>
+          <Ionicons name="share-outline" size={22} color="rgba(255, 255, 255, 0.7)" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* PHASE 3 STEP 12 */}
         {liveUpdatesOn ? <Text style={styles.liveText}>Live updates on</Text> : null}
-        <View style={styles.card}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>{claim.title}</Text>
-            <StatusBadge status={claim.status} />
-          </View>
-          {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for Review</Text> : null}
-          <View style={styles.aiPanel}>
-            <Text style={styles.aiTitle}>AI Check: {aiCheckLabels[claim.aiCheck.status]}</Text>
-            <Text style={styles.aiText}>
-              {claim.aiCheck.reason ?? "AI pre-check is pending. No real AI API is connected yet."}
-            </Text>
+        <View style={styles.cardFlush}>
+          <VerdictBanner
+            status={claim.status}
+            verdictLabel={engineVerdict}
+            finalScore={formatPercent(claim.finalScore)}
+            aiScore={formatPercent(claim.aiCheck.confidence)}
+            communityScore={formatPercent(claim.weightedCommunityScore)}
+          />
+          <View style={styles.claimBody}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>{claim.title}</Text>
+              <StatusBadge status={claim.status} />
+            </View>
+            <Text style={styles.description}>{claim.description}</Text>
+            <View style={styles.metaWrap}>
+              {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
+              <SourceQualityBadge quality={mainSourceQuality} />
+              <AiCheckBadge status={claim.aiCheck.status} />
+              {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for review</Text> : null}
+            </View>
+            <View style={styles.sourceLinkRow}>
+              <Ionicons name="link-outline" size={13} color={theme.colors.link} />
+              <Text style={styles.sourceUrl} selectable>
+                {claim.sourceUrl}
+              </Text>
+            </View>
+            <View style={styles.aiDetailPanel}>
+              <Text style={styles.aiDetailTitle}>AI pre-check</Text>
+              <View style={styles.aiDetailGrid}>
+                <View style={styles.aiDetailItem}>
+                  <Text style={styles.aiDetailLabel}>Confidence</Text>
+                  <Text style={styles.aiDetailValue}>{formatPercent(claim.aiCheck.confidence)}</Text>
+                </View>
+                <View style={styles.aiDetailItem}>
+                  <Text style={styles.aiDetailLabel}>Source quality</Text>
+                  <Text style={styles.aiDetailValue}>{formatSourceQualityLabel(claim.sourceQuality)}</Text>
+                </View>
+                <View style={styles.aiDetailItem}>
+                  <Text style={styles.aiDetailLabel}>Sources found</Text>
+                  <Text style={styles.aiDetailValue}>{claim.sourceCount}</Text>
+                </View>
+              </View>
+              <Text style={styles.aiText}>{aiSummary}</Text>
+              {claim.redFlags.length > 0 ? (
+                <Text style={styles.aiRedFlags}>Red flags: {claim.redFlags.join(", ")}</Text>
+              ) : null}
+              <Text style={styles.aiDisclaimer}>
+                AI pre-check is only a risk signal. Community voting decides the final result.
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -660,60 +718,52 @@ export default function ClaimDetailScreen() {
           <Text style={styles.mediaNote}>Video upload and real image moderation will be added later.</Text>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.labelNoMargin}>Report this claim</Text>
-            {claim.reportCount > 0 ? (
-              <Text style={styles.reportCountBadge}>
-                {claim.reportCount} {claim.reportCount === 1 ? "report" : "reports"}
-              </Text>
-            ) : null}
-          </View>
-          <Text style={styles.reportHelp}>Flag spam, fake sources, duplicate claims, harmful content, or abuse.</Text>
-          {reportLoading ? <Text style={styles.placeholder}>Loading reports...</Text> : null}
-          {userReport ? <Text style={styles.reportAlready}>You already reported this claim.</Text> : null}
-          <View style={styles.reasonGrid}>
-            {reportReasons.map((reason) => {
-              const selected = reportReason === reason;
+        <View style={styles.compactCard}>
+          <View style={styles.reportRowCompact}>
+            <Text style={styles.reportInlineLabel}>Flag as</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.reportChipRow}
+              style={styles.reportChipScroller}
+            >
+              {compactReportReasons.map((reason) => {
+                const selected = reportReason === reason.value;
 
-              return (
-                <TouchableOpacity
-                  key={reason}
-                  style={[styles.reasonButton, selected && styles.reasonButtonSelected]}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setReportReason(reason);
-                    setReportSuccess(false);
-                    setReportError("");
-                  }}
-                >
-                  <Text style={[styles.reasonButtonText, selected && styles.reasonButtonTextSelected]}>{reason}</Text>
-                </TouchableOpacity>
-              );
-            })}
+                return (
+                  <TouchableOpacity
+                    key={reason.value}
+                    style={[styles.reasonButton, selected && styles.reasonButtonSelected]}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setReportReason(reason.value);
+                      setReportSuccess(false);
+                      setReportError("");
+                    }}
+                  >
+                    <Text style={[styles.reasonButtonText, selected && styles.reasonButtonTextSelected]}>
+                      {reason.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.reportIconButton, reportSubmitting && styles.disabledButton]}
+              activeOpacity={0.8}
+              onPress={handleSubmitReport}
+              disabled={reportSubmitting}
+            >
+              <Ionicons name="flag-outline" size={14} color={theme.colors.background} />
+            </TouchableOpacity>
           </View>
-          <TextInput
-            value={reportNote}
-            onChangeText={(value) => {
-              setReportNote(value);
-              setReportSuccess(false);
-              setReportError("");
-            }}
-            placeholder="Optional note"
-            placeholderTextColor={theme.colors.muted}
-            style={[styles.input, styles.reportNoteInput]}
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.submitReportButton, reportSubmitting && styles.disabledButton]}
-            activeOpacity={0.8}
-            onPress={handleSubmitReport}
-            disabled={reportSubmitting}
-          >
-            <Text style={styles.submitReportButtonText}>
-              {reportSubmitting ? "Submitting report..." : "Submit report"}
+          {reportLoading ? <Text style={styles.reportMetaText}>Loading reports...</Text> : null}
+          {userReport ? <Text style={styles.reportMetaText}>You already reported this claim.</Text> : null}
+          {claim.reportCount > 0 ? (
+            <Text style={styles.reportMetaText}>
+              {claim.reportCount} {claim.reportCount === 1 ? "report" : "reports"}
             </Text>
-          </TouchableOpacity>
+          ) : null}
           {reportError ? <Text style={styles.errorText}>{reportError}</Text> : null}
           {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
         </View>
@@ -835,15 +885,7 @@ export default function ClaimDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Test voting window</Text>
-          <View style={styles.windowPanel}>
-            <View>
-              <Text style={styles.windowCaption}>{votingOpen ? "Time remaining" : "Voting closed"}</Text>
-              <Text style={[styles.windowValue, !votingOpen && styles.closedValue]}>
-                {votingOpen ? getTimeRemaining(voteWindowClosesAt) : "Voting closed"}
-              </Text>
-            </View>
-            <StatusBadge status={votingOpen ? "OPEN" : claim.status} />
-          </View>
+          <PhaseStatusRow timeLabel={timeLabel} phaseLabel={phaseLabel} />
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
           <Text style={styles.date}>Voting closes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
           <Text style={styles.date}>Verdict locks {new Date(scoreLockAt).toLocaleString()}</Text>
@@ -916,7 +958,7 @@ export default function ClaimDetailScreen() {
 
         {!votingOpen && verdictTitle ? (
           <View style={styles.card}>
-            <Text style={styles.label}>System Verdict</Text>
+            <Text style={styles.label}>System verdict</Text>
             <StatusBadge status={claim.status === "OPEN" ? automaticVerdict?.status ?? "NEEDS_MORE_EVIDENCE" : claim.status} />
             <Text style={styles.verdictTitle}>{verdictTitle}</Text>
             {verdictReason ? <Text style={styles.verdictReason}>{verdictReason}</Text> : null}
@@ -928,28 +970,17 @@ export default function ClaimDetailScreen() {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.label}>{votingOpen ? "Vote Totals" : "Final Vote Breakdown"}</Text>
-          <View style={styles.voteRowDetailed}>
-            {voteStats.map((stat) => {
-              const width: DimensionValue =
-                totalVotes > 0 ? `${Math.max((stat.value / totalVotes) * 100, 8)}%` : "8%";
-
-              return (
-                <View key={stat.label} style={styles.voteItemDetailed}>
-                  <Text style={styles.voteLabelDetailed}>{stat.label}</Text>
-                  <Text style={styles.voteValueDetailed}>{stat.value}</Text>
-                  <View style={styles.voteBarTrack}>
-                    <View style={[styles.voteBar, { backgroundColor: stat.color, width }]} />
-                  </View>
-                </View>
-              );
-            })}
-          </View>
+          <VoteBreakdownBars
+            votesTrue={claim.votesTrue}
+            votesFake={claim.votesFake}
+            votesUnsure={claim.votesUnsure}
+            totalVotes={totalVotes}
+          />
         </View>
 
         {votingOpen ? (
           <View style={styles.card}>
-            <Text style={styles.label}>System Verdict</Text>
+            <Text style={styles.label}>System verdict</Text>
             <Text style={styles.placeholder}>Result appears when voting closes.</Text>
           </View>
         ) : null}
@@ -969,21 +1000,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.navy,
+    borderBottomWidth: 0,
   },
   headerTitle: {
-    fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
-    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: "500",
+    color: theme.colors.background,
   },
   headerSpacer: {
     width: 24,
   },
   content: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: 10,
+    paddingTop: 10,
     paddingBottom: theme.spacing.xl,
   },
   // PHASE 3 STEP 12
@@ -995,7 +1025,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
@@ -1003,11 +1033,31 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
-    padding: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-    ...theme.shadows.light,
-    borderWidth: 1,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 0.5,
     borderColor: theme.colors.lightBorder,
+  },
+  cardFlush: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  compactCard: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  claimBody: {
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   titleRow: {
     flexDirection: "row",
@@ -1017,10 +1067,10 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "500",
     color: theme.colors.text,
-    lineHeight: theme.typography.title.lineHeight,
+    lineHeight: 21,
     marginRight: theme.spacing.md,
   },
   authorText: {
@@ -1040,7 +1090,7 @@ const styles = StyleSheet.create({
   authorName: {
     color: theme.colors.text,
     fontSize: theme.typography.title.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   verifiedBadge: {
@@ -1050,7 +1100,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -1075,12 +1125,12 @@ const styles = StyleSheet.create({
   ownerButtonText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   deleteButtonText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   aiPanel: {
     backgroundColor: theme.colors.card,
@@ -1093,7 +1143,7 @@ const styles = StyleSheet.create({
   aiTitle: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   aiText: {
@@ -1101,51 +1151,97 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     lineHeight: theme.typography.small.lineHeight,
   },
+  aiDetailPanel: {
+    backgroundColor: theme.colors.aiBg,
+    borderRadius: theme.radius.sm,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  aiDetailTitle: {
+    color: theme.colors.ai,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  aiDetailGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  aiDetailItem: {
+    flex: 1,
+  },
+  aiDetailLabel: {
+    color: theme.colors.subtext,
+    fontSize: 10,
+  },
+  aiDetailValue: {
+    color: theme.colors.ai,
+    fontSize: 18,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  aiRedFlags: {
+    color: theme.colors.danger,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  aiDisclaimer: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   flaggedBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FECACA",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    backgroundColor: theme.colors.dangerBg,
+    borderRadius: 999,
     color: theme.colors.danger,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   label: {
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
-    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "500",
+    color: theme.colors.subtext,
     marginBottom: theme.spacing.md,
   },
   labelNoMargin: {
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
-    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "500",
+    color: theme.colors.subtext,
   },
   description: {
-    fontSize: theme.typography.body.fontSize,
+    fontSize: 14,
     color: theme.colors.text,
-    lineHeight: theme.typography.body.lineHeight,
+    lineHeight: 20,
   },
   category: {
     alignSelf: "flex-start",
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.lightBorder,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    color: theme.colors.primary,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
-    marginTop: theme.spacing.md,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.tagBg,
+    borderRadius: 999,
+    color: theme.colors.tagText,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   sourceUrl: {
-    fontSize: theme.typography.body.fontSize,
-    color: theme.colors.primary,
+    color: theme.colors.link,
+    flex: 1,
+    fontSize: 12,
+  },
+  sourceLinkRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
+  },
+  metaWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
   },
   sourceQualityPanel: {
     backgroundColor: theme.colors.card,
@@ -1171,7 +1267,7 @@ const styles = StyleSheet.create({
   copyButtonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   mediaList: {
     gap: theme.spacing.sm,
@@ -1204,7 +1300,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -1249,7 +1345,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -1260,7 +1356,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
@@ -1273,7 +1369,7 @@ const styles = StyleSheet.create({
   reportAlready: {
     color: theme.colors.warning,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.md,
   },
   fieldGroup: {
@@ -1282,7 +1378,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     color: theme.colors.text,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   input: {
@@ -1320,22 +1416,57 @@ const styles = StyleSheet.create({
   },
   reasonButton: {
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
   reasonButtonSelected: {
-    backgroundColor: "#E0E7FF",
-    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.dangerBg,
+    borderColor: "#F09595",
   },
   reasonButtonText: {
     color: theme.colors.subtext,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "400",
   },
   reasonButtonTextSelected: {
-    color: theme.colors.primary,
+    color: theme.colors.danger,
+  },
+  reportRowCompact: {
+    alignItems: "center",
+    backgroundColor: theme.colors.secondarySurface,
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    flexDirection: "row",
+    gap: 8,
+    maxHeight: 40,
+    minHeight: 40,
+    paddingHorizontal: 14,
+  },
+  reportInlineLabel: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+  },
+  reportChipScroller: {
+    flex: 1,
+  },
+  reportChipRow: {
+    alignItems: "center",
+    gap: 6,
+  },
+  reportIconButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.danger,
+    borderRadius: 8,
+    justifyContent: "center",
+    padding: 10,
+  },
+  reportMetaText: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    paddingHorizontal: 14,
+    paddingTop: 8,
   },
   reportNoteInput: {
     minHeight: 88,
@@ -1351,12 +1482,12 @@ const styles = StyleSheet.create({
   submitReportButtonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   reportSuccess: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.md,
   },
   typeButton: {
@@ -1369,7 +1500,7 @@ const styles = StyleSheet.create({
   typeButtonText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   addEvidenceButton: {
     alignItems: "center",
@@ -1383,7 +1514,7 @@ const styles = StyleSheet.create({
   addEvidenceButtonText: {
     color: theme.colors.background,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   evidenceList: {
     marginTop: theme.spacing.lg,
@@ -1397,7 +1528,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     borderRadius: theme.radius.sm,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
@@ -1444,7 +1575,7 @@ const styles = StyleSheet.create({
   },
   windowValue: {
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: "500",
     color: theme.colors.primary,
   },
   closedValue: {
@@ -1458,19 +1589,19 @@ const styles = StyleSheet.create({
   userVoteText: {
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
   voteError: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.sm,
   },
   voteSuccess: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.sm,
   },
   voteRowDetailed: {
@@ -1485,7 +1616,7 @@ const styles = StyleSheet.create({
   },
   voteValueDetailed: {
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "500",
     color: theme.colors.text,
   },
   voteBarTrack: {
@@ -1505,38 +1636,38 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   engineItem: {
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.phaseBg,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderWidth: 0.5,
     flexBasis: "48%",
     flexGrow: 1,
     gap: theme.spacing.xs,
     padding: theme.spacing.md,
   },
   engineItemWide: {
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.phaseBg,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderWidth: 0.5,
     flexBasis: "100%",
     gap: theme.spacing.xs,
     padding: theme.spacing.md,
   },
   engineLabel: {
-    color: theme.colors.subtext,
-    fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    color: theme.colors.phaseText,
+    fontSize: 11,
+    fontWeight: "400",
   },
   engineValue: {
-    color: theme.colors.text,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    color: theme.colors.navy,
+    fontSize: 18,
+    fontWeight: "500",
   },
   verdictTitle: {
     color: theme.colors.text,
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.xs,
   },
@@ -1557,7 +1688,7 @@ const styles = StyleSheet.create({
   verdictMetaText: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   placeholder: {
     fontSize: theme.typography.body.fontSize,

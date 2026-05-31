@@ -1,5 +1,6 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 20E
+// FactLens UI redesign
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { theme } from "../constants/theme";
 import type { VoteOption } from "../types/claim";
@@ -8,7 +9,7 @@ import type { VoteOption } from "../types/claim";
 const voteOptions: Array<{ label: string; value: VoteOption; style: "primary" | "danger" | "warning" }> = [
   { label: "True", value: "TRUE", style: "primary" },
   { label: "Fake", value: "FAKE", style: "danger" },
-  { label: "Not Sure", value: "NOT_SURE", style: "warning" },
+  { label: "Not sure", value: "NOT_SURE", style: "warning" },
 ];
 
 export function getVoteOptionLabel(vote: VoteOption | null | undefined): string {
@@ -21,7 +22,7 @@ export function getVoteOptionLabel(vote: VoteOption | null | undefined): string 
   }
 
   if (vote === "NOT_SURE") {
-    return "Not Sure";
+    return "Not sure";
   }
 
   return "";
@@ -98,8 +99,8 @@ const styles = StyleSheet.create({
   },
   label: {
     color: theme.colors.background,
-    fontWeight: "700",
-    fontSize: theme.typography.body.fontSize,
+    fontWeight: "500",
+    fontSize: 14,
   },
   primary: {
     backgroundColor: theme.colors.primary,
@@ -127,6 +128,6 @@ const styles = StyleSheet.create({
   },
   selectedMessage: {
     color: theme.colors.primary,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });

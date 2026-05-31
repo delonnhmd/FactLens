@@ -286,6 +286,9 @@ function mapStatus(status: string | null): ClaimStatus {
 function mapAiStatus(status: string | null): ClaimAiStatus {
   if (
     status === "PENDING" ||
+    // PHASE 4 STEP 1
+    status === "LOW_RISK" ||
+    status === "MEDIUM_RISK" ||
     status === "LIKELY_TRUE" ||
     status === "LIKELY_FAKE" ||
     status === "NEEDS_MORE_EVIDENCE"
