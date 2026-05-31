@@ -3,9 +3,11 @@
 # PHASE 4 STEP 3
 # PHASE 4 STEP 4
 # PHASE 4 STEP 5
+# PHASE 4 STEP 5B
 import os
 from datetime import datetime, timezone
 from typing import Literal
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -76,6 +78,11 @@ class AiPrecheckResponse(BaseModel):
     ai_summary: str | None = None
     ai_status: AiStatus | None = None
     error: str | None = None
+    # PHASE 4 STEP 5B
+    details: str | None = None
+    hint: str | None = None
+    supabase_updated: bool | None = None
+    updated_claim: dict | None = None
 
 
 @app.get("/")
@@ -107,24 +114,106 @@ def get_supabase_client() -> Client:
     return create_client(supabase_url, service_role_key)
 
 
-def update_claim_ai_fields(claim_id: str, analysis: dict) -> str | None:
+# PHASE 4 STEP 5B
+def get_supabase_project_ref() -> str:
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    hostname = urlparse(supabase_url).hostname or ""
+
+    if hostname.endswith(".supabase.co"):
+        return hostname.split(".")[0]
+
+    return hostname or "unknown"
+
+
+# PHASE 4 STEP 5B
+def build_claim_ai_update_payload(analysis: dict) -> dict:
+    return {
+        "ai_confidence": analysis["ai_confidence"],
+        "source_count": analysis["source_count"],
+        "source_quality": analysis["source_quality"],
+        "red_flags": analysis["red_flags"],
+        "ai_summary": analysis["ai_summary"],
+        "ai_status": analysis["ai_status"],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# PHASE 4 STEP 5B
+def format_supabase_error(error: Exception) -> dict:
+    error_dict = getattr(error, "dict", None)
+
+    if callable(error_dict):
+        try:
+            data = error_dict()
+            return {
+                "error": str(data.get("message") or error),
+                "details": None if data.get("details") is None else str(data.get("details")),
+                "hint": None if data.get("hint") is None else str(data.get("hint")),
+            }
+        except Exception:
+            pass
+
+    return {
+        "error": str(getattr(error, "message", None) or error),
+        "details": None if getattr(error, "details", None) is None else str(getattr(error, "details")),
+        "hint": None if getattr(error, "hint", None) is None else str(getattr(error, "hint")),
+    }
+
+
+# PHASE 4 STEP 5B
+def fetch_claim_ai_fields(claim_id: str) -> dict | None:
+    supabase = get_supabase_client()
+    response = (
+        supabase.table("claims")
+        .select("ai_status,ai_confidence,source_quality,red_flags,ai_summary")
+        .eq("id", claim_id)
+        .limit(1)
+        .execute()
+    )
+    rows = response.data or []
+
+    if isinstance(rows, dict):
+        return rows
+
+    if not rows:
+        return None
+
+    return rows[0]
+
+
+# PHASE 4 STEP 5B
+def update_claim_ai_fields(claim_id: str, analysis: dict) -> dict:
+    payload = build_claim_ai_update_payload(analysis)
+    print(f"[supabase] project_ref={get_supabase_project_ref()}", flush=True)
+    print(f"[supabase] claim_id={claim_id}", flush=True)
+    print(f"[supabase] update_payload={payload}", flush=True)
+
     try:
         supabase = get_supabase_client()
-        supabase.table("claims").update(
-            {
-                "ai_confidence": analysis["ai_confidence"],
-                "source_count": analysis["source_count"],
-                "source_quality": analysis["source_quality"],
-                "red_flags": analysis["red_flags"],
-                "ai_summary": analysis["ai_summary"],
-                "ai_status": analysis["ai_status"],
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", claim_id).execute()
+        supabase.table("claims").update(payload).eq("id", claim_id).execute()
+        updated_claim = fetch_claim_ai_fields(claim_id)
     except Exception as error:
-        return f"Supabase update failed: {error}"
+        formatted_error = format_supabase_error(error)
+        print(f"[supabase] update_error={formatted_error}", flush=True)
+        return {
+            "ok": False,
+            **formatted_error,
+        }
 
-    return None
+    print(f"[supabase] updated_claim={updated_claim}", flush=True)
+
+    if not updated_claim:
+        return {
+            "ok": False,
+            "error": "Supabase update verification failed.",
+            "details": "No claim row was returned after update.",
+            "hint": "Check claim_id and claims SELECT policy/service role access.",
+        }
+
+    return {
+        "ok": True,
+        "updated_claim": updated_claim,
+    }
 
 
 # PHASE 4 STEP 3
@@ -142,21 +231,10 @@ def build_ai_error_analysis() -> dict:
 # PHASE 4 STEP 3
 def mark_claim_ai_error(claim_id: str) -> str | None:
     error_analysis = build_ai_error_analysis()
-    try:
-        supabase = get_supabase_client()
-        supabase.table("claims").update(
-            {
-                "ai_confidence": error_analysis["ai_confidence"],
-                "source_count": error_analysis["source_count"],
-                "source_quality": error_analysis["source_quality"],
-                "red_flags": error_analysis["red_flags"],
-                "ai_summary": error_analysis["ai_summary"],
-                "ai_status": error_analysis["ai_status"],
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", claim_id).execute()
-    except Exception as error:
-        return f"Supabase error status update failed: {error}"
+    result = update_claim_ai_fields(claim_id, error_analysis)
+
+    if not result.get("ok"):
+        return str(result.get("error") or "Supabase error status update failed.")
 
     return None
 
@@ -240,10 +318,10 @@ def ai_precheck(payload: AiPrecheckRequest):
     print(f"[ai/precheck] ai_confidence={analysis['ai_confidence']}", flush=True)
     print(f"[ai/precheck] source_quality={analysis['source_quality']}", flush=True)
     print("[ai/precheck] OpenAI analysis completed", flush=True)
-    update_error = update_claim_ai_fields(payload.claim_id, analysis)
+    update_result = update_claim_ai_fields(payload.claim_id, analysis)
 
-    if update_error:
-        print(f"[ai/precheck] Supabase update failure: {update_error}", flush=True)
+    if not update_result.get("ok"):
+        print(f"[ai/precheck] Supabase update failure: {update_result}", flush=True)
         error_update = mark_claim_ai_error(payload.claim_id)
 
         if error_update:
@@ -254,17 +332,19 @@ def ai_precheck(payload: AiPrecheckRequest):
         return {
             "ok": False,
             "claim_id": payload.claim_id,
-            **build_ai_error_analysis(),
-            "error": update_error,
+            "error": update_result.get("error"),
+            "details": update_result.get("details"),
+            "hint": update_result.get("hint"),
         }
 
     print("[ai/precheck] Supabase update success", flush=True)
-    response_ok = analysis["ai_status"] != "ERROR"
     return {
-        "ok": response_ok,
+        "ok": True,
         "claim_id": payload.claim_id,
+        "supabase_updated": True,
+        "updated_claim": update_result.get("updated_claim"),
         **analysis,
-        "error": None if response_ok else "AI pre-check failed. Please retry.",
+        "error": None,
     }
 
 
@@ -294,18 +374,26 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
         print(f"[ai/precheck/retry] ai_confidence={analysis['ai_confidence']}", flush=True)
         print(f"[ai/precheck/retry] source_quality={analysis['source_quality']}", flush=True)
         print("[ai/precheck/retry] OpenAI analysis completed", flush=True)
-        update_error = update_claim_ai_fields(claim_id, analysis)
+        update_result = update_claim_ai_fields(claim_id, analysis)
 
-        if update_error:
-            raise RuntimeError(update_error)
+        if not update_result.get("ok"):
+            print(f"[ai/precheck/retry] Supabase update failure: {update_result}", flush=True)
+            return {
+                "ok": False,
+                "claim_id": claim_id,
+                "error": update_result.get("error"),
+                "details": update_result.get("details"),
+                "hint": update_result.get("hint"),
+            }
 
         print("[ai/precheck/retry] Supabase update success", flush=True)
-        response_ok = analysis["ai_status"] != "ERROR"
         return {
-            "ok": response_ok,
+            "ok": True,
             "claim_id": claim_id,
+            "supabase_updated": True,
+            "updated_claim": update_result.get("updated_claim"),
             **analysis,
-            "error": None if response_ok else "AI pre-check failed. Please retry.",
+            "error": None,
         }
     except HTTPException:
         raise
