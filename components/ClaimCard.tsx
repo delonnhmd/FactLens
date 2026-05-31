@@ -1,5 +1,6 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
+// PHASE 3 STEP 32
 import { memo, useCallback, useState } from "react";
 import { Alert, Image, Share, TouchableOpacity, View, Text, StyleSheet, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -95,9 +96,10 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // PHASE 2 STEP 5
   const sourceQuality = getSourceQuality(claim.sourceUrl);
   // PHASE 2 STEP 10
-  const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  // PHASE 3 STEP 32
+  const totalVotes = claim.totalVotes;
   // PHASE 3 STEP 10
-  const finalTotalVotes = claim.verdictCalculatedAt ? claim.totalVotes : totalVotes;
+  const finalTotalVotes = claim.totalVotes;
   const verdictTitle =
     claim.status === "COMMUNITY_TRUE" ||
     claim.status === "COMMUNITY_FAKE" ||

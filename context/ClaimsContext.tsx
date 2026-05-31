@@ -2,6 +2,7 @@
 // PHASE 3 STEP 26
 // PHASE 3 STEP 27
 // PHASE 3 STEP 28
+// PHASE 3 STEP 32
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -25,7 +26,6 @@ import {
 import type { ClaimSearchFilters, ClaimsResult } from "../services/claimService";
 import {
   fetchUserVoteForClaim,
-  recalculateVoteCounts as recalculateRemoteVoteCounts,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
@@ -627,7 +627,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       const cachedUserVote = userVotesByClaimId[claimId] ?? existingClaim?.userVote ?? null;
 
       if (cachedUserVote) {
-        const updatedClaim = await recalculateRemoteVoteCounts(claimId);
+        // PHASE 3 STEP 32
+        const updatedClaim = await fetchRemoteClaimById(claimId);
 
         if (updatedClaim.claim) {
           setClaims((currentClaimsState) =>
@@ -687,11 +688,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       const result = await voteOnRemoteClaim(claimId, currentUser.id, vote, votingProfile);
 
       // PHASE 3 STEP 20
-      if (result.claim) {
+      // PHASE 3 STEP 32
+      const serviceUpdatedClaim = result.updatedClaim ?? result.claim;
+
+      if (serviceUpdatedClaim) {
         const resultVote = result.alreadyVoted
-          ? toAppVoteOption(result.vote?.vote_type) ?? result.claim.userVote
-          : result.claim.userVote ?? vote;
-        const updatedClaim = mergeLocalClaimState(result.claim, existingClaim);
+          ? toAppVoteOption(result.vote?.vote_type) ?? serviceUpdatedClaim.userVote
+          : serviceUpdatedClaim.userVote ?? vote;
+        const updatedClaim = mergeLocalClaimState(serviceUpdatedClaim, existingClaim);
         setClaims((currentClaimsState) =>
           currentClaimsState.map((claim) =>
             claim.id === claimId ? { ...updatedClaim, userVote: resultVote } : claim,
@@ -707,7 +711,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.alreadyVoted) {
-        const existingVote = toAppVoteOption(result.vote?.vote_type) ?? result.claim?.userVote ?? null;
+        const existingVote = toAppVoteOption(result.vote?.vote_type) ?? serviceUpdatedClaim?.userVote ?? null;
 
         if (existingVote) {
           setUserVotesByClaimId((currentVotes) => ({
@@ -725,7 +729,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         return result.message ?? ALREADY_VOTED_MESSAGE;
       }
 
-      if (result.error || !result.claim) {
+      if (result.error || !serviceUpdatedClaim) {
         throw new Error(result.error ?? "We could not save your vote. Please try again.");
       }
 
@@ -957,12 +961,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 3
   const fetchClaimById = useCallback(
     async (claimId: string) => {
+      // PHASE 3 STEP 32
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);
-
-      if (existingClaim) {
-        return existingClaim;
-      }
-
       const result = await fetchRemoteClaimById(claimId);
 
       if (result.error) {
@@ -971,7 +971,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.claim) {
-        const [loadedClaim] = await applyRemoteClaims({ claims: [result.claim] }, false);
+        const remoteClaim = mergeLocalClaimState(result.claim, existingClaim);
+        const [loadedClaim] = await applyRemoteClaims({ claims: [remoteClaim] }, false);
         return loadedClaim;
       }
 

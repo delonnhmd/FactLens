@@ -3,6 +3,7 @@
 // PHASE 3 STEP 20E
 // PHASE 3 STEP 24
 // PHASE 3 STEP 29
+// PHASE 3 STEP 32
 import { supabase } from "../lib/supabase";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
@@ -39,6 +40,7 @@ interface UserVoteResult {
 
 interface ClaimVoteResult {
   claim: Claim | null;
+  updatedClaim?: Claim | null;
   vote?: VoteRow | null;
   error?: string;
   message?: string;
@@ -47,16 +49,51 @@ interface ClaimVoteResult {
   countRefreshFailed?: boolean;
 }
 
-interface VoteTotals {
-  votesTrue: number;
-  votesFake: number;
-  votesUnsure: number;
-  totalVotes: number;
-  weightedCommunityScore: number;
-  finalScore: number;
+const ALREADY_VOTED_MESSAGE = "You already voted on this post.";
+const TRIGGER_REFETCH_DELAY_MS = 300;
+
+function waitForClaimTrigger() {
+  return new Promise((resolve) => setTimeout(resolve, TRIGGER_REFETCH_DELAY_MS));
 }
 
-const ALREADY_VOTED_MESSAGE = "You already voted on this post.";
+function logUpdatedClaimFromSupabase(updatedClaim: Claim | null | undefined) {
+  if (!updatedClaim) {
+    return;
+  }
+
+  console.log("[vote] updated claim from Supabase:", {
+    id: updatedClaim.id,
+    votes_true: updatedClaim.votesTrue,
+    votes_fake: updatedClaim.votesFake,
+    votes_unsure: updatedClaim.votesUnsure,
+    total_votes: updatedClaim.totalVotes,
+    weighted_community_score: updatedClaim.weightedCommunityScore,
+    final_score: updatedClaim.finalScore,
+  });
+  console.log("[vote] updated counts:", {
+    votesTrue: updatedClaim.votesTrue,
+    votesFake: updatedClaim.votesFake,
+    votesUnsure: updatedClaim.votesUnsure,
+    totalVotes: updatedClaim.totalVotes,
+    weightedCommunityScore: updatedClaim.weightedCommunityScore,
+    finalScore: updatedClaim.finalScore,
+  });
+}
+
+async function fetchClaimAfterVoteTrigger(claimId: string, waitForTrigger = false): Promise<ClaimResultLike> {
+  if (waitForTrigger) {
+    await waitForClaimTrigger();
+  }
+
+  const result = await fetchClaimById(claimId);
+  logUpdatedClaimFromSupabase(result.claim);
+  return result;
+}
+
+type ClaimResultLike = {
+  claim: Claim | null;
+  error?: string;
+};
 
 export function normalizeVoteType(voteType: VoteTypeInput): VoteType {
   const normalized = String(voteType)
@@ -104,41 +141,6 @@ export function getVoteValue(normalizedVoteType: VoteType): number | null {
   return null;
 }
 
-function parseNumber(value: number | string | null | undefined, fallback: number): number {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-
-  const parsedValue = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : fallback;
-}
-
-function normalizeAiConfidence(aiConfidence: number | null | undefined): number {
-  const parsedConfidence = parseNumber(aiConfidence, 0.5);
-  const normalizedConfidence = parsedConfidence > 1 ? parsedConfidence / 100 : parsedConfidence;
-
-  return Math.min(1, Math.max(0, normalizedConfidence));
-}
-
-function roundScore(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
-function getEffectiveVoteValue(vote: VoteRow): number | null {
-  const normalizedVoteType = normalizeVoteType(vote.vote_type);
-
-  if (vote.vote_value !== null && vote.vote_value !== undefined) {
-    return parseNumber(vote.vote_value, getVoteValue(normalizedVoteType) ?? 0);
-  }
-
-  return getVoteValue(normalizedVoteType);
-}
-
-function getEffectiveTrustWeight(vote: Pick<VoteRow, "trust_weight">): number {
-  const trustWeight = parseNumber(vote.trust_weight, 1);
-  return trustWeight > 0 ? trustWeight : 1;
-}
-
 function getVoteErrorMessage(message: string): string {
   const normalizedMessage = message.toLowerCase();
 
@@ -183,68 +185,6 @@ function hasVoteWindowClosed(claim: Claim): boolean {
   return new Date(getVoteAcceptUntil(claim)).getTime() <= Date.now();
 }
 
-function applyVoteTotalsToClaim(claim: Claim, totals: VoteTotals): Claim {
-  return {
-    ...claim,
-    votesTrue: totals.votesTrue,
-    votesFake: totals.votesFake,
-    votesUnsure: totals.votesUnsure,
-    totalVotes: totals.totalVotes,
-    weightedCommunityScore: totals.weightedCommunityScore,
-    finalScore: totals.finalScore,
-  };
-}
-
-function calculateVoteTotals(claim: Claim, votes: VoteRow[]): VoteTotals {
-  let votesTrue = 0;
-  let votesFake = 0;
-  let votesUnsure = 0;
-  let weightedNumerator = 0;
-  let weightedDenominator = 0;
-
-  votes.forEach((vote) => {
-    const normalizedVoteType = normalizeVoteType(vote.vote_type);
-
-    if (normalizedVoteType === "TRUE") {
-      votesTrue += 1;
-    }
-
-    if (normalizedVoteType === "FAKE") {
-      votesFake += 1;
-    }
-
-    if (normalizedVoteType === "UNSURE") {
-      votesUnsure += 1;
-      return;
-    }
-
-    const voteValue = getEffectiveVoteValue(vote);
-
-    if (voteValue === null) {
-      return;
-    }
-
-    const trustWeight = getEffectiveTrustWeight(vote);
-    weightedNumerator += voteValue * trustWeight;
-    weightedDenominator += trustWeight;
-  });
-
-  const totalVotes = votesTrue + votesFake + votesUnsure;
-  const weightedCommunityScore =
-    weightedDenominator > 0 ? weightedNumerator / weightedDenominator : 0.5;
-  const aiConfidence = normalizeAiConfidence(claim.aiCheck.confidence);
-  const finalScore = aiConfidence * 0.4 + weightedCommunityScore * 0.6;
-
-  return {
-    votesTrue,
-    votesFake,
-    votesUnsure,
-    totalVotes,
-    weightedCommunityScore: roundScore(weightedCommunityScore),
-    finalScore: roundScore(finalScore),
-  };
-}
-
 async function fetchVoteRowForClaim(claimId: string, userId: string): Promise<{ vote: VoteRow | null; error?: string }> {
   const { data, error } = await supabase
     .from("votes")
@@ -262,25 +202,6 @@ async function fetchVoteRowForClaim(claimId: string, userId: string): Promise<{ 
 
   return {
     vote: (data as VoteRow | null) ?? null,
-  };
-}
-
-async function fetchAcceptedVotesForClaim(claimId: string): Promise<VoteRowsResult> {
-  const { data, error } = await supabase
-    .from("votes")
-    .select("vote_type,vote_value,trust_weight,accepted")
-    .eq("claim_id", claimId)
-    .eq("accepted", true);
-
-  if (error) {
-    return {
-      votes: [],
-      error: getVoteErrorMessage(error.message),
-    };
-  }
-
-  return {
-    votes: (data as VoteRow[]) ?? [],
   };
 }
 
@@ -316,80 +237,23 @@ export async function fetchUserVoteForClaim(claimId: string, userId: string): Pr
   };
 }
 
-async function persistClaimVoteTotals(
-  claimId: string,
-  totals: VoteTotals,
-): Promise<{ claim: Claim | null; error?: string }> {
-  const { error } = await supabase
-    .from("claims")
-    .update({
-      votes_true: totals.votesTrue,
-      votes_fake: totals.votesFake,
-      votes_unsure: totals.votesUnsure,
-      total_votes: totals.totalVotes,
-      weighted_community_score: totals.weightedCommunityScore,
-      final_score: totals.finalScore,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", claimId);
-
-  if (error) {
-    console.log("[vote] Claim vote count update failed", {
-      claimId,
-      code: error.code,
-      message: error.message,
-      details: error.details,
-    });
-
-    return {
-      claim: null,
-      error: "Vote saved, but count refresh failed.",
-    };
-  }
-
-  const refreshedClaim = await fetchClaimById(claimId);
-  return {
-    claim: refreshedClaim.claim,
-    error: refreshedClaim.error,
-  };
-}
-
 export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteResult> {
-  const claimResult = await fetchClaimById(claimId);
+  // PHASE 3 STEP 32
+  // Supabase triggers own vote totals; this legacy-named helper now refetches
+  // the claims row instead of recalculating totals on the client.
+  const claimResult = await fetchClaimAfterVoteTrigger(claimId);
 
   if (claimResult.error || !claimResult.claim) {
     return {
       claim: null,
+      updatedClaim: null,
       error: claimResult.error ?? "Claim not found.",
     };
   }
 
-  const votesResult = await fetchAcceptedVotesForClaim(claimId);
-
-  if (votesResult.error) {
-    return {
-      claim: claimResult.claim,
-      error: votesResult.error,
-    };
-  }
-
-  const totals = calculateVoteTotals(claimResult.claim, votesResult.votes);
-  console.log("[vote] updated counts:", totals);
-
-  const localClaim = applyVoteTotalsToClaim(claimResult.claim, totals);
-  const persistResult = await persistClaimVoteTotals(claimId, totals);
-
-  if (persistResult.error || !persistResult.claim) {
-    return {
-      claim: localClaim,
-      message: "Vote saved, but count refresh failed.",
-      countRefreshFailed: true,
-    };
-  }
-
   return {
-    claim: applyVoteTotalsToClaim(persistResult.claim, totals),
-    message: "Vote saved.",
+    claim: claimResult.claim,
+    updatedClaim: claimResult.claim,
   };
 }
 
@@ -477,7 +341,8 @@ export async function voteOnClaim(
 
   if (existingVote.vote) {
     console.log("[vote] user already voted:", existingVote.vote.vote_type);
-    const updatedClaim = await recalculateVoteCounts(claimId);
+    const updatedClaim = await fetchClaimAfterVoteTrigger(claimId);
+    const existingVoteOption = toAppVoteOption(existingVote.vote.vote_type);
 
     return {
       ok: false,
@@ -486,12 +351,18 @@ export async function voteOnClaim(
       claim: updatedClaim.claim
         ? {
             ...updatedClaim.claim,
-            userVote: toAppVoteOption(existingVote.vote.vote_type),
+            userVote: existingVoteOption,
           }
         : {
             ...claimResult.claim,
-            userVote: toAppVoteOption(existingVote.vote.vote_type),
+            userVote: existingVoteOption,
           },
+      updatedClaim: updatedClaim.claim
+        ? {
+            ...updatedClaim.claim,
+            userVote: existingVoteOption,
+          }
+        : null,
       error: ALREADY_VOTED_MESSAGE,
       message: ALREADY_VOTED_MESSAGE,
     };
@@ -523,7 +394,8 @@ export async function voteOnClaim(
     if (error.code === "23505") {
       const duplicateVote = await fetchVoteRowForClaim(claimId, userId);
       const duplicateVoteType = duplicateVote.vote?.vote_type ?? normalizedVoteType;
-      const updatedClaim = await recalculateVoteCounts(claimId);
+      const duplicateVoteOption = toAppVoteOption(duplicateVoteType);
+      const updatedClaim = await fetchClaimAfterVoteTrigger(claimId, true);
 
       console.log("[vote] user already voted:", duplicateVoteType);
 
@@ -534,12 +406,18 @@ export async function voteOnClaim(
         claim: updatedClaim.claim
           ? {
               ...updatedClaim.claim,
-              userVote: toAppVoteOption(duplicateVoteType),
+              userVote: duplicateVoteOption,
             }
           : {
               ...claimResult.claim,
-              userVote: toAppVoteOption(duplicateVoteType),
+              userVote: duplicateVoteOption,
             },
+        updatedClaim: updatedClaim.claim
+          ? {
+              ...updatedClaim.claim,
+              userVote: duplicateVoteOption,
+            }
+          : null,
         error: ALREADY_VOTED_MESSAGE,
         message: ALREADY_VOTED_MESSAGE,
       };
@@ -570,10 +448,11 @@ export async function voteOnClaim(
     }
   }
 
-  const updatedClaim = await recalculateVoteCounts(claimId);
+  console.log("[vote] inserted vote, refetching claim:", claimId);
+  const updatedClaim = await fetchClaimAfterVoteTrigger(claimId, true);
 
   if (!updatedClaim.claim) {
-    console.log("[vote] Vote was inserted but recalculation failed", {
+    console.log("[vote] Vote was inserted but claim refetch failed", {
       claimId,
       userId,
       voteType: normalizedVoteType,
@@ -585,6 +464,7 @@ export async function voteOnClaim(
         ...claimResult.claim,
         userVote: appVoteOption,
       },
+      updatedClaim: null,
       message: "Vote saved, but count refresh failed.",
       countRefreshFailed: true,
     };
@@ -596,8 +476,11 @@ export async function voteOnClaim(
       ...updatedClaim.claim,
       userVote: appVoteOption,
     },
-    message: updatedClaim.message ?? "Vote saved.",
-    countRefreshFailed: updatedClaim.countRefreshFailed,
+    updatedClaim: {
+      ...updatedClaim.claim,
+      userVote: appVoteOption,
+    },
+    message: "Vote saved.",
   };
 }
 

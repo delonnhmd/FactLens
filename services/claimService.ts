@@ -5,6 +5,7 @@
 // PHASE 3 STEP 27
 // PHASE 3 STEP 28
 // PHASE 3 STEP 29
+// PHASE 3 STEP 32
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -1058,7 +1059,8 @@ export async function refreshClaimVerdict(claimId: string): Promise<ClaimResult>
 
 export async function fetchClaimById(id: string): Promise<ClaimResult> {
   // PHASE 3 STEP 29
-  const { data, error } = await supabase.from("claims").select("*").eq("id", id).maybeSingle();
+  // PHASE 3 STEP 32
+  const { data, error } = await supabase.from("claims").select("*").eq("id", id).single();
 
   if (error) {
     return {

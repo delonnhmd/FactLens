@@ -1,9 +1,10 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
-import { useEffect, useState } from "react";
+// PHASE 3 STEP 32
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import type { DimensionValue } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { EmptyState } from "../../components/EmptyState";
 import { SourceQualityBadge } from "../../components/SourceQualityBadge";
@@ -70,6 +71,12 @@ const verdictLabels = {
   NEEDS_MORE_EVIDENCE: "Needs More Evidence",
 };
 
+const CLAIM_REFETCH_DELAY_MS = 300;
+
+function waitForClaimRefetch() {
+  return new Promise((resolve) => setTimeout(resolve, CLAIM_REFETCH_DELAY_MS));
+}
+
 // PHASE 3 STEP 5
 function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
   const fallbackQuality = getSourceQuality(evidence.url);
@@ -94,6 +101,7 @@ function formatPercent(value: number | null | undefined): string {
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const navigation = useNavigation();
   // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
@@ -138,36 +146,65 @@ export default function ClaimDetailScreen() {
   const userReport = claim && currentUser ? claim.reports.find((report) => report.userId === currentUser.id) : undefined;
 
   // PHASE 3 STEP 3
-  useEffect(() => {
-    if (!claimId || claim) {
-      return;
+  // PHASE 3 STEP 32
+  const refreshDetailClaim = useCallback(async (mountedRef?: { current: boolean }) => {
+    if (!claimId) {
+      return undefined;
     }
 
-    let mounted = true;
     setDetailLoading(true);
     setDetailError("");
 
-    fetchClaimById(claimId)
-      .then((loadedClaim) => {
-        if (mounted && !loadedClaim) {
-          setDetailError("Claim not found.");
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setDetailError("We could not load this claim. Please try again.");
-        }
-      })
-      .finally(() => {
-        if (mounted) {
-          setDetailLoading(false);
-        }
-      });
+    try {
+      const loadedClaim = await fetchClaimById(claimId);
+
+      if (mountedRef && !mountedRef.current) {
+        return loadedClaim;
+      }
+
+      if (!loadedClaim) {
+        setDetailError("Claim not found.");
+      } else {
+        console.log("[detail] refreshed claim:", {
+          id: loadedClaim.id,
+          votesTrue: loadedClaim.votesTrue,
+          votesFake: loadedClaim.votesFake,
+          votesUnsure: loadedClaim.votesUnsure,
+          totalVotes: loadedClaim.totalVotes,
+        });
+      }
+
+      return loadedClaim;
+    } catch {
+      if (!mountedRef || mountedRef.current) {
+        setDetailError("We could not load this claim. Please try again.");
+      }
+
+      return undefined;
+    } finally {
+      if (!mountedRef || mountedRef.current) {
+        setDetailLoading(false);
+      }
+    }
+  }, [claimId, fetchClaimById]);
+
+  useEffect(() => {
+    const mountedRef = { current: true };
+
+    void refreshDetailClaim(mountedRef);
+
+    const unsubscribe = navigation.addListener?.("focus", () => {
+      void refreshDetailClaim(mountedRef);
+    });
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
+
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
     };
-  }, [claim, claimId, fetchClaimById]);
+  }, [navigation, refreshDetailClaim]);
 
   // PHASE 3 STEP 12
   useEffect(() => {
@@ -419,8 +456,11 @@ export default function ClaimDetailScreen() {
 
     try {
       // PHASE 3 STEP 20D
+      // PHASE 3 STEP 32
       const message = await voteOnClaim(claim.id, vote);
       setVoteSuccess(typeof message === "string" ? message : "Vote saved.");
+      await waitForClaimRefetch();
+      await refreshDetailClaim();
     } catch (error) {
       setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
     }
@@ -441,8 +481,8 @@ export default function ClaimDetailScreen() {
     );
   }
 
-  const currentVoteTotal = claim.votesTrue + claim.votesFake + claim.votesUnsure;
-  const totalVotes = claim.verdictCalculatedAt ? claim.totalVotes : currentVoteTotal;
+  // PHASE 3 STEP 32
+  const totalVotes = claim.totalVotes;
   const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
   // PHASE 3 STEP 22
   const voteWindowClosesAt = getVoteAcceptUntil(claim);

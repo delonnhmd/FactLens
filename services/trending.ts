@@ -1,4 +1,5 @@
 // PHASE 2 STEP 7
+// PHASE 3 STEP 32
 import type { Claim } from "../types/claim";
 import { isVotingOpen } from "./claimVoting";
 
@@ -28,7 +29,7 @@ function getRecencyBonus(createdAt: string, now = new Date()): number {
 }
 
 export function calculateTrendingScore(claim: Claim, now = new Date()): number {
-  const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  const totalVotes = claim.totalVotes;
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   const openVotingBonus = isVotingOpen(claim, now) ? 10 : 0;
