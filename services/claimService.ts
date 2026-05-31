@@ -6,6 +6,7 @@
 // PHASE 3 STEP 28
 // PHASE 3 STEP 29
 // PHASE 3 STEP 32
+// PHASE 4 STEP 6
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -330,7 +331,27 @@ function getClaimExpiresAt(row: ClaimRow, fallbackScoreLockAt: string): string {
 }
 
 function mapStringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  // PHASE 4 STEP 6
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+
+    if (!trimmedValue) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(trimmedValue) as unknown;
+      return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [trimmedValue];
+    } catch {
+      return [trimmedValue];
+    }
+  }
+
+  return [];
 }
 
 function mapTrustTier(tier: string | null | undefined): AppUser["trustTier"] {
@@ -443,10 +464,16 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   const scoreLockAt = getScoreLockAt(row);
   const expiresAt = isValidDateString(row.expires_at) ? row.expires_at : createdAt;
   const aiFlags = mapStringList(row.red_flags);
+  // PHASE 4 STEP 6
+  const aiStatus = mapAiStatus(row.ai_status);
+  const aiConfidence = row.ai_confidence ?? null;
+  const sourceQuality = mapSourceQuality(row.source_quality);
+  const sourceCount = row.source_count ?? 0;
+  const aiSummary = row.ai_summary ?? row.ai_reason ?? null;
   // PHASE 3 STEP 25
   const aiCheck = {
-    status: mapAiStatus(row.ai_status),
-    confidence: row.ai_confidence ?? null,
+    status: aiStatus,
+    confidence: aiConfidence,
     reason: row.ai_reason ?? null,
     riskLabel: null,
     flags: aiFlags,
@@ -481,6 +508,8 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
       youtubeThumbnailUrl,
     },
     aiCheck,
+    aiStatus,
+    aiConfidence,
     category: row.category ?? "Other",
     votesTrue,
     votesFake,
@@ -501,10 +530,10 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     finalScore: row.final_score ?? engineResult.final_score,
     minVotesRequired: row.min_votes_required ?? modeConfig.minVotes,
     expectedParticipation: row.expected_participation ?? modeConfig.expectedParticipation,
-    sourceCount: row.source_count ?? 0,
-    sourceQuality: mapSourceQuality(row.source_quality),
+    sourceCount,
+    sourceQuality,
     redFlags: aiFlags,
-    aiSummary: row.ai_summary ?? row.ai_reason ?? null,
+    aiSummary,
     status: mapStatus(row.status),
     createdAt,
     // PHASE 3 STEP 22
@@ -573,6 +602,8 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
       sourceNotes: null,
       checkedAt: null,
     },
+    aiStatus: "PENDING",
+    aiConfidence: null,
     category: row.category ?? "Other",
     votesTrue: row.votes_true ?? 0,
     votesFake: row.votes_fake ?? 0,

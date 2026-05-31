@@ -1,6 +1,7 @@
 // FactLens UI redesign
 // PHASE 4 STEP 3
 // PHASE 4 STEP 4
+// PHASE 4 STEP 6
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
@@ -8,12 +9,12 @@ import type { AiCheck } from "../types/claim";
 
 const aiCheckLabels: Record<AiCheck["status"], string> = {
   PENDING: "Pending",
-  LOW_RISK: "Low risk",
-  MEDIUM_RISK: "Medium risk",
-  HIGH_RISK: "High risk",
+  LOW_RISK: "Low Risk",
+  MEDIUM_RISK: "Medium Risk",
+  HIGH_RISK: "High Risk",
   LIKELY_TRUE: "Complete",
   LIKELY_FAKE: "Complete",
-  NEEDS_MORE_EVIDENCE: "Needs more evidence",
+  NEEDS_MORE_EVIDENCE: "Needs More Evidence",
   ERROR: "Error",
 };
 
@@ -62,7 +63,7 @@ export function AiCheckBadge({ status }: AiCheckBadgeProps) {
   return (
     <View style={[styles.badge, { backgroundColor: colors.backgroundColor }]}>
       <Ionicons name="sparkles-outline" size={12} color={colors.color} />
-      <Text style={[styles.text, { color: colors.color }]}>AI check: {aiCheckLabels[status]}</Text>
+      <Text style={[styles.text, { color: colors.color }]}>AI Check: {aiCheckLabels[status]}</Text>
     </View>
   );
 }

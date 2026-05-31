@@ -1,12 +1,14 @@
 // PHASE 4 STEP 1
 // PHASE 4 STEP 2
 // PHASE 4 STEP 3
-import { getBackendUrl } from "../constants/apiConfig";
+// PHASE 4 STEP 6
+import { API_CONFIG, getBackendUrl } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
 export interface AiPrecheckResponse {
   ok: boolean;
   claim_id: string;
+  ai_result?: Record<string, unknown> | null;
   ai_confidence?: number | null;
   source_count?: number | null;
   source_quality?: string | null;
@@ -14,6 +16,10 @@ export interface AiPrecheckResponse {
   ai_summary?: string | null;
   ai_status?: string | null;
   error?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  update_payload?: Record<string, unknown> | null;
+  updated_claim?: Record<string, unknown> | null;
 }
 
 async function postAiPrecheck(
@@ -24,18 +30,23 @@ async function postAiPrecheck(
   const backendUrl = getBackendUrl();
 
   if (!backendUrl) {
+    console.log("[ai] backend url:", API_CONFIG.BACKEND_URL);
     return {
       ok: false,
       claim_id: claimId,
-      error: "AI pre-check unavailable",
+      error: "AI pre-check backend URL is not configured.",
     };
   }
+
+  const requestUrl = `${backendUrl}${path}`;
+  console.log("[ai] backend url:", API_CONFIG.BACKEND_URL);
+  console.log("[ai] calling:", requestUrl);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const response = await fetch(`${backendUrl}${path}`, {
+    const response = await fetch(requestUrl, {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -50,13 +61,16 @@ async function postAiPrecheck(
       return {
         ok: false,
         claim_id: claimId,
-        error: "AI pre-check unavailable",
+        error: data.error ?? `AI pre-check failed with HTTP ${response.status}.`,
+        details: data.details ?? null,
+        hint: data.hint ?? null,
       };
     }
 
     return {
       ok: Boolean(data.ok),
       claim_id: data.claim_id ?? claimId,
+      ai_result: data.ai_result ?? null,
       ai_confidence: data.ai_confidence ?? null,
       source_count: data.source_count ?? null,
       source_quality: data.source_quality ?? null,
@@ -64,12 +78,16 @@ async function postAiPrecheck(
       ai_summary: data.ai_summary ?? null,
       ai_status: data.ai_status ?? null,
       error: data.error ?? null,
+      details: data.details ?? null,
+      hint: data.hint ?? null,
+      update_payload: data.update_payload ?? null,
+      updated_claim: data.updated_claim ?? null,
     };
-  } catch {
+  } catch (error) {
     return {
       ok: false,
       claim_id: claimId,
-      error: "AI pre-check unavailable",
+      error: error instanceof Error ? error.message : "AI pre-check unavailable",
     };
   } finally {
     clearTimeout(timeoutId);

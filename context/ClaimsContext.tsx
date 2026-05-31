@@ -3,6 +3,7 @@
 // PHASE 3 STEP 27
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
+// PHASE 4 STEP 6
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -28,7 +29,11 @@ import {
   fetchUserVoteForClaim,
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
-import { retryAiPrecheckForClaim, runAiPrecheckForClaim } from "../services/aiPrecheckService";
+import {
+  retryAiPrecheckForClaim,
+  runAiPrecheckForClaim,
+  type AiPrecheckResponse,
+} from "../services/aiPrecheckService";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
 import {
   addEvidence as addRemoteEvidence,
@@ -117,6 +122,98 @@ interface ClaimsContextValue {
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
+const AI_PRECHECK_REFETCH_DELAY_MS = 300;
+
+function waitForAiPrecheckRefresh() {
+  return new Promise((resolve) => setTimeout(resolve, AI_PRECHECK_REFETCH_DELAY_MS));
+}
+
+// PHASE 4 STEP 6
+function mapAiStatus(status: unknown): Claim["aiStatus"] {
+  if (
+    status === "PENDING" ||
+    status === "LOW_RISK" ||
+    status === "MEDIUM_RISK" ||
+    status === "HIGH_RISK" ||
+    status === "LIKELY_TRUE" ||
+    status === "LIKELY_FAKE" ||
+    status === "NEEDS_MORE_EVIDENCE" ||
+    status === "ERROR"
+  ) {
+    return status;
+  }
+
+  return "PENDING";
+}
+
+function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
+  if (
+    sourceQuality === "official" ||
+    sourceQuality === "mainstream" ||
+    sourceQuality === "blog" ||
+    sourceQuality === "unknown"
+  ) {
+    return sourceQuality;
+  }
+
+  return "unknown";
+}
+
+function getNumberField(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getStringField(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function getStringListField(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item)).filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [value];
+    } catch {
+      return [value];
+    }
+  }
+
+  return [];
+}
+
+function getAiPrecheckErrorMessage(result: AiPrecheckResponse): string {
+  return [result.error, result.details, result.hint].filter(Boolean).join(" ") || "AI pre-check unavailable.";
+}
+
+function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckResponse): Claim {
+  const updatedClaim = result.updated_claim ?? {};
+  const aiStatus = mapAiStatus(updatedClaim.ai_status ?? result.ai_status ?? claim.aiStatus);
+  const aiConfidence = getNumberField(updatedClaim.ai_confidence ?? result.ai_confidence) ?? claim.aiConfidence;
+  const sourceQuality = mapSourceQuality(updatedClaim.source_quality ?? result.source_quality ?? claim.sourceQuality);
+  const sourceCount = getNumberField(updatedClaim.source_count ?? result.source_count) ?? claim.sourceCount;
+  const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
+  const aiSummary = getStringField(updatedClaim.ai_summary ?? result.ai_summary) ?? claim.aiSummary;
+
+  return {
+    ...claim,
+    aiStatus,
+    aiConfidence,
+    sourceQuality,
+    sourceCount,
+    redFlags,
+    aiSummary,
+    aiCheck: {
+      ...claim.aiCheck,
+      status: aiStatus,
+      confidence: aiConfidence,
+      flags: redFlags,
+      sourceNotes: aiSummary,
+    },
+  };
+}
 
 function mergeLocalClaimState(remoteClaim: Claim, existingClaim?: Claim): Claim {
   if (!existingClaim) {
@@ -515,12 +612,24 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 4 STEP 3
   const refreshClaimAfterAiPrecheck = useCallback(
-    async (targetClaim: Claim) => {
+    async (targetClaim: Claim, precheckResult?: AiPrecheckResponse) => {
+      // PHASE 4 STEP 6
+      const claimAfterPrecheck = precheckResult?.ok
+        ? mergeAiPrecheckResponseIntoClaim(targetClaim, precheckResult)
+        : targetClaim;
+
+      if (claimAfterPrecheck !== targetClaim) {
+        setClaims((currentClaimsState) =>
+          currentClaimsState.map((claim) => (claim.id === targetClaim.id ? claimAfterPrecheck : claim)),
+        );
+      }
+
+      await waitForAiPrecheckRefresh();
       const refreshedClaimResult = await fetchRemoteClaimById(targetClaim.id);
 
       if (refreshedClaimResult.error || !refreshedClaimResult.claim) {
         console.log("[ai precheck warning]", refreshedClaimResult.error ?? "Could not refresh AI pre-check result.");
-        setAiPrecheckNotice("AI pre-check will retry later.");
+        setAiPrecheckNotice(refreshedClaimResult.error ?? "AI pre-check will retry later.");
         return undefined;
       }
 
@@ -549,12 +658,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       const precheckResult = await runAiPrecheckForClaim(targetClaim);
 
       if (!precheckResult.ok) {
-        console.log("[ai precheck warning]", precheckResult.error ?? "AI pre-check unavailable");
-        setAiPrecheckNotice("AI pre-check will retry later.");
+        const message = getAiPrecheckErrorMessage(precheckResult);
+        console.log("[ai precheck warning]", message);
+        setAiPrecheckNotice(`AI pre-check failed: ${message}`);
         return undefined;
       }
 
-      return refreshClaimAfterAiPrecheck(targetClaim);
+      return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);
     },
     [refreshClaimAfterAiPrecheck],
   );
@@ -572,19 +682,21 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         const precheckResult = await retryAiPrecheckForClaim(targetClaim.id);
 
         if (!precheckResult.ok) {
-          console.log("[ai precheck retry warning]", precheckResult.error ?? "AI pre-check unavailable");
+          const message = getAiPrecheckErrorMessage(precheckResult);
+          console.log("[ai precheck retry warning]", message);
           await refreshClaimAfterAiPrecheck(targetClaim).catch((refreshError) => {
             console.log("[ai precheck retry warning]", refreshError instanceof Error ? refreshError.message : refreshError);
           });
 
           if (showNotice) {
-            setAiPrecheckNotice("AI pre-check is unavailable. Try again later.");
+            setAiPrecheckNotice(`AI pre-check failed: ${message}`);
+            throw new Error(message);
           }
 
           return undefined;
         }
 
-        return refreshClaimAfterAiPrecheck(targetClaim);
+        return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);
       } finally {
         aiRetryInProgressClaimIdsRef.current.delete(targetClaim.id);
       }
@@ -601,9 +713,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         throw new Error("Claim not found.");
       }
 
-      return retryAiPrecheckAndRefreshClaim(targetClaim);
+      // PHASE 4 STEP 6
+      return runAiPrecheckAndRefreshClaim(targetClaim);
     },
-    [retryAiPrecheckAndRefreshClaim],
+    [runAiPrecheckAndRefreshClaim],
   );
 
   // PHASE 4 STEP 3

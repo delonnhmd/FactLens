@@ -1,6 +1,7 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
+// PHASE 4 STEP 6
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -186,6 +187,8 @@ export default function ClaimDetailScreen() {
           votesFake: loadedClaim.votesFake,
           votesUnsure: loadedClaim.votesUnsure,
           totalVotes: loadedClaim.totalVotes,
+          aiStatus: loadedClaim.aiCheck.status,
+          aiConfidence: loadedClaim.aiCheck.confidence,
         });
       }
 
@@ -495,9 +498,10 @@ export default function ClaimDetailScreen() {
       const updatedClaim = await runAiPrecheckForClaimId(claim.id);
       await waitForClaimRefetch();
       await refreshDetailClaim();
-      setAiPrecheckMessage(updatedClaim ? "AI pre-check updated." : "AI pre-check is unavailable. Try again later.");
+      setAiPrecheckMessage(updatedClaim ? "AI pre-check updated." : "AI pre-check failed: AI pre-check unavailable.");
     } catch (error) {
-      setAiPrecheckError(error instanceof Error ? error.message : "AI pre-check is unavailable. Try again later.");
+      const message = error instanceof Error ? error.message : "AI pre-check unavailable.";
+      setAiPrecheckError(`AI pre-check failed: ${message}`);
     } finally {
       setAiPrecheckLoading(false);
     }

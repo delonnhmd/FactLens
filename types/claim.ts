@@ -106,6 +106,9 @@ export interface Claim {
   sourceUrl: string;
   media: ClaimMedia;
   aiCheck: AiCheck;
+  // PHASE 4 STEP 6
+  aiStatus: AiCheck["status"];
+  aiConfidence: number | null;
   // PHASE 2 STEP 2
   category?: string;
   votesTrue: number;
