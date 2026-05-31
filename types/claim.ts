@@ -80,6 +80,8 @@ export interface AiCheck {
     | "PENDING"
     | "LOW_RISK"
     | "MEDIUM_RISK"
+    // PHASE 4 STEP 4
+    | "HIGH_RISK"
     | "LIKELY_TRUE"
     | "LIKELY_FAKE"
     | "NEEDS_MORE_EVIDENCE"

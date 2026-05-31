@@ -1,5 +1,6 @@
 // FactLens UI redesign
 // PHASE 4 STEP 3
+// PHASE 4 STEP 4
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
@@ -9,6 +10,7 @@ const aiCheckLabels: Record<AiCheck["status"], string> = {
   PENDING: "Pending",
   LOW_RISK: "Low risk",
   MEDIUM_RISK: "Medium risk",
+  HIGH_RISK: "High risk",
   LIKELY_TRUE: "Complete",
   LIKELY_FAKE: "Complete",
   NEEDS_MORE_EVIDENCE: "Needs more evidence",
@@ -27,6 +29,10 @@ const stateColors: Record<AiCheck["status"], { backgroundColor: string; color: s
   MEDIUM_RISK: {
     backgroundColor: theme.colors.warningBg,
     color: theme.colors.warning,
+  },
+  HIGH_RISK: {
+    backgroundColor: theme.colors.dangerBg,
+    color: theme.colors.danger,
   },
   LIKELY_TRUE: {
     backgroundColor: theme.colors.aiBg,

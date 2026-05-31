@@ -289,6 +289,8 @@ function mapAiStatus(status: string | null): ClaimAiStatus {
     // PHASE 4 STEP 1
     status === "LOW_RISK" ||
     status === "MEDIUM_RISK" ||
+    // PHASE 4 STEP 4
+    status === "HIGH_RISK" ||
     status === "LIKELY_TRUE" ||
     status === "LIKELY_FAKE" ||
     status === "NEEDS_MORE_EVIDENCE" ||

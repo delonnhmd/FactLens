@@ -1,6 +1,8 @@
 # PHASE 4 STEP 1
 # PHASE 4 STEP 2
 # PHASE 4 STEP 3
+# PHASE 4 STEP 4
+# PHASE 4 STEP 5
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -10,6 +12,21 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import Client, create_client
+
+try:
+    from services.openai_factcheck import (
+        analyze_claim_with_openai,
+        analyze_claim_with_openai_response,
+        get_openai_model,
+        test_openai_connection,
+    )
+except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
+    from backend.services.openai_factcheck import (
+        analyze_claim_with_openai,
+        analyze_claim_with_openai_response,
+        get_openai_model,
+        test_openai_connection,
+    )
 
 
 load_dotenv()
@@ -25,7 +42,7 @@ app.add_middleware(
 
 
 OfficialQuality = Literal["official", "mainstream", "blog", "unknown"]
-AiStatus = Literal["PENDING", "LOW_RISK", "MEDIUM_RISK", "NEEDS_MORE_EVIDENCE", "ERROR"]
+AiStatus = Literal["PENDING", "LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "ERROR"]
 
 
 class AiPrecheckRequest(BaseModel):
@@ -41,6 +58,14 @@ class AiPrecheckRetryRequest(BaseModel):
     claim_id: str = ""
 
 
+# PHASE 4 STEP 5
+class AiPrecheckTestRequest(BaseModel):
+    title: str = "Coffee without sugar helps burn fat"
+    description: str = "This is a test claim."
+    source_url: str = "https://www.healthline.com"
+    category: str = "Health"
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -53,41 +78,6 @@ class AiPrecheckResponse(BaseModel):
     error: str | None = None
 
 
-OFFICIAL_DOMAINS = [
-    ".gov",
-    ".edu",
-    "who.int",
-    "cdc.gov",
-    "fda.gov",
-    "sec.gov",
-    "federalreserve.gov",
-]
-
-MAINSTREAM_DOMAINS = [
-    "reuters.com",
-    "apnews.com",
-    "bbc.com",
-    "cnn.com",
-    "nbcnews.com",
-    "cbsnews.com",
-    "abcnews.go.com",
-    "nytimes.com",
-    "washingtonpost.com",
-]
-
-SUSPICIOUS_TERMS = [
-    "shocking",
-    "secret",
-    "leaked",
-    "viral",
-    "rumor",
-    "anonymous",
-    "miracle cure",
-    "guaranteed",
-    "everyone is hiding",
-]
-
-
 @app.get("/")
 def home():
     return {"message": "FactLens API running"}
@@ -95,63 +85,16 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-2"}
+    return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-5"}
 
 
 def analyze_claim(payload: AiPrecheckRequest) -> dict:
-    source_url = payload.source_url.strip()
-    source_url_lower = source_url.lower()
-    searchable_text = f"{payload.title} {payload.description}".lower()
-    red_flags: list[str] = []
-
-    ai_confidence = 0.50
-    source_count = 0
-    source_quality: OfficialQuality = "unknown"
-    ai_summary = "No strong source signal found. Community voting and evidence are needed."
-    ai_status: AiStatus = "PENDING"
-
-    if not source_url:
-        return {
-            "ai_confidence": 0.35,
-            "source_count": 0,
-            "source_quality": "unknown",
-            "red_flags": ["Missing source URL"],
-            "ai_summary": "The claim is missing a source URL.",
-            "ai_status": "NEEDS_MORE_EVIDENCE",
-        }
-
-    if any(domain in source_url_lower for domain in OFFICIAL_DOMAINS):
-        ai_confidence = 0.65
-        source_count = 1
-        source_quality = "official"
-        ai_summary = "The source appears to be an official or institutional source."
-        ai_status = "LOW_RISK"
-    elif any(domain in source_url_lower for domain in MAINSTREAM_DOMAINS):
-        ai_confidence = 0.60
-        source_count = 1
-        source_quality = "mainstream"
-        ai_summary = "The source appears to be a mainstream news source."
-        ai_status = "LOW_RISK"
-
-    for term in SUSPICIOUS_TERMS:
-        if term in searchable_text:
-            red_flags.append(f"Suspicious wording: {term}")
-
-    if red_flags:
-        ai_confidence = max(ai_confidence - 0.15, 0.20)
-        ai_status = "MEDIUM_RISK"
-
-        if source_quality == "unknown":
-            ai_summary = "The claim contains suspicious wording and needs more community evidence."
-
-    return {
-        "ai_confidence": round(ai_confidence, 2),
-        "source_count": source_count,
-        "source_quality": source_quality,
-        "red_flags": red_flags,
-        "ai_summary": ai_summary,
-        "ai_status": ai_status,
-    }
+    return analyze_claim_with_openai(
+        title=payload.title,
+        description=payload.description,
+        source_url=payload.source_url,
+        category=payload.category,
+    )
 
 
 def get_supabase_client() -> Client:
@@ -190,8 +133,8 @@ def build_ai_error_analysis() -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
-        "red_flags": [],
-        "ai_summary": "AI pre-check failed. Please retry.",
+        "red_flags": ["AI pre-check failed"],
+        "ai_summary": "AI pre-check failed. Community voting and evidence are still available.",
         "ai_status": "ERROR",
     }
 
@@ -244,6 +187,42 @@ def build_precheck_payload_from_claim(claim: dict) -> AiPrecheckRequest:
     )
 
 
+# PHASE 4 STEP 5
+@app.get("/ai/test")
+def ai_test():
+    print("[ai/test] endpoint called", flush=True)
+    print(f"[ai/test] OPENAI_MODEL={get_openai_model()}", flush=True)
+    result = test_openai_connection()
+
+    if result.get("ok"):
+        print("[ai/test] OpenAI success", flush=True)
+    else:
+        print(f"[ai/test] OpenAI failure: {result.get('error')}", flush=True)
+
+    return result
+
+
+# PHASE 4 STEP 5
+@app.post("/ai/precheck/test")
+def ai_precheck_test(payload: AiPrecheckTestRequest):
+    print("[ai/precheck/test] endpoint called", flush=True)
+    print(f"[ai/precheck/test] OPENAI_MODEL={get_openai_model()}", flush=True)
+    result = analyze_claim_with_openai_response(
+        title=payload.title,
+        description=payload.description,
+        source_url=payload.source_url,
+        category=payload.category,
+    )
+
+    if result.get("ok"):
+        print(f"[ai/precheck/test] ai_status={result.get('ai_status')}", flush=True)
+        print(f"[ai/precheck/test] ai_confidence={result.get('ai_confidence')}", flush=True)
+    else:
+        print(f"[ai/precheck/test] error={result.get('error')}", flush=True)
+
+    return result
+
+
 @app.post("/ai/precheck", response_model=AiPrecheckResponse)
 def ai_precheck(payload: AiPrecheckRequest):
     claim_id = payload.claim_id.strip()
@@ -254,10 +233,13 @@ def ai_precheck(payload: AiPrecheckRequest):
     payload.claim_id = claim_id
     analysis = analyze_claim(payload)
     print("[ai/precheck] called", flush=True)
+    print(f"[ai/precheck] OPENAI_MODEL={get_openai_model()}", flush=True)
     print(f"[ai/precheck] claim_id={payload.claim_id}", flush=True)
     print(f"[ai/precheck] source_url={payload.source_url}", flush=True)
     print(f"[ai/precheck] ai_status={analysis['ai_status']}", flush=True)
     print(f"[ai/precheck] ai_confidence={analysis['ai_confidence']}", flush=True)
+    print(f"[ai/precheck] source_quality={analysis['source_quality']}", flush=True)
+    print("[ai/precheck] OpenAI analysis completed", flush=True)
     update_error = update_claim_ai_fields(payload.claim_id, analysis)
 
     if update_error:
@@ -277,10 +259,12 @@ def ai_precheck(payload: AiPrecheckRequest):
         }
 
     print("[ai/precheck] Supabase update success", flush=True)
+    response_ok = analysis["ai_status"] != "ERROR"
     return {
-        "ok": True,
+        "ok": response_ok,
         "claim_id": payload.claim_id,
         **analysis,
+        "error": None if response_ok else "AI pre-check failed. Please retry.",
     }
 
 
@@ -293,6 +277,7 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
         raise HTTPException(status_code=400, detail="claim_id is required")
 
     print("[ai/precheck/retry] called", flush=True)
+    print(f"[ai/precheck/retry] OPENAI_MODEL={get_openai_model()}", flush=True)
     print(f"[ai/precheck/retry] claim_id={claim_id}", flush=True)
 
     try:
@@ -306,16 +291,21 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
 
         analysis = analyze_claim(build_precheck_payload_from_claim(claim))
         print(f"[ai/precheck/retry] new_ai_status={analysis['ai_status']}", flush=True)
+        print(f"[ai/precheck/retry] ai_confidence={analysis['ai_confidence']}", flush=True)
+        print(f"[ai/precheck/retry] source_quality={analysis['source_quality']}", flush=True)
+        print("[ai/precheck/retry] OpenAI analysis completed", flush=True)
         update_error = update_claim_ai_fields(claim_id, analysis)
 
         if update_error:
             raise RuntimeError(update_error)
 
         print("[ai/precheck/retry] Supabase update success", flush=True)
+        response_ok = analysis["ai_status"] != "ERROR"
         return {
-            "ok": True,
+            "ok": response_ok,
             "claim_id": claim_id,
             **analysis,
+            "error": None if response_ok else "AI pre-check failed. Please retry.",
         }
     except HTTPException:
         raise
