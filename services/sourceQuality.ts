@@ -1,5 +1,7 @@
 // PHASE 2 STEP 5
+// PHASE 4 STEP 9
 import { trustedSourceDomains } from "../constants/sourceDomains";
+import type { SourceQuality as ClaimSourceQuality } from "../types/verification";
 
 export type SourceQualityLabel = "Strong Source" | "Medium Source" | "Weak Source" | "Unknown Source";
 
@@ -7,6 +9,26 @@ export interface SourceQuality {
   label: SourceQualityLabel;
   score: number;
   reason: string;
+}
+
+export function getSourceCredibilityLabel(value: ClaimSourceQuality | string | null | undefined): string {
+  if (value === "official") {
+    return "Official Source";
+  }
+
+  if (value === "mainstream" || value === "specialized" || value === "blog") {
+    return "Medium Source";
+  }
+
+  if (value === "social") {
+    return "Social Source";
+  }
+
+  return "Unknown Source";
+}
+
+export function formatSourceCredibilityScore(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}/100` : "Pending";
 }
 
 const suspiciousWords = ["rumor", "leaked", "secret", "shocking", "unknown", "viral", "anonymous"];
@@ -115,4 +137,3 @@ export function getSourceQuality(url: string): SourceQuality {
     reason: "HTTPS source with a detectable domain.",
   };
 }
-

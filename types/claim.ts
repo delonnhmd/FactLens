@@ -140,6 +140,10 @@ export interface Claim {
   expectedParticipation: number;
   sourceCount: number;
   sourceQuality: SourceQuality;
+  // PHASE 4 STEP 9
+  sourceDomain: string | null;
+  sourceScore: number | null;
+  sourceReason: string | null;
   redFlags: string[];
   aiSummary: string | null;
   status: ClaimStatus;

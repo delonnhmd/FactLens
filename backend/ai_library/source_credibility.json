@@ -1,0 +1,67 @@
+{
+  "official": {
+    "score": 90,
+    "domains": [
+      "cdc.gov",
+      "fda.gov",
+      "who.int",
+      "sec.gov",
+      "federalreserve.gov",
+      "whitehouse.gov",
+      "congress.gov",
+      "supremecourt.gov",
+      "treasury.gov",
+      "irs.gov",
+      "nasa.gov",
+      "noaa.gov",
+      "nih.gov"
+    ]
+  },
+  "mainstream": {
+    "score": 75,
+    "domains": [
+      "reuters.com",
+      "apnews.com",
+      "bbc.com",
+      "npr.org",
+      "pbs.org",
+      "nytimes.com",
+      "washingtonpost.com",
+      "wsj.com",
+      "cnn.com",
+      "nbcnews.com",
+      "cbsnews.com",
+      "abcnews.go.com",
+      "theguardian.com"
+    ]
+  },
+  "specialized": {
+    "score": 70,
+    "domains": [
+      "healthline.com",
+      "webmd.com",
+      "mayoclinic.org",
+      "coindesk.com",
+      "cointelegraph.com",
+      "investopedia.com",
+      "morningstar.com"
+    ]
+  },
+  "social": {
+    "score": 35,
+    "domains": [
+      "youtube.com",
+      "youtu.be",
+      "tiktok.com",
+      "x.com",
+      "twitter.com",
+      "facebook.com",
+      "instagram.com",
+      "reddit.com"
+    ]
+  },
+  "unknown": {
+    "score": 40,
+    "domains": []
+  }
+}

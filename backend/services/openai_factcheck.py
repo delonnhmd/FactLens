@@ -2,6 +2,7 @@
 # PHASE 4 STEP 5
 # PHASE 4 STEP 7
 # PHASE 4 STEP 8
+# PHASE 4 STEP 9
 import json
 import os
 from typing import Literal
@@ -15,11 +16,13 @@ except ImportError:  # pragma: no cover - Render installs this from requirements
 
 try:
     from services.ai_library_loader import load_factlens_ai_library
+    from services.source_credibility import score_source_url
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.ai_library_loader import load_factlens_ai_library
+    from backend.services.source_credibility import score_source_url
 
 
-SourceQuality = Literal["official", "mainstream", "blog", "unknown"]
+SourceQuality = Literal["official", "mainstream", "specialized", "social", "blog", "unknown"]
 ClaimType = Literal["FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"]
 AiStatus = Literal[
     "LOW_RISK",
@@ -80,7 +83,7 @@ SUSPICIOUS_TERMS = [
     "everyone is hiding",
 ]
 
-SOURCE_QUALITIES = {"official", "mainstream", "blog", "unknown"}
+SOURCE_QUALITIES = {"official", "mainstream", "specialized", "social", "blog", "unknown"}
 CLAIM_TYPES = {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}
 AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "NOT_FACT_CHECKABLE", "ERROR"}
 
@@ -139,26 +142,72 @@ def _not_fact_checkable_analysis(claim_type: ClaimType) -> dict:
     }
 
 
+# PHASE 4 STEP 9
+def _get_source_metadata(source_url: str, source_metadata: dict | None = None) -> dict:
+    if source_metadata is not None:
+        return source_metadata
+
+    return score_source_url(source_url)
+
+
+# PHASE 4 STEP 9
+def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
+    source_quality = str(source_metadata.get("source_quality") or "unknown").lower()
+
+    if source_quality not in SOURCE_QUALITIES:
+        source_quality = "unknown"
+
+    source_score = source_metadata.get("source_score")
+
+    try:
+        normalized_score = int(source_score)
+    except (TypeError, ValueError):
+        normalized_score = 0 if source_quality == "unknown" else 40
+
+    next_analysis = {
+        **analysis,
+        "source_quality": source_quality,
+        "source_domain": str(source_metadata.get("domain") or ""),
+        "source_score": max(0, min(normalized_score, 100)),
+        "source_reason": str(source_metadata.get("source_reason") or ""),
+    }
+
+    red_flags = list(next_analysis.get("red_flags") or [])
+
+    if source_quality == "social" and not any("social" in flag.lower() for flag in red_flags):
+        red_flags.append("Social source needs corroborating evidence")
+        if next_analysis.get("ai_status") == "LOW_RISK":
+            next_analysis["ai_status"] = "NEEDS_MORE_EVIDENCE"
+        next_analysis["ai_confidence"] = min(_clamp_confidence(next_analysis.get("ai_confidence")), 0.55)
+    elif source_quality == "unknown" and next_analysis["source_score"] <= 40:
+        next_analysis["ai_confidence"] = min(_clamp_confidence(next_analysis.get("ai_confidence")), 0.60)
+
+    next_analysis["red_flags"] = red_flags[:8]
+    return next_analysis
+
+
 def _fallback_source_risk_analysis(
     title: str,
     description: str,
     source_url: str,
     openai_missing: bool = False,
+    source_metadata: dict | None = None,
 ) -> dict:
     source_url_lower = source_url.strip().lower()
+    scored_source = _get_source_metadata(source_url, source_metadata)
     searchable_text = f"{title} {description}".lower()
     red_flags: list[str] = []
 
     ai_confidence = 0.50
     source_count = 0
-    source_quality: SourceQuality = "unknown"
+    source_quality = str(scored_source.get("source_quality") or "unknown").lower()
     ai_summary = "No strong source signal found. Community voting and evidence are needed."
     ai_status: AiStatus = "NEEDS_MORE_EVIDENCE"
     claim_type: ClaimType = "FACTUAL"
 
     non_fact_checkable_type = _classify_non_fact_checkable(title, description)
     if non_fact_checkable_type and non_fact_checkable_type != "UNCLEAR":
-        return _not_fact_checkable_analysis(non_fact_checkable_type)
+        return _attach_source_metadata(_not_fact_checkable_analysis(non_fact_checkable_type), scored_source)
 
     if non_fact_checkable_type == "UNCLEAR":
         claim_type = "UNCLEAR"
@@ -167,18 +216,29 @@ def _fallback_source_risk_analysis(
         ai_confidence = 0.35
         red_flags.append("Missing source URL")
         ai_summary = "The claim is missing a source URL."
-    elif any(domain in source_url_lower for domain in OFFICIAL_DOMAINS):
+    elif source_quality == "official" or any(domain in source_url_lower for domain in OFFICIAL_DOMAINS):
         ai_confidence = 0.65
         source_count = 1
         source_quality = "official"
         ai_summary = "The source appears to be an official or institutional source."
         ai_status = "LOW_RISK"
-    elif any(domain in source_url_lower for domain in MAINSTREAM_DOMAINS):
+    elif source_quality == "mainstream" or any(domain in source_url_lower for domain in MAINSTREAM_DOMAINS):
         ai_confidence = 0.60
         source_count = 1
         source_quality = "mainstream"
         ai_summary = "The source appears to be a mainstream news source."
         ai_status = "LOW_RISK"
+    elif source_quality == "specialized":
+        ai_confidence = 0.55
+        source_count = 1
+        ai_summary = "The source appears to be a specialized reference source."
+    elif source_quality == "social":
+        ai_confidence = 0.40
+        red_flags.append("Social source needs corroborating evidence")
+        ai_summary = "Social media source. Needs corroborating evidence."
+    elif source_quality == "unknown":
+        ai_confidence = 0.40
+        ai_summary = "Unknown source. Stronger supporting evidence is needed."
 
     for term in SUSPICIOUS_TERMS:
         if term in searchable_text:
@@ -195,7 +255,7 @@ def _fallback_source_risk_analysis(
     if openai_missing:
         red_flags.append("OpenAI API key not configured")
 
-    return {
+    return _attach_source_metadata({
         "claim_type": claim_type,
         "ai_confidence": round(ai_confidence, 2),
         "source_count": source_count,
@@ -203,7 +263,7 @@ def _fallback_source_risk_analysis(
         "red_flags": red_flags,
         "ai_summary": ai_summary,
         "ai_status": ai_status,
-    }
+    }, scored_source)
 
 
 def _error_analysis() -> dict:
@@ -307,10 +367,12 @@ def _normalize_connection_message(value: object) -> str:
     return message or "FactLens AI is connected"
 
 
-def _build_prompt(title: str, description: str, source_url: str, category: str) -> list[dict]:
+def _build_prompt(title: str, description: str, source_url: str, category: str, source_metadata: dict) -> list[dict]:
     # PHASE 4 STEP 8
+    # PHASE 4 STEP 9
     ai_library = load_factlens_ai_library()
     ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
+    source_metadata_json = json.dumps(source_metadata, ensure_ascii=True, sort_keys=True)
     system_prompt = (
         "You are the AI pre-check engine for FactLens. "
         "Use the FactLens AI Teaching Library below as the highest priority platform rule set. "
@@ -322,10 +384,14 @@ def _build_prompt(title: str, description: str, source_url: str, category: str) 
         "OPINION means subjective taste, preference, quality judgment, or personal feeling, such as 'Solo Leveling is good', 'This movie is boring', or 'Bitcoin is better than gold'. "
         "FACTUAL means it can be verified by evidence, such as 'Coffee improves memory' or 'City council approved a transit program'. "
         "QUESTION means the user asks a question instead of making a claim. PROMOTION means advertising or self-promotion. SATIRE means joke, parody, or satire. UNCLEAR means too vague to classify. "
-        "If claim_type is OPINION, QUESTION, SATIRE, or PROMOTION, set ai_status to NOT_FACT_CHECKABLE, ai_confidence to 0.5, source_count to 0, source_quality to unknown, explain why in red_flags, and say in ai_summary that it is not a factual claim that can be verified as true or fake. "
+        "If claim_type is OPINION, QUESTION, SATIRE, or PROMOTION, set ai_status to NOT_FACT_CHECKABLE, ai_confidence to 0.5, source_count to 0, explain why in red_flags, and say in ai_summary that it is not a factual claim that can be verified as true or fake. "
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "
+        "Official source metadata can increase confidence only if that source supports the claim. "
+        "Social source metadata must not be treated as strong evidence alone. "
+        "Unknown source metadata should lower confidence. "
+        "Source score is not final truth. It is only one signal. "
         "No live search is available in this call, so source_count must be 0 unless the submitted text explicitly mentions corroborating sources. "
         f"FactLens AI Teaching Library: {ai_library_json}"
     )
@@ -333,7 +399,8 @@ def _build_prompt(title: str, description: str, source_url: str, category: str) 
         f"Title: {title or ''}\n"
         f"Description: {description or ''}\n"
         f"Source URL: {source_url or ''}\n"
-        f"Category: {category or 'Other'}"
+        f"Category: {category or 'Other'}\n"
+        f"FactLens source metadata: {source_metadata_json}"
     )
 
     return [
@@ -417,14 +484,28 @@ def test_openai_connection() -> dict:
 
 
 # PHASE 4 STEP 5
-def analyze_claim_with_openai_response(title: str, description: str, source_url: str, category: str) -> dict:
+def analyze_claim_with_openai_response(
+    title: str,
+    description: str,
+    source_url: str,
+    category: str,
+    source_metadata: dict | None = None,
+) -> dict:
+    # PHASE 4 STEP 9
+    scored_source = _get_source_metadata(source_url, source_metadata)
     api_key = os.environ.get("OPENAI_API_KEY", "")
 
     if not api_key or OpenAI is None:
         print("[openai] OpenAI client unavailable or API key missing; using fallback source-risk logic", flush=True)
         return {
             "ok": True,
-            **_fallback_source_risk_analysis(title, description, source_url, openai_missing=True),
+            **_fallback_source_risk_analysis(
+                title,
+                description,
+                source_url,
+                openai_missing=True,
+                source_metadata=scored_source,
+            ),
         }
 
     model = get_openai_model()
@@ -433,7 +514,7 @@ def analyze_claim_with_openai_response(title: str, description: str, source_url:
         client = OpenAI(api_key=api_key)
         response = client.responses.parse(
             model=model,
-            input=_build_prompt(title, description, source_url, category),
+            input=_build_prompt(title, description, source_url, category, scored_source),
             text_format=FactLensAiPrecheckResult,
         )
         parsed = getattr(response, "output_parsed", None)
@@ -442,7 +523,7 @@ def analyze_claim_with_openai_response(title: str, description: str, source_url:
             print("[openai] AI pre-check success", flush=True)
             return {
                 "ok": True,
-                **_normalize_analysis(_model_to_dict(parsed)),
+                **_attach_source_metadata(_normalize_analysis(_model_to_dict(parsed)), scored_source),
             }
 
         output_text = getattr(response, "output_text", "")
@@ -456,7 +537,7 @@ def analyze_claim_with_openai_response(title: str, description: str, source_url:
 
             return {
                 "ok": True,
-                **_normalize_analysis(raw_result),
+                **_attach_source_metadata(_normalize_analysis(raw_result), scored_source),
             }
 
         return _invalid_json_response("")
@@ -466,15 +547,22 @@ def analyze_claim_with_openai_response(title: str, description: str, source_url:
         print(f"[openai] AI pre-check failure: {error}", flush=True)
         return {
             "ok": False,
-            **_error_analysis(),
+            **_attach_source_metadata(_error_analysis(), scored_source),
             "error": "AI pre-check failed. Please retry.",
         }
 
 
-def analyze_claim_with_openai(title: str, description: str, source_url: str, category: str) -> dict:
-    result = analyze_claim_with_openai_response(title, description, source_url, category)
+def analyze_claim_with_openai(
+    title: str,
+    description: str,
+    source_url: str,
+    category: str,
+    source_metadata: dict | None = None,
+) -> dict:
+    result = analyze_claim_with_openai_response(title, description, source_url, category, source_metadata)
 
     if result.get("ok"):
         return {key: value for key, value in result.items() if key not in {"ok", "error", "raw"}}
 
-    return _error_analysis()
+    scored_source = _get_source_metadata(source_url, source_metadata)
+    return _attach_source_metadata(_error_analysis(), scored_source)

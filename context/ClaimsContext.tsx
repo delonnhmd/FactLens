@@ -5,6 +5,7 @@
 // PHASE 3 STEP 32
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
+// PHASE 4 STEP 9
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -168,6 +169,8 @@ function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
   if (
     sourceQuality === "official" ||
     sourceQuality === "mainstream" ||
+    sourceQuality === "specialized" ||
+    sourceQuality === "social" ||
     sourceQuality === "blog" ||
     sourceQuality === "unknown"
   ) {
@@ -213,6 +216,9 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const claimType = mapClaimType(updatedClaim.claim_type ?? result.claim_type ?? claim.claimType);
   const sourceQuality = mapSourceQuality(updatedClaim.source_quality ?? result.source_quality ?? claim.sourceQuality);
   const sourceCount = getNumberField(updatedClaim.source_count ?? result.source_count) ?? claim.sourceCount;
+  const sourceDomain = getStringField(updatedClaim.source_domain ?? result.source_domain) ?? claim.sourceDomain;
+  const sourceScore = getNumberField(updatedClaim.source_score ?? result.source_score) ?? claim.sourceScore;
+  const sourceReason = getStringField(updatedClaim.source_reason ?? result.source_reason) ?? claim.sourceReason;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
   const aiSummary = getStringField(updatedClaim.ai_summary ?? result.ai_summary) ?? claim.aiSummary;
 
@@ -223,6 +229,9 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     claimType,
     sourceQuality,
     sourceCount,
+    sourceDomain,
+    sourceScore,
+    sourceReason,
     redFlags,
     aiSummary,
     aiCheck: {

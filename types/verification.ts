@@ -4,7 +4,8 @@ import type { VoteOption } from "./claim";
 
 export type VerificationMode = "test" | "production";
 export type VerificationVerdict = "true" | "fake" | "unsure" | "pending";
-export type SourceQuality = "official" | "mainstream" | "blog" | "unknown";
+// PHASE 4 STEP 9
+export type SourceQuality = "official" | "mainstream" | "specialized" | "social" | "blog" | "unknown";
 export type VerificationUserRole = "new_user" | "new" | "regular" | "verified" | "high_accuracy" | "expert";
 
 // PHASE 3 STEP 17

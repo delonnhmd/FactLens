@@ -1,4 +1,5 @@
 # PHASE 4 STEP 8
+# PHASE 4 STEP 9
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -13,6 +14,7 @@ AI_LIBRARY_FILES = {
     "source_quality_rules": "source_quality_rules.json",
     "red_flag_rules": "red_flag_rules.json",
     "confidence_rules": "confidence_rules.json",
+    "source_credibility": "source_credibility.json",
 }
 
 DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
@@ -40,13 +42,22 @@ DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
         },
     },
     "source_quality_rules": {
-        "allowed_source_quality": ["official", "mainstream", "blog", "unknown"],
+        "allowed_source_quality": ["official", "mainstream", "specialized", "social", "blog", "unknown"],
         "rules": {
             "official": [".gov", ".edu", "who.int", "cdc.gov", "fda.gov", "sec.gov", "federalreserve.gov"],
             "mainstream": ["reuters.com", "apnews.com", "bbc.com", "npr.org", "cnn.com"],
+            "specialized": ["healthline.com", "webmd.com", "mayoclinic.org", "investopedia.com"],
+            "social": ["youtube.com", "tiktok.com", "x.com", "facebook.com", "instagram.com", "reddit.com"],
             "blog": ["personal blogs", "affiliate articles", "medium posts", "unsourced newsletters"],
             "unknown": ["unrecognized website", "random domain", "missing source"],
         },
+    },
+    "source_credibility": {
+        "official": {"score": 90, "domains": []},
+        "mainstream": {"score": 75, "domains": []},
+        "specialized": {"score": 70, "domains": []},
+        "social": {"score": 35, "domains": []},
+        "unknown": {"score": 40, "domains": []},
     },
     "red_flag_rules": {
         "red_flags": [

@@ -4,6 +4,7 @@
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
 // PHASE 4 STEP 8
+// PHASE 4 STEP 9
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -19,7 +20,12 @@ import { VoteBreakdownBars } from "../../components/VoteBreakdownBars";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
-import { getSourceQuality, type SourceQuality } from "../../services/sourceQuality";
+import {
+  formatSourceCredibilityScore,
+  getSourceCredibilityLabel,
+  getSourceQuality,
+  type SourceQuality,
+} from "../../services/sourceQuality";
 import { getScoreLockAt, getVoteAcceptUntil } from "../../utils/verificationTiming";
 import {
   subscribeToClaimById,
@@ -104,11 +110,7 @@ function formatPercent(value: number | null | undefined): string {
 }
 
 function formatSourceQualityLabel(value: string | null | undefined): string {
-  if (!value) {
-    return "unknown";
-  }
-
-  return value.replace(/_/g, " ");
+  return getSourceCredibilityLabel(value);
 }
 
 // PHASE 4 STEP 7
@@ -575,6 +577,8 @@ export default function ClaimDetailScreen() {
     "AI pre-check is pending. Community voting and evidence are still needed.";
   // PHASE 4 STEP 7
   const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
+  // PHASE 4 STEP 9
+  const sourceNeedsEvidence = typeof claim.sourceScore === "number" && claim.sourceScore < 50;
   // PHASE 4 STEP 3
   const canRetryAiPrecheck =
     claim.aiCheck.status === "PENDING" ||
@@ -653,14 +657,19 @@ export default function ClaimDetailScreen() {
                   <Text style={styles.aiDetailValue}>{formatSourceQualityLabel(claim.sourceQuality)}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
-                  <Text style={styles.aiDetailLabel}>Sources found</Text>
-                  <Text style={styles.aiDetailValue}>{claim.sourceCount}</Text>
+                  <Text style={styles.aiDetailLabel}>Source score</Text>
+                  <Text style={styles.aiDetailValue}>{formatSourceCredibilityScore(claim.sourceScore)}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Claim type</Text>
                   <Text style={styles.aiDetailValue}>{formatClaimType(claim.claimType)}</Text>
                 </View>
               </View>
+              <Text style={styles.aiText}>Source domain: {claim.sourceDomain || "Pending"}</Text>
+              <Text style={styles.aiText}>Source reason: {claim.sourceReason || "Source score pending."}</Text>
+              {sourceNeedsEvidence ? (
+                <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>
+              ) : null}
               <Text style={styles.aiText}>{aiSummary}</Text>
               {claim.redFlags.length > 0 ? (
                 <Text style={styles.aiRedFlags}>Red flags: {claim.redFlags.join(", ")}</Text>
@@ -735,6 +744,13 @@ export default function ClaimDetailScreen() {
           </Text>
           <View style={styles.sourceQualityPanel}>
             <SourceQualityBadge quality={mainSourceQuality} showScore />
+            <Text style={styles.sourceQualityReason}>Source quality: {formatSourceQualityLabel(claim.sourceQuality)}</Text>
+            <Text style={styles.sourceQualityReason}>Source score: {formatSourceCredibilityScore(claim.sourceScore)}</Text>
+            <Text style={styles.sourceQualityReason}>Source domain: {claim.sourceDomain || "Pending"}</Text>
+            <Text style={styles.sourceQualityReason}>Source reason: {claim.sourceReason || "Source score pending."}</Text>
+            {sourceNeedsEvidence ? (
+              <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>
+            ) : null}
             <Text style={styles.sourceQualityReason}>{mainSourceQuality.reason}</Text>
           </View>
         </View>
@@ -1245,10 +1261,12 @@ const styles = StyleSheet.create({
   },
   aiDetailGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
   },
   aiDetailItem: {
-    flex: 1,
+    flexBasis: "48%",
+    flexGrow: 1,
   },
   aiDetailLabel: {
     color: theme.colors.subtext,
@@ -1256,7 +1274,7 @@ const styles = StyleSheet.create({
   },
   aiDetailValue: {
     color: theme.colors.ai,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "500",
     marginTop: 2,
   },
@@ -1296,6 +1314,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   notFactCheckableWarning: {
+    color: theme.colors.warning,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
+  sourceWarning: {
     color: theme.colors.warning,
     fontSize: 12,
     fontWeight: "600",

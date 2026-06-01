@@ -3,6 +3,7 @@
 // PHASE 4 STEP 3
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
+// PHASE 4 STEP 9
 import { API_CONFIG, getBackendUrl } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
@@ -14,6 +15,9 @@ export interface AiPrecheckResponse {
   ai_confidence?: number | null;
   source_count?: number | null;
   source_quality?: string | null;
+  source_domain?: string | null;
+  source_score?: number | null;
+  source_reason?: string | null;
   red_flags?: string[] | null;
   ai_summary?: string | null;
   ai_status?: string | null;
@@ -77,6 +81,9 @@ async function postAiPrecheck(
       ai_confidence: data.ai_confidence ?? null,
       source_count: data.source_count ?? null,
       source_quality: data.source_quality ?? null,
+      source_domain: data.source_domain ?? null,
+      source_score: data.source_score ?? null,
+      source_reason: data.source_reason ?? null,
       red_flags: data.red_flags ?? [],
       ai_summary: data.ai_summary ?? null,
       ai_status: data.ai_status ?? null,

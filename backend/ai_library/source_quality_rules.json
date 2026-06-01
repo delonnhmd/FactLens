@@ -2,6 +2,8 @@
   "allowed_source_quality": [
     "official",
     "mainstream",
+    "specialized",
+    "social",
     "blog",
     "unknown"
   ],
@@ -26,6 +28,25 @@
       "abcnews.go.com",
       "nytimes.com",
       "washingtonpost.com"
+    ],
+    "specialized": [
+      "healthline.com",
+      "webmd.com",
+      "mayoclinic.org",
+      "coindesk.com",
+      "cointelegraph.com",
+      "investopedia.com",
+      "morningstar.com"
+    ],
+    "social": [
+      "youtube.com",
+      "youtu.be",
+      "tiktok.com",
+      "x.com",
+      "twitter.com",
+      "facebook.com",
+      "instagram.com",
+      "reddit.com"
     ],
     "blog": [
       "personal blogs",

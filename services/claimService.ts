@@ -8,6 +8,7 @@
 // PHASE 3 STEP 32
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
+// PHASE 4 STEP 9
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -114,6 +115,9 @@ export interface ClaimRow {
   expected_participation?: number | null;
   source_count?: number | null;
   source_quality?: string | null;
+  source_domain?: string | null;
+  source_score?: number | null;
+  source_reason?: string | null;
   red_flags?: unknown;
   ai_summary?: string | null;
   created_at?: string | null;
@@ -334,6 +338,8 @@ function mapSourceQuality(sourceQuality: string | null | undefined): SourceQuali
   if (
     sourceQuality === "official" ||
     sourceQuality === "mainstream" ||
+    sourceQuality === "specialized" ||
+    sourceQuality === "social" ||
     sourceQuality === "blog" ||
     sourceQuality === "unknown"
   ) {
@@ -492,6 +498,10 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   const claimType = mapClaimType(row.claim_type);
   const sourceQuality = mapSourceQuality(row.source_quality);
   const sourceCount = row.source_count ?? 0;
+  // PHASE 4 STEP 9
+  const sourceDomain = row.source_domain ?? null;
+  const sourceScore = row.source_score ?? null;
+  const sourceReason = row.source_reason ?? null;
   const aiSummary = row.ai_summary ?? row.ai_reason ?? null;
   // PHASE 3 STEP 25
   const aiCheck = {
@@ -556,6 +566,9 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     expectedParticipation: row.expected_participation ?? modeConfig.expectedParticipation,
     sourceCount,
     sourceQuality,
+    sourceDomain,
+    sourceScore,
+    sourceReason,
     redFlags: aiFlags,
     aiSummary,
     status: mapStatus(row.status),
@@ -650,6 +663,9 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     expectedParticipation: row.expected_participation ?? 10,
     sourceCount: row.source_count ?? 0,
     sourceQuality: mapSourceQuality(row.source_quality),
+    sourceDomain: row.source_domain ?? null,
+    sourceScore: row.source_score ?? null,
+    sourceReason: row.source_reason ?? null,
     redFlags: [],
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status ?? "OPEN"),
@@ -730,6 +746,10 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     expected_participation: timing.expectedParticipation,
     source_count: 0,
     source_quality: "unknown",
+    // PHASE 4 STEP 9
+    source_domain: null,
+    source_score: null,
+    source_reason: null,
     red_flags: [],
     ai_summary: null,
     expires_at: timing.expiresAt,

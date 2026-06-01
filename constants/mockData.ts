@@ -1,6 +1,7 @@
 // PHASE 1 STEP 2
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
+// PHASE 4 STEP 9
 import type { Claim } from "../types/claim";
 import { generateClaimShareUrl, generateClaimSlug } from "../services/claimLinks";
 import { getExpiresAt } from "../services/claimVoting";
@@ -31,6 +32,9 @@ const verificationFields = (createdAt: string) => ({
   expectedParticipation: 10,
   sourceCount: 0,
   sourceQuality: "unknown" as const,
+  sourceDomain: null,
+  sourceScore: null,
+  sourceReason: null,
   redFlags: [],
   aiSummary: null,
   aiStatus: "PENDING" as const,

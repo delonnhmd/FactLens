@@ -3,6 +3,7 @@
 // PHASE 3 STEP 32
 // PHASE 4 STEP 7
 // PHASE 4 STEP 8
+// PHASE 4 STEP 9
 import { memo, useCallback, useState } from "react";
 import { Alert, Image, TouchableOpacity, View, Text, StyleSheet, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +17,7 @@ import { VoteBreakdownBars } from "./VoteBreakdownBars";
 import { theme } from "../constants/theme";
 import { useAuth } from "../context/AuthContext";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../services/claimVoting";
-import { getSourceQuality } from "../services/sourceQuality";
+import { formatSourceCredibilityScore, getSourceCredibilityLabel, getSourceQuality } from "../services/sourceQuality";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
 
 // PHASE 3 STEP 10
@@ -64,11 +65,7 @@ function formatPercent(value: number | null | undefined): string {
 }
 
 function formatSourceQuality(value: string | null | undefined): string {
-  if (!value) {
-    return "unknown";
-  }
-
-  return value.replace(/_/g, " ");
+  return getSourceCredibilityLabel(value);
 }
 
 // PHASE 4 STEP 7
@@ -139,6 +136,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     "AI pre-check is pending. Community voting and evidence are still needed.";
   // PHASE 4 STEP 7
   const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
+  // PHASE 4 STEP 9
+  const sourceNeedsEvidence = typeof claim.sourceScore === "number" && claim.sourceScore < 50;
 
   // PHASE 3 STEP 6
   const handleSubmitReport = useCallback(async () => {
@@ -252,8 +251,16 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           </View>
           <View style={styles.aiSignalPanel}>
             <Text style={styles.aiSignalText}>
-              AI confidence {formatPercent(claim.aiCheck.confidence)} · Source {formatSourceQuality(claim.sourceQuality)}
+              AI confidence {formatPercent(claim.aiCheck.confidence)} - Source quality: {formatSourceQuality(claim.sourceQuality)}
             </Text>
+            <Text style={styles.aiSignalText}>Source score: {formatSourceCredibilityScore(claim.sourceScore)}</Text>
+            <Text style={styles.aiSignalText}>Source domain: {claim.sourceDomain || "Pending"}</Text>
+            <Text style={styles.aiSignalText} numberOfLines={2}>
+              Reason: {claim.sourceReason || "Source score pending."}
+            </Text>
+            {sourceNeedsEvidence ? (
+              <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>
+            ) : null}
             <Text style={styles.aiSignalText}>Claim type: {formatClaimType(claim.claimType)}</Text>
             <Text style={styles.aiSignalText} numberOfLines={2}>{aiSummary}</Text>
             {claim.redFlags.length > 0 ? (
@@ -560,6 +567,12 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   notFactCheckableWarning: {
+    color: theme.colors.warning,
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 15,
+  },
+  sourceWarning: {
     color: theme.colors.warning,
     fontSize: 11,
     fontWeight: "600",
