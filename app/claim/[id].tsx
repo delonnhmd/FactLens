@@ -5,6 +5,7 @@
 // PHASE 4 STEP 7
 // PHASE 4 STEP 8
 // PHASE 4 STEP 9
+// PHASE 4 STEP 10
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -143,6 +144,7 @@ export default function ClaimDetailScreen() {
     reportClaim,
     refreshClaimVerdict,
     runAiPrecheckForClaimId,
+    retryAiPrecheckWithEvidenceForClaimId,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -168,6 +170,8 @@ export default function ClaimDetailScreen() {
   const [voteSuccess, setVoteSuccess] = useState("");
   // PHASE 4 STEP 2
   const [aiPrecheckLoading, setAiPrecheckLoading] = useState(false);
+  // PHASE 4 STEP 10
+  const [aiEvidenceRecheckLoading, setAiEvidenceRecheckLoading] = useState(false);
   const [aiPrecheckMessage, setAiPrecheckMessage] = useState("");
   const [aiPrecheckError, setAiPrecheckError] = useState("");
   // PHASE 3 STEP 12
@@ -525,6 +529,28 @@ export default function ClaimDetailScreen() {
     }
   };
 
+  // PHASE 4 STEP 10
+  const handleRecheckWithEvidence = async () => {
+    if (!claim) {
+      return;
+    }
+
+    setAiEvidenceRecheckLoading(true);
+    setAiPrecheckMessage("");
+    setAiPrecheckError("");
+
+    try {
+      await retryAiPrecheckWithEvidenceForClaimId(claim.id);
+      await waitForClaimRefetch();
+      await refreshDetailClaim();
+      setAiPrecheckMessage("AI re-check updated.");
+    } catch {
+      setAiPrecheckError("AI re-check failed. Try later.");
+    } finally {
+      setAiEvidenceRecheckLoading(false);
+    }
+  };
+
   if (!claim) {
     return (
       <SafeAreaView style={styles.container}>
@@ -563,6 +589,9 @@ export default function ClaimDetailScreen() {
   const engineVerdict = verdictTitle ?? (claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
+  // PHASE 4 STEP 10
+  const evidenceUsedCount = claim.evidenceUsedCount ?? 0;
+  const hasEvidenceLinks = evidenceCount > 0 || claim.evidence.length > 0;
   // PHASE 3 STEP 1
   const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
@@ -670,6 +699,12 @@ export default function ClaimDetailScreen() {
               {sourceNeedsEvidence ? (
                 <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>
               ) : null}
+              <Text style={styles.aiText}>Evidence used by AI: {evidenceUsedCount}</Text>
+              <Text style={styles.aiText}>
+                {evidenceUsedCount > 0
+                  ? `AI reviewed ${evidenceUsedCount} evidence links.`
+                  : "No evidence links were used in this AI check."}
+              </Text>
               <Text style={styles.aiText}>{aiSummary}</Text>
               {claim.redFlags.length > 0 ? (
                 <Text style={styles.aiRedFlags}>Red flags: {claim.redFlags.join(", ")}</Text>
@@ -684,13 +719,25 @@ export default function ClaimDetailScreen() {
               </Text>
               {canRetryAiPrecheck ? (
                 <TouchableOpacity
-                  style={[styles.aiRetryButton, aiPrecheckLoading && styles.disabledButton]}
+                  style={[styles.aiRetryButton, (aiPrecheckLoading || aiEvidenceRecheckLoading) && styles.disabledButton]}
                   activeOpacity={0.85}
-                  disabled={aiPrecheckLoading}
+                  disabled={aiPrecheckLoading || aiEvidenceRecheckLoading}
                   onPress={handleRunAiPrecheck}
                 >
                   <Text style={styles.aiRetryButtonText}>
                     {aiPrecheckLoading ? "Checking..." : "Run AI Pre-check"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              {hasEvidenceLinks ? (
+                <TouchableOpacity
+                  style={[styles.aiRetryButton, (aiPrecheckLoading || aiEvidenceRecheckLoading) && styles.disabledButton]}
+                  activeOpacity={0.85}
+                  disabled={aiPrecheckLoading || aiEvidenceRecheckLoading}
+                  onPress={handleRecheckWithEvidence}
+                >
+                  <Text style={styles.aiRetryButtonText}>
+                    {aiEvidenceRecheckLoading ? "Re-checking..." : "Re-check with Evidence"}
                   </Text>
                 </TouchableOpacity>
               ) : null}

@@ -3,6 +3,7 @@
 # PHASE 4 STEP 7
 # PHASE 4 STEP 8
 # PHASE 4 STEP 9
+# PHASE 4 STEP 10
 import json
 import os
 from typing import Literal
@@ -39,6 +40,7 @@ class FactLensAiPrecheckResult(BaseModel):
     ai_confidence: float
     source_count: int
     source_quality: SourceQuality
+    evidence_used_count: int = 0
     red_flags: list[str]
     ai_summary: str
     ai_status: AiStatus
@@ -136,6 +138,7 @@ def _not_fact_checkable_analysis(claim_type: ClaimType) -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
+        "evidence_used_count": 0,
         "red_flags": [f"Claim type is {type_label}, not a factual news claim"],
         "ai_summary": "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake.",
         "ai_status": "NOT_FACT_CHECKABLE",
@@ -186,15 +189,45 @@ def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
     return next_analysis
 
 
+# PHASE 4 STEP 10
+def _normalize_evidence_rows(evidence_rows: list[dict] | None = None) -> list[dict]:
+    normalized_rows: list[dict] = []
+
+    for row in (evidence_rows or [])[:10]:
+        normalized_rows.append(
+            {
+                "id": str(row.get("id") or ""),
+                "url": str(row.get("url") or ""),
+                "note": str(row.get("note") or "")[:500],
+                "evidence_type": str(row.get("evidence_type") or "UNCLEAR"),
+                "source_quality_label": row.get("source_quality_label"),
+                "source_quality_score": row.get("source_quality_score"),
+                "created_at": str(row.get("created_at") or ""),
+            }
+        )
+
+    return normalized_rows
+
+
+# PHASE 4 STEP 10
+def _attach_evidence_metadata(analysis: dict, evidence_rows: list[dict] | None = None) -> dict:
+    return {
+        **analysis,
+        "evidence_used_count": len(_normalize_evidence_rows(evidence_rows)),
+    }
+
+
 def _fallback_source_risk_analysis(
     title: str,
     description: str,
     source_url: str,
     openai_missing: bool = False,
     source_metadata: dict | None = None,
+    evidence_rows: list[dict] | None = None,
 ) -> dict:
     source_url_lower = source_url.strip().lower()
     scored_source = _get_source_metadata(source_url, source_metadata)
+    normalized_evidence = _normalize_evidence_rows(evidence_rows)
     searchable_text = f"{title} {description}".lower()
     red_flags: list[str] = []
 
@@ -207,7 +240,10 @@ def _fallback_source_risk_analysis(
 
     non_fact_checkable_type = _classify_non_fact_checkable(title, description)
     if non_fact_checkable_type and non_fact_checkable_type != "UNCLEAR":
-        return _attach_source_metadata(_not_fact_checkable_analysis(non_fact_checkable_type), scored_source)
+        return _attach_evidence_metadata(
+            _attach_source_metadata(_not_fact_checkable_analysis(non_fact_checkable_type), scored_source),
+            normalized_evidence,
+        )
 
     if non_fact_checkable_type == "UNCLEAR":
         claim_type = "UNCLEAR"
@@ -255,7 +291,11 @@ def _fallback_source_risk_analysis(
     if openai_missing:
         red_flags.append("OpenAI API key not configured")
 
-    return _attach_source_metadata({
+    if normalized_evidence:
+        source_count = max(source_count, 1 + len(normalized_evidence))
+        ai_summary = "Community evidence links were included for AI retry, but OpenAI is unavailable."
+
+    analysis = {
         "claim_type": claim_type,
         "ai_confidence": round(ai_confidence, 2),
         "source_count": source_count,
@@ -263,7 +303,9 @@ def _fallback_source_risk_analysis(
         "red_flags": red_flags,
         "ai_summary": ai_summary,
         "ai_status": ai_status,
-    }, scored_source)
+    }
+
+    return _attach_evidence_metadata(_attach_source_metadata(analysis, scored_source), normalized_evidence)
 
 
 def _error_analysis() -> dict:
@@ -272,6 +314,7 @@ def _error_analysis() -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
+        "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
         "ai_summary": "AI pre-check failed. Community voting and evidence are still available.",
         "ai_status": "ERROR",
@@ -313,6 +356,12 @@ def _normalize_analysis(raw_result: dict) -> dict:
     except (TypeError, ValueError):
         source_count = 0
 
+    # PHASE 4 STEP 10
+    try:
+        evidence_used_count = int(raw_result.get("evidence_used_count") or 0)
+    except (TypeError, ValueError):
+        evidence_used_count = 0
+
     ai_confidence = _clamp_confidence(raw_result.get("ai_confidence"))
 
     if claim_type in {"OPINION", "QUESTION", "SATIRE", "PROMOTION"}:
@@ -320,6 +369,7 @@ def _normalize_analysis(raw_result: dict) -> dict:
         ai_confidence = 0.5
         source_quality = "unknown"
         source_count = 0
+        evidence_used_count = 0
 
     ai_summary = str(raw_result.get("ai_summary") or "").strip()
 
@@ -337,6 +387,7 @@ def _normalize_analysis(raw_result: dict) -> dict:
         "ai_confidence": ai_confidence,
         "source_count": max(source_count, 0),
         "source_quality": source_quality,
+        "evidence_used_count": max(evidence_used_count, 0),
         "red_flags": [str(flag) for flag in red_flags[:8]],
         "ai_summary": ai_summary[:500],
         "ai_status": ai_status,
@@ -367,12 +418,21 @@ def _normalize_connection_message(value: object) -> str:
     return message or "FactLens AI is connected"
 
 
-def _build_prompt(title: str, description: str, source_url: str, category: str, source_metadata: dict) -> list[dict]:
+def _build_prompt(
+    title: str,
+    description: str,
+    source_url: str,
+    category: str,
+    source_metadata: dict,
+    evidence_rows: list[dict] | None = None,
+) -> list[dict]:
     # PHASE 4 STEP 8
     # PHASE 4 STEP 9
+    # PHASE 4 STEP 10
     ai_library = load_factlens_ai_library()
     ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
     source_metadata_json = json.dumps(source_metadata, ensure_ascii=True, sort_keys=True)
+    evidence_json = json.dumps(_normalize_evidence_rows(evidence_rows), ensure_ascii=True, sort_keys=True)
     system_prompt = (
         "You are the AI pre-check engine for FactLens. "
         "Use the FactLens AI Teaching Library below as the highest priority platform rule set. "
@@ -392,15 +452,25 @@ def _build_prompt(title: str, description: str, source_url: str, category: str, 
         "Social source metadata must not be treated as strong evidence alone. "
         "Unknown source metadata should lower confidence. "
         "Source score is not final truth. It is only one signal. "
-        "No live search is available in this call, so source_count must be 0 unless the submitted text explicitly mentions corroborating sources. "
+        "Community evidence links are user-submitted signals, not final truth. "
+        "Increase confidence only if community evidence supports the claim. "
+        "Decrease confidence if community evidence contradicts the claim. "
+        "Keep NEEDS_MORE_EVIDENCE if evidence is weak, social-only, irrelevant, or does not address the claim. "
+        "Never invent evidence. Mention evidence in ai_summary only when you used it. "
+        "Set evidence_used_count to the number of provided community evidence links you considered. "
+        "No live search is available in this call, so source_count must count only the main source and provided community evidence that you actually use. "
         f"FactLens AI Teaching Library: {ai_library_json}"
     )
     user_prompt = (
+        "Main source:\n"
         f"Title: {title or ''}\n"
         f"Description: {description or ''}\n"
         f"Source URL: {source_url or ''}\n"
         f"Category: {category or 'Other'}\n"
-        f"FactLens source metadata: {source_metadata_json}"
+        f"Source score: {source_metadata.get('source_score')}\n"
+        f"Source quality: {source_metadata.get('source_quality')}\n"
+        f"FactLens source metadata: {source_metadata_json}\n"
+        f"Community evidence: {evidence_json}"
     )
 
     return [
@@ -490,9 +560,12 @@ def analyze_claim_with_openai_response(
     source_url: str,
     category: str,
     source_metadata: dict | None = None,
+    evidence_rows: list[dict] | None = None,
 ) -> dict:
     # PHASE 4 STEP 9
     scored_source = _get_source_metadata(source_url, source_metadata)
+    # PHASE 4 STEP 10
+    normalized_evidence = _normalize_evidence_rows(evidence_rows)
     api_key = os.environ.get("OPENAI_API_KEY", "")
 
     if not api_key or OpenAI is None:
@@ -505,6 +578,7 @@ def analyze_claim_with_openai_response(
                 source_url,
                 openai_missing=True,
                 source_metadata=scored_source,
+                evidence_rows=normalized_evidence,
             ),
         }
 
@@ -514,7 +588,7 @@ def analyze_claim_with_openai_response(
         client = OpenAI(api_key=api_key)
         response = client.responses.parse(
             model=model,
-            input=_build_prompt(title, description, source_url, category, scored_source),
+            input=_build_prompt(title, description, source_url, category, scored_source, normalized_evidence),
             text_format=FactLensAiPrecheckResult,
         )
         parsed = getattr(response, "output_parsed", None)
@@ -523,7 +597,10 @@ def analyze_claim_with_openai_response(
             print("[openai] AI pre-check success", flush=True)
             return {
                 "ok": True,
-                **_attach_source_metadata(_normalize_analysis(_model_to_dict(parsed)), scored_source),
+                **_attach_evidence_metadata(
+                    _attach_source_metadata(_normalize_analysis(_model_to_dict(parsed)), scored_source),
+                    normalized_evidence,
+                ),
             }
 
         output_text = getattr(response, "output_text", "")
@@ -537,7 +614,10 @@ def analyze_claim_with_openai_response(
 
             return {
                 "ok": True,
-                **_attach_source_metadata(_normalize_analysis(raw_result), scored_source),
+                **_attach_evidence_metadata(
+                    _attach_source_metadata(_normalize_analysis(raw_result), scored_source),
+                    normalized_evidence,
+                ),
             }
 
         return _invalid_json_response("")
@@ -547,7 +627,7 @@ def analyze_claim_with_openai_response(
         print(f"[openai] AI pre-check failure: {error}", flush=True)
         return {
             "ok": False,
-            **_attach_source_metadata(_error_analysis(), scored_source),
+            **_attach_evidence_metadata(_attach_source_metadata(_error_analysis(), scored_source), normalized_evidence),
             "error": "AI pre-check failed. Please retry.",
         }
 
@@ -558,11 +638,12 @@ def analyze_claim_with_openai(
     source_url: str,
     category: str,
     source_metadata: dict | None = None,
+    evidence_rows: list[dict] | None = None,
 ) -> dict:
-    result = analyze_claim_with_openai_response(title, description, source_url, category, source_metadata)
+    result = analyze_claim_with_openai_response(title, description, source_url, category, source_metadata, evidence_rows)
 
     if result.get("ok"):
         return {key: value for key, value in result.items() if key not in {"ok", "error", "raw"}}
 
     scored_source = _get_source_metadata(source_url, source_metadata)
-    return _attach_source_metadata(_error_analysis(), scored_source)
+    return _attach_evidence_metadata(_attach_source_metadata(_error_analysis(), scored_source), evidence_rows)

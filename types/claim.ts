@@ -1,5 +1,6 @@
 // PHASE 1 STEP 1
 // PHASE 4 STEP 7
+// PHASE 4 STEP 10
 import type { User } from "./user";
 import type { SourceQuality, VerificationMode } from "./verification";
 
@@ -144,6 +145,8 @@ export interface Claim {
   sourceDomain: string | null;
   sourceScore: number | null;
   sourceReason: string | null;
+  // PHASE 4 STEP 10
+  evidenceUsedCount: number;
   redFlags: string[];
   aiSummary: string | null;
   status: ClaimStatus;

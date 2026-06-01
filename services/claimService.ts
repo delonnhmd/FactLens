@@ -9,6 +9,7 @@
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
 // PHASE 4 STEP 9
+// PHASE 4 STEP 10
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -95,6 +96,7 @@ export interface ClaimRow {
   ai_reason: string | null;
   report_count: number | null;
   evidence_count: number | null;
+  evidence_used_count?: number | null;
   is_flagged: boolean | null;
   // PHASE 3 STEP 10
   verdict_reason: string | null;
@@ -502,6 +504,8 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   const sourceDomain = row.source_domain ?? null;
   const sourceScore = row.source_score ?? null;
   const sourceReason = row.source_reason ?? null;
+  // PHASE 4 STEP 10
+  const evidenceUsedCount = row.evidence_used_count ?? 0;
   const aiSummary = row.ai_summary ?? row.ai_reason ?? null;
   // PHASE 3 STEP 25
   const aiCheck = {
@@ -569,6 +573,7 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     sourceDomain,
     sourceScore,
     sourceReason,
+    evidenceUsedCount,
     redFlags: aiFlags,
     aiSummary,
     status: mapStatus(row.status),
@@ -666,6 +671,7 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     sourceDomain: row.source_domain ?? null,
     sourceScore: row.source_score ?? null,
     sourceReason: row.source_reason ?? null,
+    evidenceUsedCount: row.evidence_used_count ?? 0,
     redFlags: [],
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status ?? "OPEN"),
@@ -731,6 +737,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     ai_reason: null,
     report_count: 0,
     evidence_count: 0,
+    evidence_used_count: 0,
     is_flagged: false,
     mode: timing.mode,
     current_phase: 0,

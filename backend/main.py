@@ -10,6 +10,7 @@
 # PHASE 4 STEP 7
 # PHASE 4 STEP 8
 # PHASE 4 STEP 9
+# PHASE 4 STEP 10
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -135,6 +136,8 @@ class AiPrecheckResponse(BaseModel):
     source_domain: str | None = None
     source_score: int | None = None
     source_reason: str | None = None
+    # PHASE 4 STEP 10
+    evidence_used_count: int | None = None
     red_flags: list[str] | None = None
     ai_summary: str | None = None
     ai_status: AiStatus | None = None
@@ -211,6 +214,27 @@ def log_source_score(endpoint_label: str, source_metadata: dict) -> None:
     print("[source] score:", source_metadata.get("source_score"), flush=True)
 
 
+# PHASE 4 STEP 10
+def fetch_evidence_rows(claim_id: str) -> list[dict]:
+    print("[ai evidence] claim_id:", claim_id, flush=True)
+    supabase = get_supabase_client()
+    response = (
+        supabase.table("evidence")
+        .select("id, url, note, evidence_type, source_quality_label, source_quality_score, created_at")
+        .eq("claim_id", claim_id)
+        .order("created_at", desc=True)
+        .limit(10)
+        .execute()
+    )
+    evidence_rows = response.data or []
+
+    if isinstance(evidence_rows, dict):
+        evidence_rows = [evidence_rows]
+
+    print("[ai evidence] evidence_count:", len(evidence_rows), flush=True)
+    return evidence_rows
+
+
 def get_supabase_client() -> Client:
     supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -261,6 +285,8 @@ def build_claim_ai_update_payload(analysis: dict) -> dict:
         "source_domain": analysis.get("source_domain"),
         "source_score": analysis.get("source_score"),
         "source_reason": analysis.get("source_reason"),
+        # PHASE 4 STEP 10
+        "evidence_used_count": analysis.get("evidence_used_count", 0),
         "source_count": analysis["source_count"],
         "red_flags": normalize_red_flags(analysis.get("red_flags")),
         "ai_summary": analysis["ai_summary"],
@@ -338,7 +364,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -401,6 +427,8 @@ def build_ai_error_analysis() -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
+        # PHASE 4 STEP 10
+        "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
         "ai_summary": "AI pre-check failed. Community voting and evidence are still available.",
         "ai_status": "ERROR",
@@ -439,6 +467,8 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "source_domain": updated_claim.get("source_domain"),
         "source_score": updated_claim.get("source_score"),
         "source_reason": updated_claim.get("source_reason"),
+        # PHASE 4 STEP 10
+        "evidence_used_count": updated_claim.get("evidence_used_count"),
         "red_flags": red_flags,
         "ai_summary": updated_claim.get("ai_summary"),
         "ai_status": updated_claim.get("ai_status"),
@@ -500,6 +530,23 @@ def ai_source_score(url: str = ""):
     source_metadata = score_source_url(url)
     log_source_score("ai/source-score", source_metadata)
     return source_metadata
+
+
+# PHASE 4 STEP 10
+@app.get("/ai/evidence-preview/{claim_id}")
+def ai_evidence_preview(claim_id: str):
+    normalized_claim_id = claim_id.strip()
+
+    if not normalized_claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    evidence_rows = fetch_evidence_rows(normalized_claim_id)
+    return {
+        "ok": True,
+        "claim_id": normalized_claim_id,
+        "evidence_count": len(evidence_rows),
+        "evidence": evidence_rows,
+    }
 
 
 # PHASE 4 STEP 5
@@ -599,12 +646,15 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
         # PHASE 4 STEP 9
         source_metadata = score_source_url(retry_payload.source_url)
         log_source_score("ai/precheck/retry", source_metadata)
+        # PHASE 4 STEP 10
+        evidence_rows = fetch_evidence_rows(claim_id)
         ai_result = analyze_claim_with_openai(
             title=retry_payload.title,
             description=retry_payload.description,
             source_url=retry_payload.source_url,
             category=retry_payload.category,
             source_metadata=source_metadata,
+            evidence_rows=evidence_rows,
         )
         # PHASE 4 STEP 7
         print("[ai] claim_type:", ai_result.get("claim_type"), flush=True)

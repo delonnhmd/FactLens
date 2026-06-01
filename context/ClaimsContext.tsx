@@ -6,6 +6,7 @@
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
 // PHASE 4 STEP 9
+// PHASE 4 STEP 10
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -89,6 +90,7 @@ interface ClaimsContextValue {
   aiPrecheckNotice: string | null;
   clearAiPrecheckNotice: () => void;
   runAiPrecheckForClaimId: (claimId: string) => Promise<Claim | undefined>;
+  retryAiPrecheckWithEvidenceForClaimId: (claimId: string) => Promise<Claim | undefined>;
   createClaim: (input: CreateClaimInput) => Promise<Claim>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<string | void>;
   // PHASE 3 STEP 20E
@@ -219,6 +221,7 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const sourceDomain = getStringField(updatedClaim.source_domain ?? result.source_domain) ?? claim.sourceDomain;
   const sourceScore = getNumberField(updatedClaim.source_score ?? result.source_score) ?? claim.sourceScore;
   const sourceReason = getStringField(updatedClaim.source_reason ?? result.source_reason) ?? claim.sourceReason;
+  const evidenceUsedCount = getNumberField(updatedClaim.evidence_used_count ?? result.evidence_used_count) ?? claim.evidenceUsedCount;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
   const aiSummary = getStringField(updatedClaim.ai_summary ?? result.ai_summary) ?? claim.aiSummary;
 
@@ -232,6 +235,7 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     sourceDomain,
     sourceScore,
     sourceReason,
+    evidenceUsedCount,
     redFlags,
     aiSummary,
     aiCheck: {
@@ -746,6 +750,20 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       return runAiPrecheckAndRefreshClaim(targetClaim);
     },
     [runAiPrecheckAndRefreshClaim],
+  );
+
+  // PHASE 4 STEP 10
+  const retryAiPrecheckWithEvidenceForClaimId = useCallback(
+    async (claimId: string) => {
+      const targetClaim = claimsRef.current.find((claim) => claim.id === claimId);
+
+      if (!targetClaim) {
+        throw new Error("Claim not found.");
+      }
+
+      return retryAiPrecheckAndRefreshClaim(targetClaim);
+    },
+    [retryAiPrecheckAndRefreshClaim],
   );
 
   // PHASE 4 STEP 3
@@ -1286,6 +1304,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       aiPrecheckNotice,
       clearAiPrecheckNotice,
       runAiPrecheckForClaimId,
+      retryAiPrecheckWithEvidenceForClaimId,
       createClaim,
       voteOnClaim,
       getUserVoteForClaim,
@@ -1340,6 +1359,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       refreshClaims,
       refreshClaimVerdict,
       refreshUserVoteForClaim,
+      retryAiPrecheckWithEvidenceForClaimId,
       runAiPrecheckForClaimId,
       searchClaims,
       searchClaimsPage,
