@@ -1,139 +1,149 @@
 // PHASE 2 STEP 5
 // PHASE 4 STEP 9
-import { trustedSourceDomains } from "../constants/sourceDomains";
-import type { SourceQuality as ClaimSourceQuality } from "../types/verification";
-
-export type SourceQualityLabel = "Strong Source" | "Medium Source" | "Weak Source" | "Unknown Source";
+export type SourceQualityLabel =
+  | "Tier 1 - Authoritative"
+  | "Tier 2 - Established"
+  | "Tier 3 - Mixed"
+  | "Tier 4 - Low credibility"
+  | "Unknown source"
+  | "Invalid URL";
 
 export interface SourceQuality {
   label: SourceQualityLabel;
   score: number;
   reason: string;
+  lean: string;
 }
 
-export function getSourceCredibilityLabel(value: ClaimSourceQuality | string | null | undefined): string {
-  if (value === "official") {
-    return "Official Source";
-  }
+type DomainCredibility = {
+  score: number;
+  quality: SourceQualityLabel;
+  lean: string;
+};
 
-  if (value === "mainstream" || value === "specialized" || value === "blog") {
-    return "Medium Source";
-  }
-
-  if (value === "social") {
-    return "Social Source";
-  }
-
-  return "Unknown Source";
-}
-
-export function formatSourceCredibilityScore(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}/100` : "Pending";
-}
-
-const suspiciousWords = ["rumor", "leaked", "secret", "shocking", "unknown", "viral", "anonymous"];
+const DOMAIN_LIBRARY: Record<string, DomainCredibility> = {
+  "reuters.com": { score: 98, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "apnews.com": { score: 97, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "c-span.org": { score: 97, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "bbc.com": { score: 95, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "pbs.org": { score: 94, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "economist.com": { score: 92, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "npr.org": { score: 92, quality: "Tier 1 - Authoritative", lean: "Center-left" },
+  "wsj.com": { score: 90, quality: "Tier 1 - Authoritative", lean: "Center-right" },
+  "nytimes.com": { score: 88, quality: "Tier 1 - Authoritative", lean: "Center-left" },
+  "politico.com": { score: 88, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "axios.com": { score: 87, quality: "Tier 1 - Authoritative", lean: "Center" },
+  "washingtonpost.com": { score: 87, quality: "Tier 1 - Authoritative", lean: "Center-left" },
+  "theatlantic.com": { score: 80, quality: "Tier 2 - Established", lean: "Center-left" },
+  "foxnews.com": { score: 78, quality: "Tier 2 - Established", lean: "Right" },
+  "nationalreview.com": { score: 74, quality: "Tier 2 - Established", lean: "Right" },
+  "newsweek.com": { score: 74, quality: "Tier 2 - Established", lean: "Center-left" },
+  "cnn.com": { score: 76, quality: "Tier 2 - Established", lean: "Left" },
+  "msnbc.com": { score: 72, quality: "Tier 2 - Established", lean: "Left" },
+  "nypost.com": { score: 70, quality: "Tier 2 - Established", lean: "Right" },
+  "realclearpolitics.com": { score: 70, quality: "Tier 2 - Established", lean: "Center-right" },
+  "washingtonexaminer.com": { score: 68, quality: "Tier 2 - Established", lean: "Right" },
+  "thehill.com": { score: 82, quality: "Tier 2 - Established", lean: "Center" },
+  "vox.com": { score: 72, quality: "Tier 3 - Mixed", lean: "Left" },
+  "huffpost.com": { score: 65, quality: "Tier 3 - Mixed", lean: "Left" },
+  "motherjones.com": { score: 66, quality: "Tier 3 - Mixed", lean: "Left" },
+  "thenation.com": { score: 62, quality: "Tier 3 - Mixed", lean: "Left" },
+  "slate.com": { score: 68, quality: "Tier 3 - Mixed", lean: "Left" },
+  "salon.com": { score: 60, quality: "Tier 3 - Mixed", lean: "Left" },
+  "dailywire.com": { score: 60, quality: "Tier 3 - Mixed", lean: "Right" },
+  "thefederalist.com": { score: 58, quality: "Tier 3 - Mixed", lean: "Right" },
+  "dailycaller.com": { score: 58, quality: "Tier 3 - Mixed", lean: "Right" },
+  "townhall.com": { score: 55, quality: "Tier 3 - Mixed", lean: "Right" },
+  "newsmax.com": { score: 52, quality: "Tier 3 - Mixed", lean: "Right" },
+  "breitbart.com": { score: 35, quality: "Tier 4 - Low credibility", lean: "Right" },
+  "mediamatters.org": { score: 38, quality: "Tier 4 - Low credibility", lean: "Left" },
+  "shareblue.com": { score: 25, quality: "Tier 4 - Low credibility", lean: "Left" },
+  "palmerreport.com": { score: 20, quality: "Tier 4 - Low credibility", lean: "Left" },
+  "oann.com": { score: 30, quality: "Tier 4 - Low credibility", lean: "Right" },
+  "thegatewaypundit.com": { score: 10, quality: "Tier 4 - Low credibility", lean: "Right" },
+  "infowars.com": { score: 5, quality: "Tier 4 - Low credibility", lean: "Right" },
+};
 
 function getHostname(url: string): string | null {
+  const trimmedUrl = url.trim();
+
+  if (!trimmedUrl) {
+    return null;
+  }
+
   try {
-    const parsedUrl = new URL(url.trim());
+    const parsedUrl = new URL(trimmedUrl.includes("://") ? trimmedUrl : `https://${trimmedUrl}`);
     return parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
   } catch {
     return null;
   }
 }
 
-function isTrustedDomain(hostname: string): boolean {
-  return trustedSourceDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+function findDomainCredibility(hostname: string): DomainCredibility | null {
+  const matchedDomain = Object.keys(DOMAIN_LIBRARY).find(
+    (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+  );
+
+  return matchedDomain ? DOMAIN_LIBRARY[matchedDomain] : null;
 }
 
-function isReadableDomain(hostname: string): boolean {
-  const domainName = hostname.split(".")[0] ?? "";
-  return /^[a-z0-9-]{3,}$/i.test(domainName);
+export function getSourceScore(url: string): DomainCredibility {
+  const hostname = getHostname(url);
+
+  if (!hostname || !hostname.includes(".")) {
+    return { score: 20, quality: "Invalid URL", lean: "Unknown" };
+  }
+
+  return findDomainCredibility(hostname) ?? { score: 40, quality: "Unknown source", lean: "Unknown" };
+}
+
+export function getSourceCredibilityLabel(value: string | null | undefined): string {
+  if (!value) {
+    return "Unknown source";
+  }
+
+  if (
+    value === "Tier 1 - Authoritative" ||
+    value === "Tier 2 - Established" ||
+    value === "Tier 3 - Mixed" ||
+    value === "Tier 4 - Low credibility" ||
+    value === "Unknown source" ||
+    value === "Invalid URL"
+  ) {
+    return value;
+  }
+
+  if (value === "official") {
+    return "Tier 1 - Authoritative";
+  }
+
+  if (value === "mainstream" || value === "specialized" || value === "blog") {
+    return "Tier 2 - Established";
+  }
+
+  if (value === "social") {
+    return "Unknown source";
+  }
+
+  return "Unknown source";
+}
+
+export function formatSourceCredibilityScore(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)}/100` : "Pending";
 }
 
 export function getSourceQuality(url: string): SourceQuality {
-  const trimmedUrl = url.trim();
-  const hostname = getHostname(trimmedUrl);
-
-  if (!hostname) {
-    return {
-      label: "Unknown Source",
-      score: 0,
-      reason: "URL could not be parsed.",
-    };
-  }
-
-  if (!hostname.includes(".")) {
-    return {
-      label: "Unknown Source",
-      score: 0,
-      reason: "Domain could not be detected.",
-    };
-  }
-
-  const normalizedUrl = trimmedUrl.toLowerCase();
-
-  if (!normalizedUrl.startsWith("https://")) {
-    return {
-      label: "Weak Source",
-      score: 25,
-      reason: "Source is missing HTTPS.",
-    };
-  }
-
-  const matchedSuspiciousWord = suspiciousWords.find((word) => normalizedUrl.includes(word));
-
-  if (matchedSuspiciousWord) {
-    return {
-      label: "Weak Source",
-      score: 25,
-      reason: `URL contains suspicious wording: ${matchedSuspiciousWord}.`,
-    };
-  }
-
-  if (hostname.endsWith(".gov")) {
-    return {
-      label: "Strong Source",
-      score: 95,
-      reason: "Official government domain.",
-    };
-  }
-
-  if (hostname.endsWith(".edu")) {
-    return {
-      label: "Strong Source",
-      score: 92,
-      reason: "Educational domain.",
-    };
-  }
-
-  if (hostname.endsWith(".org")) {
-    return {
-      label: "Strong Source",
-      score: 88,
-      reason: "Major organization domain.",
-    };
-  }
-
-  if (isTrustedDomain(hostname)) {
-    return {
-      label: "Strong Source",
-      score: 90,
-      reason: "Domain is on the local trusted source allowlist.",
-    };
-  }
-
-  if (hostname.endsWith(".com") && isReadableDomain(hostname)) {
-    return {
-      label: "Medium Source",
-      score: 65,
-      reason: "HTTPS .com source with a readable domain.",
-    };
-  }
+  const sourceScore = getSourceScore(url);
+  const isKnownSource = sourceScore.quality !== "Unknown source" && sourceScore.quality !== "Invalid URL";
 
   return {
-    label: "Medium Source",
-    score: 60,
-    reason: "HTTPS source with a detectable domain.",
+    label: sourceScore.quality,
+    score: sourceScore.score,
+    lean: sourceScore.lean,
+    reason: isKnownSource
+      ? "Domain matched the FactLens credibility library. Score is based on journalistic standards only; political lean is informational and not used in scoring."
+      : sourceScore.quality === "Invalid URL"
+        ? "Invalid source URL."
+        : "Domain is not in the FactLens source credibility library.",
   };
 }

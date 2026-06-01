@@ -255,6 +255,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             </Text>
             <Text style={styles.aiSignalText}>Source score: {formatSourceCredibilityScore(claim.sourceScore)}</Text>
             <Text style={styles.aiSignalText}>Source domain: {claim.sourceDomain || "Pending"}</Text>
+            <Text style={styles.aiSignalText}>Political lean: {claim.sourceLean || sourceQuality.lean || "Unknown"}</Text>
             <Text style={styles.aiSignalText} numberOfLines={2}>
               Reason: {claim.sourceReason || "Source score pending."}
             </Text>

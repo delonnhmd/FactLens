@@ -101,6 +101,7 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
     label: evidence.sourceQualityLabel as SourceQuality["label"],
     score: evidence.sourceQualityScore ?? fallbackQuality.score,
     reason: evidence.sourceQualityReason ?? fallbackQuality.reason,
+    lean: fallbackQuality.lean,
   };
 }
 
@@ -695,6 +696,10 @@ export default function ClaimDetailScreen() {
                   <Text style={styles.aiDetailValue}>{formatSourceCredibilityScore(claim.sourceScore)}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
+                  <Text style={styles.aiDetailLabel}>Political lean</Text>
+                  <Text style={styles.aiDetailValue}>{claim.sourceLean || mainSourceQuality.lean || "Unknown"}</Text>
+                </View>
+                <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Claim type</Text>
                   <Text style={styles.aiDetailValue}>{formatClaimType(claim.claimType)}</Text>
                 </View>
@@ -799,6 +804,7 @@ export default function ClaimDetailScreen() {
             <Text style={styles.sourceQualityReason}>Source quality: {formatSourceQualityLabel(claim.sourceQuality)}</Text>
             <Text style={styles.sourceQualityReason}>Source score: {formatSourceCredibilityScore(claim.sourceScore)}</Text>
             <Text style={styles.sourceQualityReason}>Source domain: {claim.sourceDomain || "Pending"}</Text>
+            <Text style={styles.sourceQualityReason}>Political lean: {claim.sourceLean || mainSourceQuality.lean || "Unknown"}</Text>
             <Text style={styles.sourceQualityReason}>Source reason: {claim.sourceReason || "Source score pending."}</Text>
             {sourceNeedsEvidence ? (
               <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>

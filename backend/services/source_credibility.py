@@ -7,32 +7,93 @@ from urllib.parse import urlparse
 
 
 SOURCE_CREDIBILITY_PATH = Path(__file__).resolve().parents[1] / "ai_library" / "source_credibility.json"
-SOURCE_QUALITY_ORDER = ("official", "mainstream", "specialized", "social")
 
-DEFAULT_SOURCE_CREDIBILITY: dict[str, dict[str, Any]] = {
-    "official": {"score": 90, "domains": []},
-    "mainstream": {"score": 75, "domains": []},
-    "specialized": {"score": 70, "domains": []},
-    "social": {"score": 35, "domains": ["youtube.com", "youtu.be", "tiktok.com"]},
-    "unknown": {"score": 40, "domains": []},
+# Credibility scores are based on journalistic standards only. Political lean is
+# informational metadata and must never change the score.
+DEFAULT_DOMAIN_LIBRARY: dict[str, dict[str, Any]] = {
+    "reuters.com": {"score": 98, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "apnews.com": {"score": 97, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "c-span.org": {"score": 97, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "bbc.com": {"score": 95, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "pbs.org": {"score": 94, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "economist.com": {"score": 92, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "npr.org": {"score": 92, "quality": "Tier 1 - Authoritative", "lean": "Center-left"},
+    "wsj.com": {"score": 90, "quality": "Tier 1 - Authoritative", "lean": "Center-right"},
+    "nytimes.com": {"score": 88, "quality": "Tier 1 - Authoritative", "lean": "Center-left"},
+    "politico.com": {"score": 88, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "axios.com": {"score": 87, "quality": "Tier 1 - Authoritative", "lean": "Center"},
+    "washingtonpost.com": {"score": 87, "quality": "Tier 1 - Authoritative", "lean": "Center-left"},
+    "theatlantic.com": {"score": 80, "quality": "Tier 2 - Established", "lean": "Center-left"},
+    "foxnews.com": {"score": 78, "quality": "Tier 2 - Established", "lean": "Right"},
+    "nationalreview.com": {"score": 74, "quality": "Tier 2 - Established", "lean": "Right"},
+    "newsweek.com": {"score": 74, "quality": "Tier 2 - Established", "lean": "Center-left"},
+    "cnn.com": {"score": 76, "quality": "Tier 2 - Established", "lean": "Left"},
+    "msnbc.com": {"score": 72, "quality": "Tier 2 - Established", "lean": "Left"},
+    "nypost.com": {"score": 70, "quality": "Tier 2 - Established", "lean": "Right"},
+    "realclearpolitics.com": {"score": 70, "quality": "Tier 2 - Established", "lean": "Center-right"},
+    "washingtonexaminer.com": {"score": 68, "quality": "Tier 2 - Established", "lean": "Right"},
+    "thehill.com": {"score": 82, "quality": "Tier 2 - Established", "lean": "Center"},
+    "vox.com": {"score": 72, "quality": "Tier 3 - Mixed", "lean": "Left"},
+    "huffpost.com": {"score": 65, "quality": "Tier 3 - Mixed", "lean": "Left"},
+    "motherjones.com": {"score": 66, "quality": "Tier 3 - Mixed", "lean": "Left"},
+    "thenation.com": {"score": 62, "quality": "Tier 3 - Mixed", "lean": "Left"},
+    "slate.com": {"score": 68, "quality": "Tier 3 - Mixed", "lean": "Left"},
+    "salon.com": {"score": 60, "quality": "Tier 3 - Mixed", "lean": "Left"},
+    "dailywire.com": {"score": 60, "quality": "Tier 3 - Mixed", "lean": "Right"},
+    "thefederalist.com": {"score": 58, "quality": "Tier 3 - Mixed", "lean": "Right"},
+    "dailycaller.com": {"score": 58, "quality": "Tier 3 - Mixed", "lean": "Right"},
+    "townhall.com": {"score": 55, "quality": "Tier 3 - Mixed", "lean": "Right"},
+    "newsmax.com": {"score": 52, "quality": "Tier 3 - Mixed", "lean": "Right"},
+    "breitbart.com": {"score": 35, "quality": "Tier 4 - Low credibility", "lean": "Right"},
+    "mediamatters.org": {"score": 38, "quality": "Tier 4 - Low credibility", "lean": "Left"},
+    "shareblue.com": {"score": 25, "quality": "Tier 4 - Low credibility", "lean": "Left"},
+    "palmerreport.com": {"score": 20, "quality": "Tier 4 - Low credibility", "lean": "Left"},
+    "oann.com": {"score": 30, "quality": "Tier 4 - Low credibility", "lean": "Right"},
+    "thegatewaypundit.com": {"score": 10, "quality": "Tier 4 - Low credibility", "lean": "Right"},
+    "infowars.com": {"score": 5, "quality": "Tier 4 - Low credibility", "lean": "Right"},
+}
+
+DEFAULT_SOURCE_CREDIBILITY: dict[str, Any] = {
+    "domains": DEFAULT_DOMAIN_LIBRARY,
+    "unknown": {"score": 40, "quality": "Unknown source", "lean": "Unknown"},
+    "invalid": {"score": 20, "quality": "Invalid URL", "lean": "Unknown"},
 }
 
 
 @lru_cache(maxsize=1)
-def load_source_credibility() -> dict[str, dict[str, Any]]:
+def load_source_credibility() -> dict[str, Any]:
     try:
         with SOURCE_CREDIBILITY_PATH.open("r", encoding="utf-8") as file:
             library = json.load(file)
     except (OSError, json.JSONDecodeError):
         library = DEFAULT_SOURCE_CREDIBILITY
 
-    return {
-        quality: {
-            "score": int(section.get("score", DEFAULT_SOURCE_CREDIBILITY.get(quality, {}).get("score", 40))),
-            "domains": [str(domain).lower().strip() for domain in section.get("domains", []) if str(domain).strip()],
+    domains = library.get("domains", {}) if isinstance(library, dict) else {}
+    normalized_domains = {
+        str(domain).lower().strip(): {
+            "score": int(metadata.get("score", 40)),
+            "quality": str(metadata.get("quality") or "Unknown source"),
+            "lean": str(metadata.get("lean") or "Unknown"),
         }
-        for quality, section in library.items()
-        if isinstance(section, dict)
+        for domain, metadata in domains.items()
+        if str(domain).strip() and isinstance(metadata, dict)
+    }
+
+    unknown = library.get("unknown", DEFAULT_SOURCE_CREDIBILITY["unknown"]) if isinstance(library, dict) else DEFAULT_SOURCE_CREDIBILITY["unknown"]
+    invalid = library.get("invalid", DEFAULT_SOURCE_CREDIBILITY["invalid"]) if isinstance(library, dict) else DEFAULT_SOURCE_CREDIBILITY["invalid"]
+
+    return {
+        "domains": normalized_domains or DEFAULT_DOMAIN_LIBRARY,
+        "unknown": {
+            "score": int(unknown.get("score", 40)),
+            "quality": str(unknown.get("quality") or "Unknown source"),
+            "lean": str(unknown.get("lean") or "Unknown"),
+        },
+        "invalid": {
+            "score": int(invalid.get("score", 20)),
+            "quality": str(invalid.get("quality") or "Invalid URL"),
+            "lean": str(invalid.get("lean") or "Unknown"),
+        },
     }
 
 
@@ -61,41 +122,37 @@ def _domain_matches(domain: str, candidate: str) -> bool:
     return domain == candidate or domain.endswith(f".{candidate}")
 
 
-def _score_result(domain: str, source_quality: str, source_score: int, source_reason: str) -> dict:
+def _score_result(domain: str, metadata: dict[str, Any], source_reason: str) -> dict:
     return {
         "domain": domain,
-        "source_quality": source_quality,
-        "source_score": max(0, min(int(source_score), 100)),
+        "source_quality": str(metadata.get("quality") or "Unknown source"),
+        "source_score": max(0, min(int(metadata.get("score", 40)), 100)),
+        "source_lean": str(metadata.get("lean") or "Unknown"),
         "source_reason": source_reason,
     }
 
 
-def score_source_url(source_url: str | None) -> dict:
+def get_source_score(source_url: str | None) -> dict:
     domain = extract_domain(source_url)
     library = load_source_credibility()
 
-    if not str(source_url or "").strip():
-        return _score_result("", "unknown", 0, "Missing source URL.")
+    if not str(source_url or "").strip() or not domain or "." not in domain:
+        return _score_result(domain, library["invalid"], "Invalid source URL.")
 
-    if not domain or "." not in domain:
-        return _score_result(domain, "unknown", 0, "Source domain could not be detected.")
+    for candidate, metadata in library["domains"].items():
+        if _domain_matches(domain, candidate):
+            return _score_result(
+                domain,
+                metadata,
+                "Domain matched the FactLens credibility library. Score is based on journalistic standards only; political lean is informational and not used in scoring.",
+            )
 
-    for source_quality in SOURCE_QUALITY_ORDER:
-        section = library.get(source_quality, {})
-        score = int(section.get("score", 40))
+    return _score_result(
+        domain,
+        library["unknown"],
+        "Domain is not in the FactLens source credibility library.",
+    )
 
-        for candidate in section.get("domains", []):
-            if _domain_matches(domain, candidate):
-                if source_quality == "social":
-                    reason = "Social media source. Needs corroborating evidence."
-                elif source_quality == "official":
-                    reason = "Official source domain matched the FactLens credibility library."
-                elif source_quality == "mainstream":
-                    reason = "Mainstream news source domain matched the FactLens credibility library."
-                else:
-                    reason = "Specialized source domain matched the FactLens credibility library."
 
-                return _score_result(domain, source_quality, score, reason)
-
-    unknown_score = int(library.get("unknown", {}).get("score", 40))
-    return _score_result(domain, "unknown", unknown_score, "Domain is not in the FactLens source credibility library.")
+def score_source_url(source_url: str | None) -> dict:
+    return get_source_score(source_url)

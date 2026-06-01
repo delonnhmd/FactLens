@@ -54,7 +54,6 @@ app.add_middleware(
 )
 
 
-OfficialQuality = Literal["official", "mainstream", "specialized", "social", "blog", "unknown"]
 ClaimType = Literal["FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"]
 AiStatus = Literal[
     "PENDING",
@@ -131,10 +130,11 @@ class AiPrecheckResponse(BaseModel):
     claim_type: ClaimType | None = None
     ai_confidence: float | None = None
     source_count: int | None = None
-    source_quality: OfficialQuality | None = None
+    source_quality: str | None = None
     # PHASE 4 STEP 9
     source_domain: str | None = None
     source_score: int | None = None
+    source_lean: str | None = None
     source_reason: str | None = None
     # PHASE 4 STEP 10
     evidence_used_count: int | None = None
@@ -212,6 +212,7 @@ def log_source_score(endpoint_label: str, source_metadata: dict) -> None:
     print("[source] domain:", source_metadata.get("domain"), flush=True)
     print("[source] quality:", source_metadata.get("source_quality"), flush=True)
     print("[source] score:", source_metadata.get("source_score"), flush=True)
+    print("[source] lean:", source_metadata.get("source_lean"), flush=True)
 
 
 # PHASE 4 STEP 10
@@ -284,6 +285,7 @@ def build_claim_ai_update_payload(analysis: dict) -> dict:
         # PHASE 4 STEP 9
         "source_domain": analysis.get("source_domain"),
         "source_score": analysis.get("source_score"),
+        "source_lean": analysis.get("source_lean"),
         "source_reason": analysis.get("source_reason"),
         # PHASE 4 STEP 10
         "evidence_used_count": analysis.get("evidence_used_count", 0),
@@ -364,7 +366,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_lean, source_reason, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -426,7 +428,8 @@ def build_ai_error_analysis() -> dict:
         "claim_type": "UNCLEAR",
         "ai_confidence": 0.5,
         "source_count": 0,
-        "source_quality": "unknown",
+        "source_quality": "Unknown source",
+        "source_lean": "Unknown",
         # PHASE 4 STEP 10
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
@@ -466,6 +469,7 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         # PHASE 4 STEP 9
         "source_domain": updated_claim.get("source_domain"),
         "source_score": updated_claim.get("source_score"),
+        "source_lean": updated_claim.get("source_lean"),
         "source_reason": updated_claim.get("source_reason"),
         # PHASE 4 STEP 10
         "evidence_used_count": updated_claim.get("evidence_used_count"),

@@ -1,67 +1,214 @@
 {
-  "official": {
-    "score": 90,
-    "domains": [
-      "cdc.gov",
-      "fda.gov",
-      "who.int",
-      "sec.gov",
-      "federalreserve.gov",
-      "whitehouse.gov",
-      "congress.gov",
-      "supremecourt.gov",
-      "treasury.gov",
-      "irs.gov",
-      "nasa.gov",
-      "noaa.gov",
-      "nih.gov"
-    ]
-  },
-  "mainstream": {
-    "score": 75,
-    "domains": [
-      "reuters.com",
-      "apnews.com",
-      "bbc.com",
-      "npr.org",
-      "pbs.org",
-      "nytimes.com",
-      "washingtonpost.com",
-      "wsj.com",
-      "cnn.com",
-      "nbcnews.com",
-      "cbsnews.com",
-      "abcnews.go.com",
-      "theguardian.com"
-    ]
-  },
-  "specialized": {
-    "score": 70,
-    "domains": [
-      "healthline.com",
-      "webmd.com",
-      "mayoclinic.org",
-      "coindesk.com",
-      "cointelegraph.com",
-      "investopedia.com",
-      "morningstar.com"
-    ]
-  },
-  "social": {
-    "score": 35,
-    "domains": [
-      "youtube.com",
-      "youtu.be",
-      "tiktok.com",
-      "x.com",
-      "twitter.com",
-      "facebook.com",
-      "instagram.com",
-      "reddit.com"
-    ]
+  "domains": {
+    "reuters.com": {
+      "score": 98,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "apnews.com": {
+      "score": 97,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "c-span.org": {
+      "score": 97,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "bbc.com": {
+      "score": 95,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "pbs.org": {
+      "score": 94,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "economist.com": {
+      "score": 92,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "npr.org": {
+      "score": 92,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center-left"
+    },
+    "wsj.com": {
+      "score": 90,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center-right"
+    },
+    "nytimes.com": {
+      "score": 88,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center-left"
+    },
+    "politico.com": {
+      "score": 88,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "axios.com": {
+      "score": 87,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center"
+    },
+    "washingtonpost.com": {
+      "score": 87,
+      "quality": "Tier 1 - Authoritative",
+      "lean": "Center-left"
+    },
+    "theatlantic.com": {
+      "score": 80,
+      "quality": "Tier 2 - Established",
+      "lean": "Center-left"
+    },
+    "foxnews.com": {
+      "score": 78,
+      "quality": "Tier 2 - Established",
+      "lean": "Right"
+    },
+    "nationalreview.com": {
+      "score": 74,
+      "quality": "Tier 2 - Established",
+      "lean": "Right"
+    },
+    "newsweek.com": {
+      "score": 74,
+      "quality": "Tier 2 - Established",
+      "lean": "Center-left"
+    },
+    "cnn.com": {
+      "score": 76,
+      "quality": "Tier 2 - Established",
+      "lean": "Left"
+    },
+    "msnbc.com": {
+      "score": 72,
+      "quality": "Tier 2 - Established",
+      "lean": "Left"
+    },
+    "nypost.com": {
+      "score": 70,
+      "quality": "Tier 2 - Established",
+      "lean": "Right"
+    },
+    "realclearpolitics.com": {
+      "score": 70,
+      "quality": "Tier 2 - Established",
+      "lean": "Center-right"
+    },
+    "washingtonexaminer.com": {
+      "score": 68,
+      "quality": "Tier 2 - Established",
+      "lean": "Right"
+    },
+    "thehill.com": {
+      "score": 82,
+      "quality": "Tier 2 - Established",
+      "lean": "Center"
+    },
+    "vox.com": {
+      "score": 72,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Left"
+    },
+    "huffpost.com": {
+      "score": 65,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Left"
+    },
+    "motherjones.com": {
+      "score": 66,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Left"
+    },
+    "thenation.com": {
+      "score": 62,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Left"
+    },
+    "slate.com": {
+      "score": 68,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Left"
+    },
+    "salon.com": {
+      "score": 60,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Left"
+    },
+    "dailywire.com": {
+      "score": 60,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Right"
+    },
+    "thefederalist.com": {
+      "score": 58,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Right"
+    },
+    "dailycaller.com": {
+      "score": 58,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Right"
+    },
+    "townhall.com": {
+      "score": 55,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Right"
+    },
+    "newsmax.com": {
+      "score": 52,
+      "quality": "Tier 3 - Mixed",
+      "lean": "Right"
+    },
+    "breitbart.com": {
+      "score": 35,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Right"
+    },
+    "mediamatters.org": {
+      "score": 38,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Left"
+    },
+    "shareblue.com": {
+      "score": 25,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Left"
+    },
+    "palmerreport.com": {
+      "score": 20,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Left"
+    },
+    "oann.com": {
+      "score": 30,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Right"
+    },
+    "thegatewaypundit.com": {
+      "score": 10,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Right"
+    },
+    "infowars.com": {
+      "score": 5,
+      "quality": "Tier 4 - Low credibility",
+      "lean": "Right"
+    }
   },
   "unknown": {
     "score": 40,
-    "domains": []
+    "quality": "Unknown source",
+    "lean": "Unknown"
+  },
+  "invalid": {
+    "score": 20,
+    "quality": "Invalid URL",
+    "lean": "Unknown"
   }
 }

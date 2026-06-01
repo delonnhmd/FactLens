@@ -53,11 +53,9 @@ DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
         },
     },
     "source_credibility": {
-        "official": {"score": 90, "domains": []},
-        "mainstream": {"score": 75, "domains": []},
-        "specialized": {"score": 70, "domains": []},
-        "social": {"score": 35, "domains": []},
-        "unknown": {"score": 40, "domains": []},
+        "domains": {},
+        "unknown": {"score": 40, "quality": "Unknown source", "lean": "Unknown"},
+        "invalid": {"score": 20, "quality": "Invalid URL", "lean": "Unknown"},
     },
     "red_flag_rules": {
         "red_flags": [

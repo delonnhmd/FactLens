@@ -169,18 +169,7 @@ function mapClaimType(claimType: unknown): Claim["claimType"] {
 }
 
 function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
-  if (
-    sourceQuality === "official" ||
-    sourceQuality === "mainstream" ||
-    sourceQuality === "specialized" ||
-    sourceQuality === "social" ||
-    sourceQuality === "blog" ||
-    sourceQuality === "unknown"
-  ) {
-    return sourceQuality;
-  }
-
-  return "unknown";
+  return typeof sourceQuality === "string" && sourceQuality.trim() ? sourceQuality : "Unknown source";
 }
 
 function getNumberField(value: unknown): number | null {
@@ -221,6 +210,7 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const sourceCount = getNumberField(updatedClaim.source_count ?? result.source_count) ?? claim.sourceCount;
   const sourceDomain = getStringField(updatedClaim.source_domain ?? result.source_domain) ?? claim.sourceDomain;
   const sourceScore = getNumberField(updatedClaim.source_score ?? result.source_score) ?? claim.sourceScore;
+  const sourceLean = getStringField(updatedClaim.source_lean ?? result.source_lean) ?? claim.sourceLean;
   const sourceReason = getStringField(updatedClaim.source_reason ?? result.source_reason) ?? claim.sourceReason;
   const evidenceUsedCount = getNumberField(updatedClaim.evidence_used_count ?? result.evidence_used_count) ?? claim.evidenceUsedCount;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
@@ -235,6 +225,7 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     sourceCount,
     sourceDomain,
     sourceScore,
+    sourceLean,
     sourceReason,
     evidenceUsedCount,
     redFlags,

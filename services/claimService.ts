@@ -119,6 +119,7 @@ export interface ClaimRow {
   source_quality?: string | null;
   source_domain?: string | null;
   source_score?: number | null;
+  source_lean?: string | null;
   source_reason?: string | null;
   red_flags?: unknown;
   ai_summary?: string | null;
@@ -337,18 +338,7 @@ function mapVerificationMode(mode: string | null | undefined): VerificationMode 
 }
 
 function mapSourceQuality(sourceQuality: string | null | undefined): SourceQuality {
-  if (
-    sourceQuality === "official" ||
-    sourceQuality === "mainstream" ||
-    sourceQuality === "specialized" ||
-    sourceQuality === "social" ||
-    sourceQuality === "blog" ||
-    sourceQuality === "unknown"
-  ) {
-    return sourceQuality;
-  }
-
-  return "unknown";
+  return sourceQuality?.trim() || "Unknown source";
 }
 
 function isValidDateString(value: string | null | undefined): value is string {
@@ -503,6 +493,7 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   // PHASE 4 STEP 9
   const sourceDomain = row.source_domain ?? null;
   const sourceScore = row.source_score ?? null;
+  const sourceLean = row.source_lean ?? null;
   const sourceReason = row.source_reason ?? null;
   // PHASE 4 STEP 10
   const evidenceUsedCount = row.evidence_used_count ?? 0;
@@ -572,6 +563,7 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     sourceQuality,
     sourceDomain,
     sourceScore,
+    sourceLean,
     sourceReason,
     evidenceUsedCount,
     redFlags: aiFlags,
@@ -670,6 +662,7 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     sourceQuality: mapSourceQuality(row.source_quality),
     sourceDomain: row.source_domain ?? null,
     sourceScore: row.source_score ?? null,
+    sourceLean: row.source_lean ?? null,
     sourceReason: row.source_reason ?? null,
     evidenceUsedCount: row.evidence_used_count ?? 0,
     redFlags: [],
@@ -752,10 +745,11 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     min_votes_required: timing.minVotesRequired,
     expected_participation: timing.expectedParticipation,
     source_count: 0,
-    source_quality: "unknown",
+    source_quality: "Unknown source",
     // PHASE 4 STEP 9
     source_domain: null,
     source_score: null,
+    source_lean: null,
     source_reason: null,
     red_flags: [],
     ai_summary: null,

@@ -23,7 +23,6 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
     from backend.services.source_credibility import score_source_url
 
 
-SourceQuality = Literal["official", "mainstream", "specialized", "social", "blog", "unknown"]
 ClaimType = Literal["FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"]
 AiStatus = Literal[
     "LOW_RISK",
@@ -39,7 +38,7 @@ class FactLensAiPrecheckResult(BaseModel):
     claim_type: ClaimType
     ai_confidence: float
     source_count: int
-    source_quality: SourceQuality
+    source_quality: str
     evidence_used_count: int = 0
     red_flags: list[str]
     ai_summary: str
@@ -85,7 +84,6 @@ SUSPICIOUS_TERMS = [
     "everyone is hiding",
 ]
 
-SOURCE_QUALITIES = {"official", "mainstream", "specialized", "social", "blog", "unknown"}
 CLAIM_TYPES = {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}
 AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "NOT_FACT_CHECKABLE", "ERROR"}
 
@@ -137,7 +135,7 @@ def _not_fact_checkable_analysis(claim_type: ClaimType) -> dict:
         "claim_type": claim_type,
         "ai_confidence": 0.5,
         "source_count": 0,
-        "source_quality": "unknown",
+        "source_quality": "Unknown source",
         "evidence_used_count": 0,
         "red_flags": [f"Claim type is {type_label}, not a factual news claim"],
         "ai_summary": "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake.",
@@ -155,34 +153,33 @@ def _get_source_metadata(source_url: str, source_metadata: dict | None = None) -
 
 # PHASE 4 STEP 9
 def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
-    source_quality = str(source_metadata.get("source_quality") or "unknown").lower()
-
-    if source_quality not in SOURCE_QUALITIES:
-        source_quality = "unknown"
+    source_quality = str(source_metadata.get("source_quality") or "Unknown source").strip() or "Unknown source"
+    source_lean = str(source_metadata.get("source_lean") or "Unknown").strip() or "Unknown"
 
     source_score = source_metadata.get("source_score")
 
     try:
         normalized_score = int(source_score)
     except (TypeError, ValueError):
-        normalized_score = 0 if source_quality == "unknown" else 40
+        normalized_score = 40
 
     next_analysis = {
         **analysis,
         "source_quality": source_quality,
         "source_domain": str(source_metadata.get("domain") or ""),
         "source_score": max(0, min(normalized_score, 100)),
+        "source_lean": source_lean,
         "source_reason": str(source_metadata.get("source_reason") or ""),
     }
 
     red_flags = list(next_analysis.get("red_flags") or [])
 
-    if source_quality == "social" and not any("social" in flag.lower() for flag in red_flags):
-        red_flags.append("Social source needs corroborating evidence")
+    if next_analysis["source_score"] < 50 and not any("low credibility" in flag.lower() for flag in red_flags):
+        red_flags.append("Low credibility source needs corroborating evidence")
         if next_analysis.get("ai_status") == "LOW_RISK":
             next_analysis["ai_status"] = "NEEDS_MORE_EVIDENCE"
         next_analysis["ai_confidence"] = min(_clamp_confidence(next_analysis.get("ai_confidence")), 0.55)
-    elif source_quality == "unknown" and next_analysis["source_score"] <= 40:
+    elif source_quality.lower() == "unknown source" and next_analysis["source_score"] <= 40:
         next_analysis["ai_confidence"] = min(_clamp_confidence(next_analysis.get("ai_confidence")), 0.60)
 
     next_analysis["red_flags"] = red_flags[:8]
@@ -233,7 +230,8 @@ def _fallback_source_risk_analysis(
 
     ai_confidence = 0.50
     source_count = 0
-    source_quality = str(scored_source.get("source_quality") or "unknown").lower()
+    source_quality = str(scored_source.get("source_quality") or "Unknown source")
+    source_score = int(scored_source.get("source_score") or 40)
     ai_summary = "No strong source signal found. Community voting and evidence are needed."
     ai_status: AiStatus = "NEEDS_MORE_EVIDENCE"
     claim_type: ClaimType = "FACTUAL"
@@ -252,35 +250,33 @@ def _fallback_source_risk_analysis(
         ai_confidence = 0.35
         red_flags.append("Missing source URL")
         ai_summary = "The claim is missing a source URL."
-    elif source_quality == "official" or any(domain in source_url_lower for domain in OFFICIAL_DOMAINS):
+    elif source_score >= 85:
         ai_confidence = 0.65
         source_count = 1
-        source_quality = "official"
-        ai_summary = "The source appears to be an official or institutional source."
+        ai_summary = "The source has a high credibility score in the FactLens library."
         ai_status = "LOW_RISK"
-    elif source_quality == "mainstream" or any(domain in source_url_lower for domain in MAINSTREAM_DOMAINS):
-        ai_confidence = 0.60
+    elif source_score >= 70:
+        ai_confidence = 0.58
         source_count = 1
-        source_quality = "mainstream"
-        ai_summary = "The source appears to be a mainstream news source."
+        ai_summary = "The source has an established credibility score in the FactLens library."
         ai_status = "LOW_RISK"
-    elif source_quality == "specialized":
-        ai_confidence = 0.55
+    elif source_score >= 50:
+        ai_confidence = 0.50
         source_count = 1
-        ai_summary = "The source appears to be a specialized reference source."
-    elif source_quality == "social":
+        ai_summary = "The source has a mixed credibility score, so corroborating evidence may be needed."
+    elif source_quality.lower() == "unknown source":
         ai_confidence = 0.40
-        red_flags.append("Social source needs corroborating evidence")
-        ai_summary = "Social media source. Needs corroborating evidence."
-    elif source_quality == "unknown":
-        ai_confidence = 0.40
-        ai_summary = "Unknown source. Stronger supporting evidence is needed."
+        ai_summary = "Unknown source. The domain is not in the FactLens credibility library."
+    else:
+        ai_confidence = 0.35
+        red_flags.append("Low credibility source needs corroborating evidence")
+        ai_summary = "The source has a low credibility score in the FactLens library."
 
     for term in SUSPICIOUS_TERMS:
         if term in searchable_text:
             red_flags.append(f"Suspicious wording: {term}")
 
-    if red_flags and source_quality == "unknown":
+    if red_flags and source_score <= 40:
         ai_confidence = min(ai_confidence, 0.35)
         ai_status = "HIGH_RISK"
         ai_summary = "The claim contains suspicious wording and needs more community evidence."
@@ -313,7 +309,8 @@ def _error_analysis() -> dict:
         "claim_type": "UNCLEAR",
         "ai_confidence": 0.5,
         "source_count": 0,
-        "source_quality": "unknown",
+        "source_quality": "Unknown source",
+        "source_lean": "Unknown",
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
         "ai_summary": "AI pre-check failed. Community voting and evidence are still available.",
@@ -335,15 +332,12 @@ def _clamp_confidence(value: object) -> float:
 
 def _normalize_analysis(raw_result: dict) -> dict:
     claim_type = str(raw_result.get("claim_type") or "UNCLEAR").upper()
-    source_quality = str(raw_result.get("source_quality") or "unknown").lower()
+    source_quality = str(raw_result.get("source_quality") or "Unknown source").strip() or "Unknown source"
     ai_status = str(raw_result.get("ai_status") or "NEEDS_MORE_EVIDENCE").upper()
     red_flags = raw_result.get("red_flags")
 
     if claim_type not in CLAIM_TYPES:
         claim_type = "UNCLEAR"
-
-    if source_quality not in SOURCE_QUALITIES:
-        source_quality = "unknown"
 
     if ai_status not in AI_STATUSES:
         ai_status = "NEEDS_MORE_EVIDENCE"
@@ -367,7 +361,7 @@ def _normalize_analysis(raw_result: dict) -> dict:
     if claim_type in {"OPINION", "QUESTION", "SATIRE", "PROMOTION"}:
         ai_status = "NOT_FACT_CHECKABLE"
         ai_confidence = 0.5
-        source_quality = "unknown"
+        source_quality = "Unknown source"
         source_count = 0
         evidence_used_count = 0
 
@@ -448,6 +442,7 @@ def _build_prompt(
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "
+        "Political lean is separate transparency metadata and must never increase or decrease source score, confidence, or risk. "
         "Official source metadata can increase confidence only if that source supports the claim. "
         "Social source metadata must not be treated as strong evidence alone. "
         "Unknown source metadata should lower confidence. "
@@ -469,6 +464,8 @@ def _build_prompt(
         f"Category: {category or 'Other'}\n"
         f"Source score: {source_metadata.get('source_score')}\n"
         f"Source quality: {source_metadata.get('source_quality')}\n"
+        f"Political lean: {source_metadata.get('source_lean')}\n"
+        "Political lean is displayed for transparency only and must never affect the source credibility score.\n"
         f"FactLens source metadata: {source_metadata_json}\n"
         f"Community evidence: {evidence_json}"
     )

@@ -144,6 +144,7 @@ export interface Claim {
   // PHASE 4 STEP 9
   sourceDomain: string | null;
   sourceScore: number | null;
+  sourceLean: string | null;
   sourceReason: string | null;
   // PHASE 4 STEP 10
   evidenceUsedCount: number;
