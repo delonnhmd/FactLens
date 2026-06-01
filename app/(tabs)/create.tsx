@@ -1,7 +1,7 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
+import { Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
@@ -45,24 +45,19 @@ export default function CreateScreen() {
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
   // PHASE 4 STEP 11
+  // PHASE 4 STEP 11 REVISED
   const claimQuality = useMemo(
     () => analyzeClaimDraft({ title, description, sourceUrl, category }),
     [title, description, sourceUrl, category],
   );
-  const needsClaimQualityConfirmation =
-    claimQuality.detectedType === "QUESTION" ||
-    claimQuality.detectedType === "OPINION" ||
-    claimQuality.detectedType === "UNCLEAR";
-  const showClaimQualityBox =
-    Boolean(title.trim() || description.trim() || sourceUrl.trim()) &&
-    (needsClaimQualityConfirmation || claimQuality.warnings.length > 0 || claimQuality.suggestions.length > 0);
+  const showClaimQualityBox = Boolean(title.trim() || description.trim() || sourceUrl.trim());
   // PHASE 3 STEP 8
   const trimmedVideoUrl = videoUrl.trim();
   const normalizedVideoUrl = normalizeUrl(videoUrl);
   const videoPlatform = trimmedVideoUrl ? detectVideoPlatform(normalizedVideoUrl) : null;
   const youtubeThumbnailUrl = trimmedVideoUrl ? getYouTubeThumbnailUrl(normalizedVideoUrl) : null;
   const videoUrlInvalid = trimmedVideoUrl.length > 0 && !isSupportedVideoUrl(normalizedVideoUrl);
-  const submitDisabled = titleOverLimit || descriptionOverLimit || videoUrlInvalid || isSubmitting;
+  const submitDisabled = titleOverLimit || descriptionOverLimit || videoUrlInvalid || !claimQuality.canSubmit || isSubmitting;
 
   const titleCounterStyle = useMemo(
     () => [styles.counterText, titleOverLimit && styles.counterTextError],
@@ -105,6 +100,12 @@ export default function CreateScreen() {
 
     if (!isVerified) {
       nextErrors.general = "Please verify your email before posting.";
+      return nextErrors;
+    }
+
+    // PHASE 4 STEP 11 REVISED
+    if (!claimQuality.canSubmit) {
+      nextErrors.general = claimQuality.warnings.join("\n") || "This content cannot be posted.";
       return nextErrors;
     }
 
@@ -184,6 +185,7 @@ export default function CreateScreen() {
   };
 
   // PHASE 4 STEP 11
+  // PHASE 4 STEP 11 REVISED
   const handleSubmit = async () => {
     if (submitDisabled) {
       setErrors((currentErrors) => ({
@@ -193,6 +195,7 @@ export default function CreateScreen() {
           ? "Description must be 1000 characters or fewer."
           : currentErrors.description,
         videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
+        general: !claimQuality.canSubmit ? claimQuality.warnings.join("\n") : currentErrors.general,
       }));
       return;
     }
@@ -201,23 +204,6 @@ export default function CreateScreen() {
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
-      return;
-    }
-
-    if (needsClaimQualityConfirmation) {
-      Alert.alert("Claim quality warning", "This post may not be fact-checkable. Continue anyway?", [
-        {
-          text: "Edit Claim",
-          style: "cancel",
-        },
-        {
-          text: "Post Anyway",
-          style: "destructive",
-          onPress: () => {
-            void submitClaim();
-          },
-        },
-      ]);
       return;
     }
 

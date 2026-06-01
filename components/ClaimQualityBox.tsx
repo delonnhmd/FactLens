@@ -1,4 +1,5 @@
 // PHASE 4 STEP 11
+// PHASE 4 STEP 11 REVISED
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { theme } from "../constants/theme";
 import type { ClaimDraftAnalysis, ClaimDraftQualityLevel } from "../utils/claimQuality";
@@ -9,9 +10,9 @@ type ClaimQualityBoxProps = {
 };
 
 const qualityCopy: Record<ClaimDraftQualityLevel, string> = {
-  good: "Claim quality looks good",
-  warning: "Claim quality needs a stronger source",
-  bad: "Claim may not be fact-checkable",
+  good: "Looks good to post.",
+  soft_warning: "AI may classify this as opinion, question, or unclear.",
+  blocked: "This content cannot be posted.",
 };
 
 export function ClaimQualityBox({ analysis, onUseSuggestedTitle }: ClaimQualityBoxProps) {
@@ -65,21 +66,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.successBg,
     borderColor: theme.colors.success,
   },
-  warning: {
-    backgroundColor: theme.colors.warningBg,
-    borderColor: theme.colors.warning,
+  soft_warning: {
+    backgroundColor: theme.colors.aiBg,
+    borderColor: theme.colors.lightBorder,
   },
-  bad: {
+  blocked: {
     backgroundColor: theme.colors.dangerBg,
     borderColor: theme.colors.danger,
   },
   goodText: {
     color: theme.colors.success,
   },
-  warningText: {
-    color: theme.colors.warning,
+  soft_warningText: {
+    color: theme.colors.ai,
   },
-  badText: {
+  blockedText: {
     color: theme.colors.danger,
   },
   heading: {
