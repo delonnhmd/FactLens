@@ -5,7 +5,8 @@
 // PHASE 4 STEP 7
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
-import { API_CONFIG, getBackendUrl } from "../constants/apiConfig";
+// PHASE 4 STEP 10B
+import { API_CONFIG } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
 export interface AiPrecheckResponse {
@@ -24,10 +25,24 @@ export interface AiPrecheckResponse {
   ai_summary?: string | null;
   ai_status?: string | null;
   error?: string | null;
+  detail?: unknown;
   details?: string | null;
   hint?: string | null;
   update_payload?: Record<string, unknown> | null;
   updated_claim?: Record<string, unknown> | null;
+}
+
+const AI_PRECHECK_TIMEOUT_MS = 10000;
+
+function getBackendErrorMessage(data: Partial<AiPrecheckResponse>, status: number): string {
+  const detail =
+    typeof data.detail === "string"
+      ? data.detail
+      : data.detail
+        ? JSON.stringify(data.detail)
+        : null;
+
+  return [data.error, detail, data.details, data.hint].filter(Boolean).join(" ") || `AI pre-check failed with HTTP ${status}.`;
 }
 
 async function postAiPrecheck(
@@ -35,10 +50,11 @@ async function postAiPrecheck(
   body: Record<string, unknown>,
   claimId: string,
 ): Promise<AiPrecheckResponse> {
-  const backendUrl = getBackendUrl();
+  // PHASE 4 STEP 10B
+  const backendUrl = API_CONFIG.BACKEND_URL.trim().replace(/\/+$/, "");
 
   if (!backendUrl) {
-    console.log("[ai] backend url:", API_CONFIG.BACKEND_URL);
+    console.log("[ai frontend] backend url:", API_CONFIG.BACKEND_URL);
     return {
       ok: false,
       claim_id: claimId,
@@ -47,11 +63,11 @@ async function postAiPrecheck(
   }
 
   const requestUrl = `${backendUrl}${path}`;
-  console.log("[ai] backend url:", API_CONFIG.BACKEND_URL);
-  console.log("[ai] calling:", requestUrl);
+  console.log("[ai frontend] backend url:", API_CONFIG.BACKEND_URL);
+  console.log("[ai frontend] request body:", body);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), AI_PRECHECK_TIMEOUT_MS);
 
   try {
     const response = await fetch(requestUrl, {
@@ -62,41 +78,51 @@ async function postAiPrecheck(
       },
       body: JSON.stringify(body),
     });
+    const json = (await response.json().catch(() => ({}))) as Partial<AiPrecheckResponse>;
 
-    const data = (await response.json().catch(() => ({}))) as Partial<AiPrecheckResponse>;
+    console.log("[ai frontend] response status:", response.status);
+    console.log("[ai frontend] response json:", json);
 
     if (!response.ok) {
       return {
         ok: false,
         claim_id: claimId,
-        error: data.error ?? `AI pre-check failed with HTTP ${response.status}.`,
-        details: data.details ?? null,
-        hint: data.hint ?? null,
+        error: getBackendErrorMessage(json, response.status),
+        details: null,
+        hint: null,
       };
     }
 
     return {
-      ok: Boolean(data.ok),
-      claim_id: data.claim_id ?? claimId,
-      claim_type: data.claim_type ?? null,
-      ai_result: data.ai_result ?? null,
-      ai_confidence: data.ai_confidence ?? null,
-      source_count: data.source_count ?? null,
-      source_quality: data.source_quality ?? null,
-      source_domain: data.source_domain ?? null,
-      source_score: data.source_score ?? null,
-      source_reason: data.source_reason ?? null,
-      evidence_used_count: data.evidence_used_count ?? null,
-      red_flags: data.red_flags ?? [],
-      ai_summary: data.ai_summary ?? null,
-      ai_status: data.ai_status ?? null,
-      error: data.error ?? null,
-      details: data.details ?? null,
-      hint: data.hint ?? null,
-      update_payload: data.update_payload ?? null,
-      updated_claim: data.updated_claim ?? null,
+      ok: Boolean(json.ok),
+      claim_id: json.claim_id ?? claimId,
+      claim_type: json.claim_type ?? null,
+      ai_result: json.ai_result ?? null,
+      ai_confidence: json.ai_confidence ?? null,
+      source_count: json.source_count ?? null,
+      source_quality: json.source_quality ?? null,
+      source_domain: json.source_domain ?? null,
+      source_score: json.source_score ?? null,
+      source_reason: json.source_reason ?? null,
+      evidence_used_count: json.evidence_used_count ?? null,
+      red_flags: json.red_flags ?? [],
+      ai_summary: json.ai_summary ?? null,
+      ai_status: json.ai_status ?? null,
+      error: json.error ?? null,
+      details: json.details ?? null,
+      hint: json.hint ?? null,
+      update_payload: json.update_payload ?? null,
+      updated_claim: json.updated_claim ?? null,
     };
   } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return {
+        ok: false,
+        claim_id: claimId,
+        error: "Backend timeout",
+      };
+    }
+
     return {
       ok: false,
       claim_id: claimId,
@@ -108,15 +134,19 @@ async function postAiPrecheck(
 }
 
 export async function runAiPrecheckForClaim(claim: Claim): Promise<AiPrecheckResponse> {
+  // PHASE 4 STEP 10B
+  const claimWithSnakeCase = claim as Claim & { source_url?: string | null };
+  const body = {
+    claim_id: claim.id,
+    title: claim.title,
+    description: claim.description,
+    source_url: claim.sourceUrl || claimWithSnakeCase.source_url || "",
+    category: claim.category || "Other",
+  };
+
   return postAiPrecheck(
     "/ai/precheck",
-    {
-      claim_id: claim.id,
-      title: claim.title,
-      description: claim.description,
-      source_url: claim.sourceUrl,
-      category: claim.category ?? "Other",
-    },
+    body,
     claim.id,
   );
 }

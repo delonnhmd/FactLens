@@ -7,6 +7,7 @@
 // PHASE 4 STEP 7
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
+// PHASE 4 STEP 10B
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -686,6 +687,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   );
 
   // PHASE 4 STEP 2
+  // PHASE 4 STEP 10B
   const runAiPrecheckAndRefreshClaim = useCallback(
     async (targetClaim: Claim) => {
       const precheckResult = await runAiPrecheckForClaim(targetClaim);
@@ -694,7 +696,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         const message = getAiPrecheckErrorMessage(precheckResult);
         console.log("[ai precheck warning]", message);
         setAiPrecheckNotice(`AI pre-check failed: ${message}`);
-        return undefined;
+        throw new Error(message);
       }
 
       return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);

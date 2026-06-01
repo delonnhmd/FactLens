@@ -507,6 +507,7 @@ export default function ClaimDetailScreen() {
   };
 
   // PHASE 4 STEP 3
+  // PHASE 4 STEP 10B
   const handleRunAiPrecheck = async () => {
     if (!claim) {
       return;
@@ -518,9 +519,13 @@ export default function ClaimDetailScreen() {
 
     try {
       const updatedClaim = await runAiPrecheckForClaimId(claim.id);
+      if (!updatedClaim) {
+        throw new Error("AI pre-check completed, but claim refresh failed.");
+      }
+
       await waitForClaimRefetch();
       await refreshDetailClaim();
-      setAiPrecheckMessage(updatedClaim ? "AI pre-check updated." : "AI pre-check failed: AI pre-check unavailable.");
+      setAiPrecheckMessage("AI pre-check updated.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI pre-check unavailable.";
       setAiPrecheckError(`AI pre-check failed: ${message}`);

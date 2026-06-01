@@ -1,6 +1,7 @@
 // PHASE 4 STEP 1
 // PHASE 4 STEP 2
 // PHASE 4 STEP 6
+// PHASE 4 STEP 10B
 export const API_CONFIG = {
   BACKEND_URL:
     process.env.EXPO_PUBLIC_BACKEND_URL ||
