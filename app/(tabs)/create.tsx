@@ -1,14 +1,16 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
+import { Alert, Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
+import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
 import { claimCategories } from "../../constants/claimCategories";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { pickClaimImage, uploadClaimImage, type PickedClaimImage } from "../../services/imageUploadService";
+import { analyzeClaimDraft } from "../../utils/claimQuality";
 import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
@@ -42,6 +44,18 @@ export default function CreateScreen() {
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
+  // PHASE 4 STEP 11
+  const claimQuality = useMemo(
+    () => analyzeClaimDraft({ title, description, sourceUrl, category }),
+    [title, description, sourceUrl, category],
+  );
+  const needsClaimQualityConfirmation =
+    claimQuality.detectedType === "QUESTION" ||
+    claimQuality.detectedType === "OPINION" ||
+    claimQuality.detectedType === "UNCLEAR";
+  const showClaimQualityBox =
+    Boolean(title.trim() || description.trim() || sourceUrl.trim()) &&
+    (needsClaimQualityConfirmation || claimQuality.warnings.length > 0 || claimQuality.suggestions.length > 0);
   // PHASE 3 STEP 8
   const trimmedVideoUrl = videoUrl.trim();
   const normalizedVideoUrl = normalizeUrl(videoUrl);
@@ -126,26 +140,7 @@ export default function CreateScreen() {
   };
 
   // PHASE 3 STEP 7
-  const handleSubmit = async () => {
-    if (submitDisabled) {
-      setErrors((currentErrors) => ({
-        ...currentErrors,
-        title: titleOverLimit ? "Title must be 160 characters or fewer." : currentErrors.title,
-        description: descriptionOverLimit
-          ? "Description must be 1000 characters or fewer."
-          : currentErrors.description,
-        videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
-      }));
-      return;
-    }
-
-    const nextErrors = validateForm();
-
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
-      return;
-    }
-
+  const submitClaim = async () => {
     try {
       setIsSubmitting(true);
       let imageUrl: string | null = null;
@@ -186,6 +181,47 @@ export default function CreateScreen() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // PHASE 4 STEP 11
+  const handleSubmit = async () => {
+    if (submitDisabled) {
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        title: titleOverLimit ? "Title must be 160 characters or fewer." : currentErrors.title,
+        description: descriptionOverLimit
+          ? "Description must be 1000 characters or fewer."
+          : currentErrors.description,
+        videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
+      }));
+      return;
+    }
+
+    const nextErrors = validateForm();
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    if (needsClaimQualityConfirmation) {
+      Alert.alert("Claim quality warning", "This post may not be fact-checkable. Continue anyway?", [
+        {
+          text: "Edit Claim",
+          style: "cancel",
+        },
+        {
+          text: "Post Anyway",
+          style: "destructive",
+          onPress: () => {
+            void submitClaim();
+          },
+        },
+      ]);
+      return;
+    }
+
+    await submitClaim();
   };
 
   // PHASE 3 STEP 15
@@ -354,6 +390,13 @@ export default function CreateScreen() {
               <Text style={descriptionCounterStyle}>{description.length}/{DESCRIPTION_MAX_LENGTH}</Text>
             </View>
           </View>
+
+          {showClaimQualityBox ? (
+            <ClaimQualityBox
+              analysis={claimQuality}
+              onUseSuggestedTitle={(rewrittenTitle) => updateField("title", rewrittenTitle)}
+            />
+          ) : null}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Main Source URL</Text>
