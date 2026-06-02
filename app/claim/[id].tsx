@@ -161,6 +161,8 @@ export default function ClaimDetailScreen() {
   const [evidenceSuccess, setEvidenceSuccess] = useState("");
   // PHASE 2 STEP 6
   const [reportReason, setReportReason] = useState<ReportReason>("Spam");
+  // PHASE 4 STEP 16
+  const [selectedReportReason, setSelectedReportReason] = useState<ReportReason | null>(null);
   const [reportNote, setReportNote] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
   // PHASE 3 STEP 6
@@ -418,6 +420,16 @@ export default function ClaimDetailScreen() {
   }, [claim?.id, currentUser, fetchReportsForClaim]);
 
   // PHASE 3 STEP 6
+  // PHASE 4 STEP 16
+  useEffect(() => {
+    setReportReason("Spam");
+    setSelectedReportReason(null);
+    setReportNote("");
+    setReportSuccess(false);
+    setReportError("");
+  }, [claim?.id]);
+
+  // PHASE 3 STEP 6
   useEffect(() => {
     if (!userReport) {
       return;
@@ -508,11 +520,21 @@ export default function ClaimDetailScreen() {
       return;
     }
 
+    // PHASE 4 STEP 16
+    const reasonToSubmit = selectedReportReason;
+
+    if (!reasonToSubmit) {
+      setReportError("Choose a report reason.");
+      return;
+    }
+
     setReportError("");
     setReportSubmitting(true);
 
     try {
-      await reportClaim(claim.id, reportReason, reportNote);
+      await reportClaim(claim.id, reasonToSubmit, reportNote);
+      setReportReason(reasonToSubmit);
+      setSelectedReportReason(reasonToSubmit);
       setReportSuccess(true);
     } catch (error) {
       setReportError(error instanceof Error ? error.message : "We could not save this report. Please try again.");
@@ -587,8 +609,10 @@ export default function ClaimDetailScreen() {
       await waitForClaimRefetch();
       await refreshDetailClaim();
       setAiPrecheckMessage("AI re-check updated.");
-    } catch {
-      setAiPrecheckError("AI re-check failed. Try later.");
+    } catch (error) {
+      // PHASE 4 STEP 16
+      const message = error instanceof Error ? error.message : "AI re-check unavailable.";
+      setAiPrecheckError(`AI re-check failed: ${message}`);
     } finally {
       setAiEvidenceRecheckLoading(false);
     }
@@ -671,6 +695,8 @@ export default function ClaimDetailScreen() {
     ? "Phase 4 · Locked"
     : `Phase ${claim.currentPhase} · ${votingOpen ? "Voting" : "Locking"}`;
   const timeLabel = votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed";
+  // PHASE 4 STEP 16
+  const reportButtonActive = reportSubmitting || Boolean(selectedReportReason);
   const shareClaim = () => {
     Alert.alert("Share link copied.", claim.shareUrl);
   };
@@ -920,7 +946,8 @@ export default function ClaimDetailScreen() {
               style={styles.reportChipScroller}
             >
               {compactReportReasons.map((reason) => {
-                const selected = reportReason === reason.value;
+                // PHASE 4 STEP 16
+                const selected = selectedReportReason === reason.value;
 
                 return (
                   <TouchableOpacity
@@ -929,6 +956,7 @@ export default function ClaimDetailScreen() {
                     activeOpacity={0.8}
                     onPress={() => {
                       setReportReason(reason.value);
+                      setSelectedReportReason(reason.value);
                       setReportSuccess(false);
                       setReportError("");
                     }}
@@ -941,12 +969,20 @@ export default function ClaimDetailScreen() {
               })}
             </ScrollView>
             <TouchableOpacity
-              style={[styles.reportIconButton, reportSubmitting && styles.disabledButton]}
+              style={[
+                styles.reportIconButton,
+                reportButtonActive && styles.reportIconButtonActive,
+                reportSubmitting && styles.disabledButton,
+              ]}
               activeOpacity={0.8}
               onPress={handleSubmitReport}
               disabled={reportSubmitting}
             >
-              <Ionicons name="flag-outline" size={14} color={theme.colors.background} />
+              <Ionicons
+                name="flag-outline"
+                size={14}
+                color={reportButtonActive ? theme.colors.background : "#6B7280"}
+              />
             </TouchableOpacity>
           </View>
           {reportLoading ? <Text style={styles.reportMetaText}>Loading reports...</Text> : null}
@@ -1657,23 +1693,24 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   reasonButton: {
-    borderColor: theme.colors.border,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E5E7EB",
     borderRadius: 999,
     borderWidth: 0.5,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
   reasonButtonSelected: {
-    backgroundColor: theme.colors.dangerBg,
-    borderColor: "#F09595",
+    backgroundColor: "#FEE2E2",
+    borderColor: "#EF4444",
   },
   reasonButtonText: {
-    color: theme.colors.subtext,
+    color: "#6B7280",
     fontSize: 11,
     fontWeight: "400",
   },
   reasonButtonTextSelected: {
-    color: theme.colors.danger,
+    color: "#DC2626",
   },
   reportRowCompact: {
     alignItems: "center",
@@ -1699,10 +1736,17 @@ const styles = StyleSheet.create({
   },
   reportIconButton: {
     alignItems: "center",
-    backgroundColor: theme.colors.danger,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#E5E7EB",
+    borderWidth: 0.5,
     borderRadius: 8,
     justifyContent: "center",
     padding: 10,
+  },
+  // PHASE 4 STEP 16
+  reportIconButtonActive: {
+    backgroundColor: "#EF4444",
+    borderColor: "#EF4444",
   },
   reportMetaText: {
     color: theme.colors.subtext,

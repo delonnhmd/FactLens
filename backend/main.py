@@ -134,7 +134,6 @@ class AiPrecheckResponse(BaseModel):
     # PHASE 4 STEP 9
     source_domain: str | None = None
     source_score: int | None = None
-    source_lean: str | None = None
     source_reason: str | None = None
     # PHASE 4 STEP 10
     evidence_used_count: int | None = None
@@ -212,7 +211,6 @@ def log_source_score(endpoint_label: str, source_metadata: dict) -> None:
     print("[source] domain:", source_metadata.get("domain"), flush=True)
     print("[source] quality:", source_metadata.get("source_quality"), flush=True)
     print("[source] score:", source_metadata.get("source_score"), flush=True)
-    print("[source] lean:", source_metadata.get("source_lean"), flush=True)
 
 
 # PHASE 4 STEP 10
@@ -275,6 +273,7 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
+# PHASE 4 STEP 16
 def build_claim_ai_update_payload(analysis: dict) -> dict:
     return {
         # PHASE 4 STEP 7
@@ -285,7 +284,6 @@ def build_claim_ai_update_payload(analysis: dict) -> dict:
         # PHASE 4 STEP 9
         "source_domain": analysis.get("source_domain"),
         "source_score": analysis.get("source_score"),
-        "source_lean": analysis.get("source_lean"),
         "source_reason": analysis.get("source_reason"),
         # PHASE 4 STEP 10
         "evidence_used_count": analysis.get("evidence_used_count", 0),
@@ -337,10 +335,12 @@ def format_supabase_response_error(error: object) -> dict:
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
+# PHASE 4 STEP 16
 def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) -> dict:
     update_payload = build_claim_ai_update_payload(ai_result)
     print(f"[{endpoint_label}] Supabase project_ref:", get_supabase_project_ref(), flush=True)
     print(f"[{endpoint_label}] claim_id:", claim_id, flush=True)
+    print("[ai] source_lean disabled until schema added", flush=True)
     print(f"[{endpoint_label}] AI result:", ai_result, flush=True)
     print(f"[{endpoint_label}] update_payload:", update_payload, flush=True)
 
@@ -366,7 +366,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_lean, source_reason, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -429,7 +429,6 @@ def build_ai_error_analysis() -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "Unknown source",
-        "source_lean": "Unknown",
         # PHASE 4 STEP 10
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
@@ -452,6 +451,7 @@ def mark_claim_ai_error(claim_id: str) -> str | None:
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
+# PHASE 4 STEP 16
 def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
     updated_claim = update_result["updated_claim"]
     red_flags = normalize_red_flags(updated_claim.get("red_flags"))
@@ -469,7 +469,6 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         # PHASE 4 STEP 9
         "source_domain": updated_claim.get("source_domain"),
         "source_score": updated_claim.get("source_score"),
-        "source_lean": updated_claim.get("source_lean"),
         "source_reason": updated_claim.get("source_reason"),
         # PHASE 4 STEP 10
         "evidence_used_count": updated_claim.get("evidence_used_count"),

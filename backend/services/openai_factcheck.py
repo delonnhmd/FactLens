@@ -154,7 +154,6 @@ def _get_source_metadata(source_url: str, source_metadata: dict | None = None) -
 # PHASE 4 STEP 9
 def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
     source_quality = str(source_metadata.get("source_quality") or "Unknown source").strip() or "Unknown source"
-    source_lean = str(source_metadata.get("source_lean") or "Unknown").strip() or "Unknown"
 
     source_score = source_metadata.get("source_score")
 
@@ -168,7 +167,6 @@ def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
         "source_quality": source_quality,
         "source_domain": str(source_metadata.get("domain") or ""),
         "source_score": max(0, min(normalized_score, 100)),
-        "source_lean": source_lean,
         "source_reason": str(source_metadata.get("source_reason") or ""),
     }
 
@@ -310,7 +308,6 @@ def _error_analysis() -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "Unknown source",
-        "source_lean": "Unknown",
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
         "ai_summary": "AI pre-check failed. Community voting and evidence are still available.",
@@ -423,9 +420,13 @@ def _build_prompt(
     # PHASE 4 STEP 8
     # PHASE 4 STEP 9
     # PHASE 4 STEP 10
+    # PHASE 4 STEP 16
     ai_library = load_factlens_ai_library()
     ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
-    source_metadata_json = json.dumps(source_metadata, ensure_ascii=True, sort_keys=True)
+    source_metadata_for_prompt = {
+        key: value for key, value in source_metadata.items() if key != "source_lean"
+    }
+    source_metadata_json = json.dumps(source_metadata_for_prompt, ensure_ascii=True, sort_keys=True)
     evidence_json = json.dumps(_normalize_evidence_rows(evidence_rows), ensure_ascii=True, sort_keys=True)
     system_prompt = (
         "You are the AI pre-check engine for FactLens. "
@@ -442,7 +443,6 @@ def _build_prompt(
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "
-        "Political lean is separate transparency metadata and must never increase or decrease source score, confidence, or risk. "
         "Official source metadata can increase confidence only if that source supports the claim. "
         "Social source metadata must not be treated as strong evidence alone. "
         "Unknown source metadata should lower confidence. "
@@ -464,8 +464,6 @@ def _build_prompt(
         f"Category: {category or 'Other'}\n"
         f"Source score: {source_metadata.get('source_score')}\n"
         f"Source quality: {source_metadata.get('source_quality')}\n"
-        f"Political lean: {source_metadata.get('source_lean')}\n"
-        "Political lean is displayed for transparency only and must never affect the source credibility score.\n"
         f"FactLens source metadata: {source_metadata_json}\n"
         f"Community evidence: {evidence_json}"
     )

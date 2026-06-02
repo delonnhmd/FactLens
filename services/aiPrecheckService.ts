@@ -20,7 +20,6 @@ export interface AiPrecheckResponse {
   source_quality?: string | null;
   source_domain?: string | null;
   source_score?: number | null;
-  source_lean?: string | null;
   source_reason?: string | null;
   evidence_used_count?: number | null;
   red_flags?: string[] | null;
@@ -106,7 +105,6 @@ async function postAiPrecheck(
       source_quality: json.source_quality ?? null,
       source_domain: json.source_domain ?? null,
       source_score: json.source_score ?? null,
-      source_lean: json.source_lean ?? null,
       source_reason: json.source_reason ?? null,
       evidence_used_count: json.evidence_used_count ?? null,
       red_flags: json.red_flags ?? [],
