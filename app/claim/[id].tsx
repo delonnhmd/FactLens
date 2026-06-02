@@ -156,6 +156,8 @@ export default function ClaimDetailScreen() {
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceSubmitLoading, setEvidenceSubmitLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
+  // PHASE 4 STEP 14
+  const [evidenceSuccess, setEvidenceSuccess] = useState("");
   // PHASE 2 STEP 6
   const [reportReason, setReportReason] = useState<ReportReason>("Spam");
   const [reportNote, setReportNote] = useState("");
@@ -413,6 +415,11 @@ export default function ClaimDetailScreen() {
     if (evidenceErrors[field]) {
       setEvidenceErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
     }
+
+    if (evidenceError || evidenceSuccess) {
+      setEvidenceError("");
+      setEvidenceSuccess("");
+    }
   };
 
   const validateEvidence = (): EvidenceErrors => {
@@ -441,6 +448,7 @@ export default function ClaimDetailScreen() {
     }
 
     setEvidenceError("");
+    setEvidenceSuccess("");
     const nextErrors = validateEvidence();
 
     if (Object.keys(nextErrors).length > 0) {
@@ -460,6 +468,7 @@ export default function ClaimDetailScreen() {
       setEvidenceNote("");
       setEvidenceType("ADDS_CONTEXT");
       setEvidenceErrors({});
+      setEvidenceSuccess("Evidence saved.");
     } catch (error) {
       setEvidenceError(error instanceof Error ? error.message : "We could not save this evidence. Please try again.");
     } finally {
@@ -987,6 +996,7 @@ export default function ClaimDetailScreen() {
           </View>
 
           {evidenceError ? <Text style={styles.errorText}>{evidenceError}</Text> : null}
+          {evidenceSuccess ? <Text style={styles.reportSuccess}>{evidenceSuccess}</Text> : null}
 
           <TouchableOpacity
             style={[styles.addEvidenceButton, evidenceSubmitLoading && styles.disabledButton]}

@@ -1085,10 +1085,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // PHASE 3 STEP 5
+  // PHASE 4 STEP 14
   const addEvidence = useCallback(
     async (claimId: string, evidenceInput: EvidenceInput) => {
       if (!currentUser) {
-        throw new Error("Log in to add evidence.");
+        throw new Error("Please log in to add evidence.");
       }
 
       // PHASE 3 STEP 28

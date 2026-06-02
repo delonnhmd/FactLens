@@ -1,8 +1,11 @@
 // PHASE 3 STEP 5
 // PHASE 3 STEP 28
+// PHASE 4 STEP 14
 import { supabase } from "../lib/supabase";
 import { getSourceQuality } from "./sourceQuality";
+import { ensureProfileForUser } from "./profileService";
 import type { Evidence, EvidenceType } from "../types/claim";
+import { getDebugErrorParts } from "../utils/debugError";
 import { isValidSourceUrl, normalizeUrl } from "../utils/url";
 
 export interface EvidenceInput {
@@ -65,6 +68,46 @@ function getEvidenceErrorMessage(message: string, action: "load" | "save" | "del
   }
 
   return "We could not save this evidence. Please try again.";
+}
+
+// PHASE 4 STEP 14
+function removeUndefinedValues<T extends Record<string, unknown>>(payload: T): T {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
+// PHASE 4 STEP 14
+function formatSupabaseEvidenceError(error: { message?: unknown; code?: unknown; details?: unknown; hint?: unknown }): string {
+  const parts = getDebugErrorParts(error);
+
+  return [
+    `We could not save this evidence: ${parts.message}`,
+    parts.code ? `Code: ${parts.code}` : "",
+    parts.details ? `Details: ${parts.details}` : "",
+    parts.hint ? `Hint: ${parts.hint}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// PHASE 4 STEP 14
+function normalizeEvidenceType(type: EvidenceType | string): EvidenceType {
+  const normalizedType = type.trim().toUpperCase().replace(/\s+/g, "_");
+
+  if (normalizedType === "SUPPORTS_TRUE" || normalizedType === "TRUE") {
+    return "SUPPORTS_TRUE";
+  }
+
+  if (normalizedType === "SUPPORTS_FAKE" || normalizedType === "FAKE") {
+    return "SUPPORTS_FAKE";
+  }
+
+  if (normalizedType === "ADDS_CONTEXT" || normalizedType === "CONTEXT" || normalizedType === "ADDS") {
+    return "ADDS_CONTEXT";
+  }
+
+  return "UNCLEAR";
 }
 
 function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string | null {
@@ -158,6 +201,7 @@ export async function addEvidence(
   userId: string,
   input: EvidenceInput,
 ): Promise<EvidenceResult> {
+  void userId;
   const validationError = validateEvidenceInput(input);
 
   if (validationError) {
@@ -167,37 +211,64 @@ export async function addEvidence(
     };
   }
 
+  // PHASE 4 STEP 14
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const user = userData?.user;
+
+  if (userError || !user) {
+    console.log("[evidence] auth user error:", userError);
+    return {
+      evidence: null,
+      error: "Please log in to add evidence.",
+    };
+  }
+
+  console.log("[evidence] auth user id:", user.id);
+
+  const profileResult = await ensureProfileForUser(user);
+
+  if (profileResult.error || !profileResult.profile) {
+    return {
+      evidence: null,
+      error: profileResult.error ?? "Profile required to add evidence.",
+    };
+  }
+
   const normalizedUrl = normalizeUrl(input.url);
+  const normalizedEvidenceType = normalizeEvidenceType(input.type);
   const sourceQuality = getSourceQuality(normalizedUrl);
+  const payload = removeUndefinedValues({
+    claim_id: claimId,
+    user_id: user.id,
+    url: normalizedUrl,
+    note: input.note.trim(),
+    evidence_type: normalizedEvidenceType,
+    source_quality_label: sourceQuality.label || null,
+    source_quality_score: sourceQuality.score ?? null,
+  });
+
+  console.log("[evidence] payload:", payload);
 
   const { data, error } = await supabase
     .from("evidence")
-    .insert({
-      claim_id: claimId,
-      user_id: userId,
-      evidence_type: input.type,
-      url: normalizedUrl,
-      note: input.note.trim(),
-      source_quality_label: sourceQuality.label,
-      source_quality_score: sourceQuality.score,
-      source_quality_reason: sourceQuality.reason,
-    })
+    .insert(payload)
     .select("*")
     .single();
 
   if (error) {
+    console.log("[evidence] error:", error);
     return {
       evidence: null,
-      error: getEvidenceErrorMessage(error.message, "save"),
+      error: formatSupabaseEvidenceError(error),
     };
   }
 
   const countResult = await recalculateEvidenceCount(claimId);
 
   if (countResult.error) {
+    console.log("[evidence] count refresh warning:", countResult.error);
     return {
       evidence: mapEvidenceRowToEvidence(data as EvidenceRow),
-      error: countResult.error,
     };
   }
 
