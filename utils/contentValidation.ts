@@ -1,6 +1,8 @@
 // PHASE 3 STEP 8
 // PHASE 3 STEP 28
 // PHASE 4 STEP 11 REVISED
+// PHASE 4 STEP 13B
+import { APP_CONFIG } from "../constants/appConfig";
 import { PROHIBITED_CONTENT } from "../constants/contentRules";
 import { isSupportedVideoUrl } from "./videoUrl";
 import { isValidSourceUrl, normalizeUrl } from "./url";
@@ -69,9 +71,9 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
     errors.push("Description must be 1000 characters or fewer.");
   }
 
-  if (!sourceUrl) {
+  if (!sourceUrl && !APP_CONFIG.TEST_MODE) {
     errors.push("Source URL is required.");
-  } else if (!isValidSourceUrl(sourceUrl)) {
+  } else if (sourceUrl && !isValidSourceUrl(sourceUrl)) {
     errors.push("Enter a valid source URL.");
   }
 

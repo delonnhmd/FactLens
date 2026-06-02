@@ -21,7 +21,6 @@ import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import { normalizeUrl } from "../utils/url";
 import { formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
 import {
-  createClaimTiming,
   getScoreLockAt,
   getVoteAcceptUntil,
 } from "../utils/verificationTiming";
@@ -34,7 +33,7 @@ import {
 import type { Claim, ClaimStatus, AiCheck, ClaimType } from "../types/claim";
 import type { SourceQuality, VerificationMode, VerificationVote } from "../types/verification";
 import type { User as AppUser } from "../types/user";
-import type { Profile } from "./profileService";
+import { ensureProfileForUser, type Profile } from "./profileService";
 
 type ClaimAiStatus = AiCheck["status"];
 
@@ -796,23 +795,23 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
   }
 }
 
-export function mapClaimToInsert(input: CreateClaimInput) {
+export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
   const normalizedSourceUrl = normalizeUrl(input.sourceUrl);
   const safeSourceUrl = normalizedSourceUrl || (APP_CONFIG.TEST_MODE ? "https://www.pennyfloat.com" : "");
   const normalizedVideoUrl = input.videoUrl ? normalizeUrl(input.videoUrl) : "";
   const trimmedVideoUrl = normalizedVideoUrl || null;
-  // PHASE 3 STEP 17
-  // PHASE 3 STEP 22
-  // PHASE 3 STEP 24
-  // PHASE 4 STEP 13
-  const timing = createClaimTiming(VERIFICATION_MODE);
-  console.log("[createClaim] timing:", timing);
+  // PHASE 4 STEP 13B
+  const now = new Date();
+  const createdAt = now.toISOString();
+  const voteAcceptUntil = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+  const scoreLockAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
+  const expiresAt = scoreLockAt;
   console.log("[url] normalized source url:", safeSourceUrl);
   console.log("[url] normalized source:", safeSourceUrl);
 
   const payload = removeUndefinedValues({
-    author_id: input.authorId,
-    created_at: timing.createdAt,
+    author_id: authorId,
+    created_at: createdAt,
     title: input.title.trim(),
     description: input.description.trim(),
     source_url: safeSourceUrl,
@@ -837,18 +836,18 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     evidence_count: 0,
     evidence_used_count: 0,
     is_flagged: false,
-    mode: timing.mode,
+    mode: "test",
     current_phase: 0,
-    vote_accept_until: timing.voteAcceptUntil,
-    score_lock_at: timing.scoreLockAt,
+    vote_accept_until: voteAcceptUntil,
+    score_lock_at: scoreLockAt,
     published_at: null,
     phase4_locked: false,
     early_verdict_fired: false,
     suspicious_activity: false,
-    weighted_community_score: 0.5,
-    final_score: 0.5,
-    min_votes_required: timing.minVotesRequired,
-    expected_participation: timing.expectedParticipation,
+    weighted_community_score: 0,
+    final_score: 0,
+    min_votes_required: 5,
+    expected_participation: 10,
     source_count: 0,
     source_quality: "unknown",
     // PHASE 4 STEP 9
@@ -857,7 +856,7 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     source_reason: null,
     red_flags: [],
     ai_summary: null,
-    expires_at: timing.expiresAt,
+    expires_at: expiresAt,
   });
 
   console.log("[create claim] insert payload:", payload);
@@ -1273,10 +1272,35 @@ export async function fetchClaimById(id: string): Promise<ClaimResult> {
 export async function createClaim(input: CreateClaimInput): Promise<ClaimResult> {
   // PHASE 3 STEP 29
   // PHASE 4 STEP 13
-  const payload = mapClaimToInsert(input);
+  // PHASE 4 STEP 13B
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const user = userData?.user;
+
+  if (userError || !user) {
+    console.log("[create claim] auth user error:", userError);
+    return {
+      claim: null,
+      error: "Please log in to post.",
+    };
+  }
+
+  console.log("[create claim] auth user id:", user.id);
+
+  const profileResult = await ensureProfileForUser(user);
+
+  if (profileResult.error || !profileResult.profile) {
+    return {
+      claim: null,
+      error: profileResult.error ?? "Profile required to post.",
+    };
+  }
+
+  const authorProfile = profileResult.profile;
+  const payload = mapClaimToInsert(input, user.id);
   const { data, error } = await supabase.from("claims").insert(payload).select("*").single();
 
   if (error) {
+    console.log("[create claim] error:", error);
     console.log("[create claim] insert error:", {
       code: error.code,
       message: error.message,
@@ -1295,7 +1319,7 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
 
   if (!insertedClaimId) {
     return {
-      claim: mapClaimRowToClaim(attachAuthorProfile(insertedRow, input.profile)),
+      claim: mapClaimRowToClaim(attachAuthorProfile(insertedRow, authorProfile)),
       error: "Claim was saved, but Supabase did not return a claim id.",
     };
   }
@@ -1333,7 +1357,7 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
 
   return {
     claim: mapClaimRowToClaim(
-      attachAuthorProfile((updatedData as ClaimRow | null) ?? { ...insertedRow, share_url: shareUrl }, input.profile),
+      attachAuthorProfile((updatedData as ClaimRow | null) ?? { ...insertedRow, share_url: shareUrl }, authorProfile),
     ),
   };
 }

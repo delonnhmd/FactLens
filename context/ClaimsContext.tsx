@@ -805,13 +805,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     if (!authorProfile) {
       const profileResult = await ensureProfile();
       authorProfile = profileResult.profile ?? null;
-    }
 
-    if (!authorProfile) {
-      throw new Error("Profile required to post.");
+      if (profileResult.error) {
+        throw new Error(profileResult.error);
+      }
     }
 
     // PHASE 4 STEP 13
+    // PHASE 4 STEP 13B
     let result = await createRemoteClaim({
       authorId: currentUser.id,
       title: input.title,
