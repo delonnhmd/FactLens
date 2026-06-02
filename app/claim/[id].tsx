@@ -6,7 +6,8 @@
 // PHASE 4 STEP 8
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
-import { useCallback, useEffect, useState } from "react";
+// PHASE 4 STEP 15
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -179,6 +180,9 @@ export default function ClaimDetailScreen() {
   const [aiPrecheckError, setAiPrecheckError] = useState("");
   // PHASE 3 STEP 12
   const [liveUpdatesOn, setLiveUpdatesOn] = useState(false);
+  // PHASE 4 STEP 15
+  const detailFetchInFlightRef = useRef(false);
+  const evidenceFetchInFlightRef = useRef(false);
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
@@ -192,6 +196,13 @@ export default function ClaimDetailScreen() {
       return undefined;
     }
 
+    // PHASE 4 STEP 15
+    if (detailFetchInFlightRef.current) {
+      console.log("[detail] fetch already running, skip");
+      return undefined;
+    }
+
+    detailFetchInFlightRef.current = true;
     setDetailLoading(true);
     setDetailError("");
 
@@ -228,6 +239,8 @@ export default function ClaimDetailScreen() {
       if (!mountedRef || mountedRef.current) {
         setDetailLoading(false);
       }
+
+      detailFetchInFlightRef.current = false;
     }
   }, [claimId, fetchClaimById]);
 
@@ -346,6 +359,15 @@ export default function ClaimDetailScreen() {
     }
 
     let mounted = true;
+    // PHASE 4 STEP 15
+    if (evidenceFetchInFlightRef.current) {
+      console.log("[evidence] detail fetch already running, skip");
+      return () => {
+        mounted = false;
+      };
+    }
+
+    evidenceFetchInFlightRef.current = true;
     setEvidenceLoading(true);
     setEvidenceError("");
 
@@ -359,6 +381,8 @@ export default function ClaimDetailScreen() {
         if (mounted) {
           setEvidenceLoading(false);
         }
+
+        evidenceFetchInFlightRef.current = false;
       });
 
     return () => {
@@ -444,7 +468,8 @@ export default function ClaimDetailScreen() {
   };
 
   const handleAddEvidence = async () => {
-    if (!claim) {
+    // PHASE 4 STEP 15
+    if (!claim || evidenceSubmitLoading) {
       return;
     }
 
@@ -520,7 +545,8 @@ export default function ClaimDetailScreen() {
   // PHASE 4 STEP 3
   // PHASE 4 STEP 10B
   const handleRunAiPrecheck = async () => {
-    if (!claim) {
+    // PHASE 4 STEP 15
+    if (!claim || aiPrecheckLoading || aiEvidenceRecheckLoading) {
       return;
     }
 
@@ -547,7 +573,8 @@ export default function ClaimDetailScreen() {
 
   // PHASE 4 STEP 10
   const handleRecheckWithEvidence = async () => {
-    if (!claim) {
+    // PHASE 4 STEP 15
+    if (!claim || aiPrecheckLoading || aiEvidenceRecheckLoading) {
       return;
     }
 
@@ -1006,7 +1033,7 @@ export default function ClaimDetailScreen() {
             disabled={evidenceSubmitLoading}
           >
             <Text style={styles.addEvidenceButtonText}>
-              {evidenceSubmitLoading ? "Saving Evidence..." : "Add Evidence"}
+              {evidenceSubmitLoading ? "Adding..." : "Add Evidence"}
             </Text>
           </TouchableOpacity>
 

@@ -1,6 +1,7 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 27
-import { useCallback, useEffect, useMemo, useState } from "react";
+// PHASE 4 STEP 15
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -75,6 +76,8 @@ export default function HomeScreen() {
   const debouncedQuery = useDebounce(query, 400);
   // PHASE 2 STEP 10
   const [refreshing, setRefreshing] = useState(false);
+  // PHASE 4 STEP 15
+  const filteredFetchInFlightRef = useRef(false);
 
   const filteredFeedActive = debouncedQuery.trim().length > 0 || Boolean(activeCategory);
 
@@ -93,6 +96,14 @@ export default function HomeScreen() {
         setFeedError("");
         return;
       }
+
+      // PHASE 4 STEP 15
+      if (filteredFetchInFlightRef.current) {
+        console.log("[claims] filtered fetch already running, skip");
+        return;
+      }
+
+      filteredFetchInFlightRef.current = true;
 
       if (replace) {
         setFeedLoading(true);
@@ -123,6 +134,7 @@ export default function HomeScreen() {
       } finally {
         setFeedLoading(false);
         setFeedLoadingMore(false);
+        filteredFetchInFlightRef.current = false;
       }
     },
     [activeCategory, debouncedQuery, filteredFeedActive, searchClaimsPage],

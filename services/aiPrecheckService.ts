@@ -6,6 +6,7 @@
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
 // PHASE 4 STEP 10B
+// PHASE 4 STEP 15
 import { API_CONFIG } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
@@ -33,7 +34,7 @@ export interface AiPrecheckResponse {
   updated_claim?: Record<string, unknown> | null;
 }
 
-const AI_PRECHECK_TIMEOUT_MS = 10000;
+const AI_PRECHECK_TIMEOUT_MS = 12000;
 
 function getBackendErrorMessage(data: Partial<AiPrecheckResponse>, status: number): string {
   const detail =
@@ -65,7 +66,8 @@ async function postAiPrecheck(
 
   const requestUrl = `${backendUrl}${path}`;
   console.log("[ai frontend] backend url:", API_CONFIG.BACKEND_URL);
-  console.log("[ai frontend] request body:", body);
+  // PHASE 4 STEP 15
+  console.log("[ai frontend] calling:", requestUrl);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), AI_PRECHECK_TIMEOUT_MS);
@@ -81,8 +83,8 @@ async function postAiPrecheck(
     });
     const json = (await response.json().catch(() => ({}))) as Partial<AiPrecheckResponse>;
 
+    // PHASE 4 STEP 15
     console.log("[ai frontend] response status:", response.status);
-    console.log("[ai frontend] response json:", json);
 
     if (!response.ok) {
       return {
@@ -121,7 +123,7 @@ async function postAiPrecheck(
       return {
         ok: false,
         claim_id: claimId,
-        error: "Backend timeout",
+        error: "AI request timed out.",
       };
     }
 

@@ -330,9 +330,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(() => new Date());
   const claimsRef = useRef<Claim[]>([]);
   const locallyCreatedClaimIdsRef = useRef(new Set<string>());
-  // PHASE 4 STEP 3
-  const aiRetryInProgressClaimIdsRef = useRef(new Set<string>());
-  const aiAutoRetryStartedRef = useRef(false);
+  // PHASE 4 STEP 15
+  const aiInFlightClaimIdsRef = useRef(new Set<string>());
+  const isFetchingClaimsRef = useRef(false);
+  const isLoadingMoreClaimsRef = useRef(false);
+  const claimFetchInFlightClaimIdsRef = useRef(new Set<string>());
+  const evidenceFetchInFlightClaimIdsRef = useRef(new Set<string>());
+  const evidenceAddInFlightClaimIdsRef = useRef(new Set<string>());
+  const finalizingExpiredClaimIdsRef = useRef(new Set<string>());
 
   useEffect(() => {
     claimsRef.current = claims;
@@ -458,6 +463,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 11
   const refreshClaims = useCallback(async () => {
+    // PHASE 4 STEP 15
+    if (isFetchingClaimsRef.current) {
+      console.log("[claims] fetch already running, skip");
+      return;
+    }
+
+    isFetchingClaimsRef.current = true;
     setLoading(true);
     clearClaimsError();
 
@@ -472,6 +484,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         errorMessage: supabaseConfigError,
       });
       setLoading(false);
+      isFetchingClaimsRef.current = false;
       return;
     }
 
@@ -485,15 +498,21 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       throw loadError;
     } finally {
       setLoading(false);
+      isFetchingClaimsRef.current = false;
     }
   }, [clearClaimsError, fetchLatestClaims, setClaimsErrorFromResult, setClaimsErrorFromUnknown]);
 
   // PHASE 3 STEP 11
   const loadMoreClaims = useCallback(async () => {
-    if (loading || loadingMore || !hasMoreClaims) {
+    // PHASE 4 STEP 15
+    if (loading || loadingMore || isLoadingMoreClaimsRef.current || !hasMoreClaims) {
+      if (isLoadingMoreClaimsRef.current) {
+        console.log("[claims] load more already running, skip");
+      }
       return;
     }
 
+    isLoadingMoreClaimsRef.current = true;
     setLoadingMore(true);
     clearClaimsError();
 
@@ -508,6 +527,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       setClaimsErrorFromUnknown(loadError);
     } finally {
       setLoadingMore(false);
+      isLoadingMoreClaimsRef.current = false;
     }
   }, [applyRemoteClaims, claimOffset, clearClaimsError, hasMoreClaims, loading, loadingMore, setClaimsErrorFromUnknown]);
 
@@ -589,12 +609,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   }, [applyRemoteClaims]);
 
   // PHASE 3 STEP 10
+  // PHASE 4 STEP 15
   useEffect(() => {
-    const expiredOpenClaims = claims.filter(
+    const expiredOpenClaims = claimsRef.current.filter(
       (claim) =>
         (claim.status === "OPEN" || claim.status === "VOTING_CLOSED") &&
         // PHASE 3 STEP 22
-        new Date(getVoteAcceptUntil(claim)).getTime() <= now.getTime(),
+        new Date(getVoteAcceptUntil(claim)).getTime() <= now.getTime() &&
+        !finalizingExpiredClaimIdsRef.current.has(claim.id),
     );
 
     if (expiredOpenClaims.length === 0) {
@@ -602,6 +624,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     }
 
     let mounted = true;
+    expiredOpenClaims.forEach((claim) => finalizingExpiredClaimIdsRef.current.add(claim.id));
 
     finalizeRemoteExpiredClaims(expiredOpenClaims)
       .then(async (result) => {
@@ -615,12 +638,23 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         if (mounted) {
           setError(finalizeError instanceof Error ? finalizeError.message : "We could not finalize expired claims.");
         }
+      })
+      .finally(() => {
+        expiredOpenClaims.forEach((claim) => finalizingExpiredClaimIdsRef.current.delete(claim.id));
       });
 
     return () => {
       mounted = false;
     };
-  }, [applyUserVotes, claims, now]);
+  }, [applyUserVotes, now]);
+
+  /*
+   * PHASE 4 STEP 15
+   * Automatic AI retry on app open is disabled for stability. AI now runs only:
+   * 1. once after claim creation,
+   * 2. when the user taps Run AI Pre-check,
+   * 3. when the user taps Re-check with Evidence.
+   */
 
   const currentClaims = useMemo(
     () =>
@@ -679,30 +713,44 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 4 STEP 2
   // PHASE 4 STEP 10B
+  // PHASE 4 STEP 15
   const runAiPrecheckAndRefreshClaim = useCallback(
     async (targetClaim: Claim) => {
-      const precheckResult = await runAiPrecheckForClaim(targetClaim);
-
-      if (!precheckResult.ok) {
-        const message = getAiPrecheckErrorMessage(precheckResult);
-        console.log("[ai precheck warning]", message);
-        setAiPrecheckNotice(`AI pre-check failed: ${message}`);
-        throw new Error(message);
+      if (aiInFlightClaimIdsRef.current.has(targetClaim.id)) {
+        console.log("[ai] already running, skip:", targetClaim.id);
+        return undefined;
       }
 
-      return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);
+      aiInFlightClaimIdsRef.current.add(targetClaim.id);
+
+      try {
+        const precheckResult = await runAiPrecheckForClaim(targetClaim);
+
+        if (!precheckResult.ok) {
+          const message = getAiPrecheckErrorMessage(precheckResult);
+          console.log("[ai precheck warning]", message);
+          setAiPrecheckNotice(`AI pre-check failed: ${message}`);
+          throw new Error(message);
+        }
+
+        return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);
+      } finally {
+        aiInFlightClaimIdsRef.current.delete(targetClaim.id);
+      }
     },
     [refreshClaimAfterAiPrecheck],
   );
 
   // PHASE 4 STEP 3
+  // PHASE 4 STEP 15
   const retryAiPrecheckAndRefreshClaim = useCallback(
     async (targetClaim: Claim, showNotice = true) => {
-      if (aiRetryInProgressClaimIdsRef.current.has(targetClaim.id)) {
+      if (aiInFlightClaimIdsRef.current.has(targetClaim.id)) {
+        console.log("[ai] already running, skip:", targetClaim.id);
         return undefined;
       }
 
-      aiRetryInProgressClaimIdsRef.current.add(targetClaim.id);
+      aiInFlightClaimIdsRef.current.add(targetClaim.id);
 
       try {
         const precheckResult = await retryAiPrecheckForClaim(targetClaim.id);
@@ -724,7 +772,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
         return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);
       } finally {
-        aiRetryInProgressClaimIdsRef.current.delete(targetClaim.id);
+        aiInFlightClaimIdsRef.current.delete(targetClaim.id);
       }
     },
     [refreshClaimAfterAiPrecheck],
@@ -758,38 +806,6 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     },
     [retryAiPrecheckAndRefreshClaim],
   );
-
-  // PHASE 4 STEP 3
-  useEffect(() => {
-    if (loading || aiAutoRetryStartedRef.current) {
-      return;
-    }
-
-    const twentyFourHoursAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const retryClaims = currentClaims
-      .filter((claim) => {
-        const createdAtMs = new Date(claim.createdAt).getTime();
-        const isRecent = Number.isFinite(createdAtMs) && createdAtMs >= twentyFourHoursAgo;
-        const aiStatus = claim.aiCheck.status;
-        // PHASE 4 STEP 7
-        console.log("[claim] claimType:", claim.claimType);
-
-        return isRecent && (aiStatus === "PENDING" || aiStatus === "ERROR");
-      })
-      .slice(0, 5);
-
-    if (retryClaims.length === 0) {
-      return;
-    }
-
-    aiAutoRetryStartedRef.current = true;
-
-    retryClaims.forEach((claim) => {
-      void retryAiPrecheckAndRefreshClaim(claim, false).catch((retryError) => {
-        console.log("[ai precheck auto-retry warning]", retryError instanceof Error ? retryError.message : retryError);
-      });
-    });
-  }, [currentClaims, loading, retryAiPrecheckAndRefreshClaim]);
 
   const createClaim = useCallback(async (input: CreateClaimInput) => {
     if (!currentUser) {
@@ -1064,62 +1080,19 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 5
   const fetchEvidenceForClaim = useCallback(async (claimId: string) => {
-    const result = await fetchRemoteEvidenceForClaim(claimId);
-
-    if (result.error) {
-      throw new Error(result.error);
+    // PHASE 4 STEP 15
+    if (evidenceFetchInFlightClaimIdsRef.current.has(claimId)) {
+      console.log("[evidence] fetch already running, skip:", claimId);
+      return claimsRef.current.find((claim) => claim.id === claimId)?.evidence ?? [];
     }
 
-    setClaims((currentClaimsState) =>
-      currentClaimsState.map((claim) =>
-        claim.id === claimId
-          ? {
-              ...claim,
-              evidence: result.evidence,
-              evidenceCount: result.evidence.length,
-            }
-          : claim,
-      ),
-    );
+    evidenceFetchInFlightClaimIdsRef.current.add(claimId);
 
-    return result.evidence;
-  }, []);
+    try {
+      const result = await fetchRemoteEvidenceForClaim(claimId);
 
-  // PHASE 3 STEP 5
-  // PHASE 4 STEP 14
-  // PHASE 4 STEP 14B
-  const addEvidence = useCallback(
-    async (claimId: string, evidenceInput: EvidenceInput) => {
-      if (!currentUser) {
-        throw new Error("Please log in to add evidence.");
-      }
-
-      // PHASE 3 STEP 28
-      if (!isVerified) {
-        throw new Error("Verify your email to add evidence.");
-      }
-
-      let evidenceProfile = profile;
-
-      if (!evidenceProfile) {
-        const profileResult = await ensureProfile();
-        evidenceProfile = profileResult.profile ?? null;
-      }
-
-      if (!evidenceProfile) {
-        throw new Error("Profile required to add evidence.");
-      }
-
-      const addResult = await addRemoteEvidence(claimId, currentUser.id, evidenceInput);
-
-      if (addResult.error || !addResult.evidence) {
-        throw new Error(addResult.error ?? "We could not save this evidence. Please try again.");
-      }
-
-      const listResult = await fetchRemoteEvidenceForClaim(claimId);
-
-      if (listResult.error) {
-        throw new Error(listResult.error);
+      if (result.error) {
+        throw new Error(result.error);
       }
 
       setClaims((currentClaimsState) =>
@@ -1127,14 +1100,81 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
           claim.id === claimId
             ? {
                 ...claim,
-                evidence: listResult.evidence,
-                evidenceCount: addResult.evidenceCount ?? listResult.evidence.length,
+                evidence: result.evidence,
+                evidenceCount: result.evidence.length,
               }
             : claim,
         ),
       );
 
-      return listResult.evidence;
+      return result.evidence;
+    } finally {
+      evidenceFetchInFlightClaimIdsRef.current.delete(claimId);
+    }
+  }, []);
+
+  // PHASE 3 STEP 5
+  // PHASE 4 STEP 14
+  // PHASE 4 STEP 14B
+  const addEvidence = useCallback(
+    async (claimId: string, evidenceInput: EvidenceInput) => {
+      // PHASE 4 STEP 15
+      if (evidenceAddInFlightClaimIdsRef.current.has(claimId)) {
+        console.log("[evidence] add already running, skip:", claimId);
+        throw new Error("Evidence is already being saved.");
+      }
+
+      if (!currentUser) {
+        throw new Error("Please log in to add evidence.");
+      }
+
+      evidenceAddInFlightClaimIdsRef.current.add(claimId);
+
+      try {
+        // PHASE 3 STEP 28
+        if (!isVerified) {
+          throw new Error("Verify your email to add evidence.");
+        }
+
+        let evidenceProfile = profile;
+
+        if (!evidenceProfile) {
+          const profileResult = await ensureProfile();
+          evidenceProfile = profileResult.profile ?? null;
+        }
+
+        if (!evidenceProfile) {
+          throw new Error("Profile required to add evidence.");
+        }
+
+        const addResult = await addRemoteEvidence(claimId, currentUser.id, evidenceInput);
+
+        if (addResult.error || !addResult.evidence) {
+          throw new Error(addResult.error ?? "We could not save this evidence. Please try again.");
+        }
+
+        const listResult = await fetchRemoteEvidenceForClaim(claimId);
+
+        if (listResult.error) {
+          throw new Error(listResult.error);
+        }
+
+        setClaims((currentClaimsState) =>
+          currentClaimsState.map((claim) =>
+            claim.id === claimId
+              ? {
+                  ...claim,
+                  evidence: listResult.evidence,
+                  evidenceCount: addResult.evidenceCount ?? listResult.evidence.length,
+                }
+              : claim,
+          ),
+        );
+
+        return listResult.evidence;
+      } finally {
+        evidenceAddInFlightClaimIdsRef.current.delete(claimId);
+      }
     },
     [currentUser, ensureProfile, isVerified, profile],
   );
@@ -1287,23 +1327,36 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const fetchClaimById = useCallback(
     async (claimId: string) => {
       // PHASE 3 STEP 32
-      const existingClaim = currentClaims.find((claim) => claim.id === claimId);
-      const result = await fetchRemoteClaimById(claimId);
+      // PHASE 4 STEP 15
+      const existingClaim = claimsRef.current.find((claim) => claim.id === claimId);
 
-      if (result.error) {
-        setError(result.error);
+      if (claimFetchInFlightClaimIdsRef.current.has(claimId)) {
+        console.log("[claim] fetch already running, skip:", claimId);
+        return existingClaim;
+      }
+
+      claimFetchInFlightClaimIdsRef.current.add(claimId);
+
+      try {
+        const result = await fetchRemoteClaimById(claimId);
+
+        if (result.error) {
+          setError(result.error);
+          return undefined;
+        }
+
+        if (result.claim) {
+          const remoteClaim = mergeLocalClaimState(result.claim, existingClaim);
+          const [loadedClaim] = await applyRemoteClaims({ claims: [remoteClaim] }, false);
+          return loadedClaim;
+        }
+
         return undefined;
+      } finally {
+        claimFetchInFlightClaimIdsRef.current.delete(claimId);
       }
-
-      if (result.claim) {
-        const remoteClaim = mergeLocalClaimState(result.claim, existingClaim);
-        const [loadedClaim] = await applyRemoteClaims({ claims: [remoteClaim] }, false);
-        return loadedClaim;
-      }
-
-      return undefined;
     },
-    [applyRemoteClaims, currentClaims],
+    [applyRemoteClaims],
   );
 
   const value = useMemo(

@@ -1,4 +1,5 @@
 // PHASE 3 STEP 12
+// PHASE 4 STEP 15
 import { supabase } from "../lib/supabase";
 
 export type RealtimeStatus = "active" | "error" | "closed";
@@ -19,7 +20,8 @@ type RealtimeChangeHandler = (payload: RealtimeChangePayload) => void;
 type RealtimeStatusHandler = (status: RealtimeStatus) => void;
 
 function makeChannelName(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  // PHASE 4 STEP 15
+  return prefix;
 }
 
 function subscribeToTableChanges(
