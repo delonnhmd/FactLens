@@ -4,6 +4,7 @@
 # PHASE 4 STEP 8
 # PHASE 4 STEP 9
 # PHASE 4 STEP 10
+# PHASE 4 STEP 17
 import json
 import os
 from typing import Literal
@@ -86,6 +87,39 @@ SUSPICIOUS_TERMS = [
 
 CLAIM_TYPES = {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}
 AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "NOT_FACT_CHECKABLE", "ERROR"}
+ALLOWED_SOURCE_QUALITIES = {"official", "mainstream", "specialized", "social", "blog", "unknown"}
+NON_SOURCE_QUALITY_VALUES = {"opinion", "question", "satire", "promotion", "unclear", "not_fact_checkable"}
+
+
+# PHASE 4 STEP 17
+def normalize_source_quality(value: object) -> str:
+    if not value:
+        return "unknown"
+
+    normalized = str(value).strip().lower()
+
+    if normalized in ALLOWED_SOURCE_QUALITIES:
+        return normalized
+
+    if normalized in NON_SOURCE_QUALITY_VALUES:
+        return "unknown"
+
+    if "official" in normalized or normalized.endswith(".gov") or normalized.endswith(".edu"):
+        return "official"
+
+    if "mainstream" in normalized or "authoritative" in normalized or "established" in normalized:
+        return "mainstream"
+
+    if "specialized" in normalized:
+        return "specialized"
+
+    if "social" in normalized:
+        return "social"
+
+    if "blog" in normalized:
+        return "blog"
+
+    return "unknown"
 
 
 # PHASE 4 STEP 7
@@ -135,7 +169,7 @@ def _not_fact_checkable_analysis(claim_type: ClaimType) -> dict:
         "claim_type": claim_type,
         "ai_confidence": 0.5,
         "source_count": 0,
-        "source_quality": "Unknown source",
+        "source_quality": "unknown",
         "evidence_used_count": 0,
         "red_flags": [f"Claim type is {type_label}, not a factual news claim"],
         "ai_summary": "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake.",
@@ -153,7 +187,7 @@ def _get_source_metadata(source_url: str, source_metadata: dict | None = None) -
 
 # PHASE 4 STEP 9
 def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
-    source_quality = str(source_metadata.get("source_quality") or "Unknown source").strip() or "Unknown source"
+    source_quality = normalize_source_quality(source_metadata.get("source_quality"))
 
     source_score = source_metadata.get("source_score")
 
@@ -177,7 +211,7 @@ def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
         if next_analysis.get("ai_status") == "LOW_RISK":
             next_analysis["ai_status"] = "NEEDS_MORE_EVIDENCE"
         next_analysis["ai_confidence"] = min(_clamp_confidence(next_analysis.get("ai_confidence")), 0.55)
-    elif source_quality.lower() == "unknown source" and next_analysis["source_score"] <= 40:
+    elif source_quality == "unknown" and next_analysis["source_score"] <= 40:
         next_analysis["ai_confidence"] = min(_clamp_confidence(next_analysis.get("ai_confidence")), 0.60)
 
     next_analysis["red_flags"] = red_flags[:8]
@@ -228,7 +262,7 @@ def _fallback_source_risk_analysis(
 
     ai_confidence = 0.50
     source_count = 0
-    source_quality = str(scored_source.get("source_quality") or "Unknown source")
+    source_quality = normalize_source_quality(scored_source.get("source_quality"))
     source_score = int(scored_source.get("source_score") or 40)
     ai_summary = "No strong source signal found. Community voting and evidence are needed."
     ai_status: AiStatus = "NEEDS_MORE_EVIDENCE"
@@ -262,7 +296,7 @@ def _fallback_source_risk_analysis(
         ai_confidence = 0.50
         source_count = 1
         ai_summary = "The source has a mixed credibility score, so corroborating evidence may be needed."
-    elif source_quality.lower() == "unknown source":
+    elif source_quality == "unknown":
         ai_confidence = 0.40
         ai_summary = "Unknown source. The domain is not in the FactLens credibility library."
     else:
@@ -307,7 +341,7 @@ def _error_analysis() -> dict:
         "claim_type": "UNCLEAR",
         "ai_confidence": 0.5,
         "source_count": 0,
-        "source_quality": "Unknown source",
+        "source_quality": "unknown",
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
         "ai_summary": "AI pre-check failed. Community voting and evidence are still available.",
@@ -329,7 +363,7 @@ def _clamp_confidence(value: object) -> float:
 
 def _normalize_analysis(raw_result: dict) -> dict:
     claim_type = str(raw_result.get("claim_type") or "UNCLEAR").upper()
-    source_quality = str(raw_result.get("source_quality") or "Unknown source").strip() or "Unknown source"
+    source_quality = normalize_source_quality(raw_result.get("source_quality"))
     ai_status = str(raw_result.get("ai_status") or "NEEDS_MORE_EVIDENCE").upper()
     red_flags = raw_result.get("red_flags")
 
@@ -358,7 +392,7 @@ def _normalize_analysis(raw_result: dict) -> dict:
     if claim_type in {"OPINION", "QUESTION", "SATIRE", "PROMOTION"}:
         ai_status = "NOT_FACT_CHECKABLE"
         ai_confidence = 0.5
-        source_quality = "Unknown source"
+        source_quality = "unknown"
         source_count = 0
         evidence_used_count = 0
 
@@ -440,6 +474,8 @@ def _build_prompt(
         "FACTUAL means it can be verified by evidence, such as 'Coffee improves memory' or 'City council approved a transit program'. "
         "QUESTION means the user asks a question instead of making a claim. PROMOTION means advertising or self-promotion. SATIRE means joke, parody, or satire. UNCLEAR means too vague to classify. "
         "If claim_type is OPINION, QUESTION, SATIRE, or PROMOTION, set ai_status to NOT_FACT_CHECKABLE, ai_confidence to 0.5, source_count to 0, explain why in red_flags, and say in ai_summary that it is not a factual claim that can be verified as true or fake. "
+        "source_quality must only be one of: official, mainstream, specialized, social, blog, unknown. "
+        "Never return opinion, question, satire, promotion, unclear, or not_fact_checkable as source_quality. Those values belong only in claim_type. "
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "

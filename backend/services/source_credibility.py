@@ -1,4 +1,5 @@
 # PHASE 4 STEP 9
+# PHASE 4 STEP 17
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -58,6 +59,37 @@ DEFAULT_SOURCE_CREDIBILITY: dict[str, Any] = {
     "unknown": {"score": 40, "quality": "Unknown source", "lean": "Unknown"},
     "invalid": {"score": 20, "quality": "Invalid URL", "lean": "Unknown"},
 }
+
+
+# PHASE 4 STEP 17
+def normalize_source_quality(value: object) -> str:
+    if not value:
+        return "unknown"
+
+    normalized = str(value).strip().lower()
+
+    if normalized in {"official", "mainstream", "specialized", "social", "blog", "unknown"}:
+        return normalized
+
+    if normalized in {"opinion", "question", "satire", "promotion", "unclear", "not_fact_checkable"}:
+        return "unknown"
+
+    if "official" in normalized:
+        return "official"
+
+    if "tier 1" in normalized or "authoritative" in normalized or "tier 2" in normalized or "established" in normalized:
+        return "mainstream"
+
+    if "specialized" in normalized:
+        return "specialized"
+
+    if "social" in normalized:
+        return "social"
+
+    if "blog" in normalized:
+        return "blog"
+
+    return "unknown"
 
 
 @lru_cache(maxsize=1)
@@ -125,7 +157,7 @@ def _domain_matches(domain: str, candidate: str) -> bool:
 def _score_result(domain: str, metadata: dict[str, Any], source_reason: str) -> dict:
     return {
         "domain": domain,
-        "source_quality": str(metadata.get("quality") or "Unknown source"),
+        "source_quality": normalize_source_quality(metadata.get("quality")),
         "source_score": max(0, min(int(metadata.get("score", 40)), 100)),
         "source_lean": str(metadata.get("lean") or "Unknown"),
         "source_reason": source_reason,

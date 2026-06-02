@@ -12,6 +12,7 @@
 // PHASE 4 STEP 10
 // PHASE 4 STEP 12
 // PHASE 4 STEP 13
+// PHASE 4 STEP 17
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
@@ -436,8 +437,15 @@ function mapVerificationMode(mode: string | null | undefined): VerificationMode 
   return mode === "production" ? "production" : "test";
 }
 
+// PHASE 4 STEP 17
+const ALLOWED_SOURCE_QUALITIES = ["official", "mainstream", "specialized", "social", "blog", "unknown"];
+
 function mapSourceQuality(sourceQuality: string | null | undefined): SourceQuality {
-  return sourceQuality?.trim() || "Unknown source";
+  const normalizedSourceQuality = sourceQuality?.trim().toLowerCase();
+
+  return normalizedSourceQuality && ALLOWED_SOURCE_QUALITIES.includes(normalizedSourceQuality)
+    ? normalizedSourceQuality
+    : "unknown";
 }
 
 function isValidDateString(value: string | null | undefined): value is string {

@@ -8,6 +8,7 @@
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
 // PHASE 4 STEP 10B
+// PHASE 4 STEP 17
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -168,8 +169,13 @@ function mapClaimType(claimType: unknown): Claim["claimType"] {
   return "UNCLEAR";
 }
 
+// PHASE 4 STEP 17
+const ALLOWED_SOURCE_QUALITIES = ["official", "mainstream", "specialized", "social", "blog", "unknown"];
+
 function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
-  return typeof sourceQuality === "string" && sourceQuality.trim() ? sourceQuality : "Unknown source";
+  const normalizedSourceQuality = typeof sourceQuality === "string" ? sourceQuality.trim().toLowerCase() : "";
+
+  return ALLOWED_SOURCE_QUALITIES.includes(normalizedSourceQuality) ? normalizedSourceQuality : "unknown";
 }
 
 function getNumberField(value: unknown): number | null {

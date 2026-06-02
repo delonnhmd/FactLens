@@ -11,6 +11,7 @@
 # PHASE 4 STEP 8
 # PHASE 4 STEP 9
 # PHASE 4 STEP 10
+# PHASE 4 STEP 17
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -27,6 +28,7 @@ try:
         analyze_claim_with_openai,
         analyze_claim_with_openai_response,
         get_openai_model,
+        normalize_source_quality,
         test_openai_connection,
     )
     from services.ai_library_loader import load_factlens_ai_library
@@ -36,6 +38,7 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         analyze_claim_with_openai,
         analyze_claim_with_openai_response,
         get_openai_model,
+        normalize_source_quality,
         test_openai_connection,
     )
     from backend.services.ai_library_loader import load_factlens_ai_library
@@ -274,20 +277,36 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
 # PHASE 4 STEP 16
+# PHASE 4 STEP 17
 def build_claim_ai_update_payload(analysis: dict) -> dict:
+    claim_type = str(analysis.get("claim_type") or "UNCLEAR").upper()
+    if claim_type not in {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}:
+        claim_type = "UNCLEAR"
+
+    source_quality = normalize_source_quality(analysis.get("source_quality"))
+    ai_status = analysis["ai_status"]
+    ai_confidence = analysis["ai_confidence"]
+    source_count = analysis["source_count"]
+
+    if claim_type in {"OPINION", "QUESTION", "SATIRE", "PROMOTION"}:
+        ai_status = "NOT_FACT_CHECKABLE"
+        ai_confidence = 0.5
+        source_quality = normalize_source_quality(source_quality)
+        source_count = 0
+
     return {
         # PHASE 4 STEP 7
-        "claim_type": analysis.get("claim_type", "UNCLEAR"),
-        "ai_status": analysis["ai_status"],
-        "ai_confidence": analysis["ai_confidence"],
-        "source_quality": analysis["source_quality"],
+        "claim_type": claim_type,
+        "ai_status": ai_status,
+        "ai_confidence": ai_confidence,
+        "source_quality": source_quality,
         # PHASE 4 STEP 9
         "source_domain": analysis.get("source_domain"),
         "source_score": analysis.get("source_score"),
         "source_reason": analysis.get("source_reason"),
         # PHASE 4 STEP 10
         "evidence_used_count": analysis.get("evidence_used_count", 0),
-        "source_count": analysis["source_count"],
+        "source_count": source_count,
         "red_flags": normalize_red_flags(analysis.get("red_flags")),
         "ai_summary": analysis["ai_summary"],
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -338,9 +357,13 @@ def format_supabase_response_error(error: object) -> dict:
 # PHASE 4 STEP 16
 def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) -> dict:
     update_payload = build_claim_ai_update_payload(ai_result)
+    # PHASE 4 STEP 17
+    update_payload["source_quality"] = normalize_source_quality(update_payload.get("source_quality"))
     print(f"[{endpoint_label}] Supabase project_ref:", get_supabase_project_ref(), flush=True)
     print(f"[{endpoint_label}] claim_id:", claim_id, flush=True)
     print("[ai] source_lean disabled until schema added", flush=True)
+    print("[ai] normalized source_quality:", update_payload["source_quality"], flush=True)
+    print("[ai] claim_type:", update_payload.get("claim_type"), flush=True)
     print(f"[{endpoint_label}] AI result:", ai_result, flush=True)
     print(f"[{endpoint_label}] update_payload:", update_payload, flush=True)
 
@@ -422,13 +445,14 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
 
 # PHASE 4 STEP 3
+# PHASE 4 STEP 17
 def build_ai_error_analysis() -> dict:
     return {
         # PHASE 4 STEP 7
         "claim_type": "UNCLEAR",
         "ai_confidence": 0.5,
         "source_count": 0,
-        "source_quality": "Unknown source",
+        "source_quality": "unknown",
         # PHASE 4 STEP 10
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
