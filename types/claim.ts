@@ -165,5 +165,8 @@ export interface Claim {
   authorUsername: string;
   authorDisplayName: string;
   authorVerified: boolean;
+  // PHASE 4 STEP 12
+  authorReputation: number;
+  authorAvatarUrl: string | null;
   author: User;
 }

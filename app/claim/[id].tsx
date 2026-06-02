@@ -766,7 +766,8 @@ export default function ClaimDetailScreen() {
             </View>
             {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
           </View>
-          <Text style={styles.authorText}>Reputation score: {claim.author.reputationScore}</Text>
+          {/* PHASE 4 STEP 12 */}
+          <Text style={styles.authorText}>Reputation score: {claim.authorReputation}</Text>
 
           {isOwner ? (
             <View style={styles.ownerActionRow}>

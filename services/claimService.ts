@@ -10,6 +10,7 @@
 // PHASE 4 STEP 7
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
+// PHASE 4 STEP 12
 import { supabase } from "../lib/supabase";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
@@ -183,6 +184,7 @@ export interface ClaimsResult {
 const DEFAULT_CLAIM_LIMIT = 50;
 // PHASE 3 STEP 11
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
+const CLAIM_PROFILE_SELECT = "id,username,display_name,verified,reputation_score,avatar_url";
 
 interface SupabaseErrorLike {
   code?: string;
@@ -256,6 +258,81 @@ function getClaimsSuccessResult(rows: ClaimRow[]): ClaimsResult {
     ok: true,
     claims,
   };
+}
+
+// PHASE 4 STEP 12
+function getUniqueAuthorIds(rows: ClaimRow[]): string[] {
+  return Array.from(
+    new Set(
+      rows
+        .map((row) => row.author_id)
+        .filter((authorId): authorId is string => Boolean(authorId)),
+    ),
+  );
+}
+
+// PHASE 4 STEP 12
+function mapProfileToClaimProfile(profile: Profile): ClaimProfileRow {
+  return {
+    id: profile.id,
+    username: profile.username,
+    display_name: profile.display_name,
+    avatar_url: profile.avatar_url,
+    verified: profile.verified,
+    reputation_score: profile.reputation_score,
+    votes_cast: profile.votes_cast,
+    accuracy_rate: profile.accuracy_rate,
+    trust_tier: profile.trust_tier,
+    trust_weight_override: profile.trust_weight_override,
+    created_at: profile.created_at,
+  };
+}
+
+// PHASE 4 STEP 12
+async function mergeAuthorProfilesIntoRows(rows: ClaimRow[]): Promise<ClaimRow[]> {
+  const authorIds = getUniqueAuthorIds(rows);
+  console.log("[claims] author ids:", authorIds);
+
+  if (authorIds.length === 0) {
+    console.log("[claims] profiles loaded:", 0);
+    return rows;
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(CLAIM_PROFILE_SELECT)
+    .in("id", authorIds);
+
+  if (error) {
+    console.log("[claims] profiles load error:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    return rows;
+  }
+
+  const profiles = (data ?? []) as ClaimProfileRow[];
+  console.log("[claims] profiles loaded:", profiles.length);
+  const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+  return rows.map((row) => {
+    const profile = row.author_id ? profilesById.get(row.author_id) ?? null : null;
+    console.log("[claim map] author profile:", profile);
+
+    return profile ? { ...row, profiles: profile } : row;
+  });
+}
+
+// PHASE 4 STEP 12
+async function getClaimsSuccessResultWithProfiles(rows: ClaimRow[]): Promise<ClaimsResult> {
+  return getClaimsSuccessResult(await mergeAuthorProfilesIntoRows(rows));
+}
+
+// PHASE 4 STEP 12
+function attachAuthorProfile(row: ClaimRow, profile?: Profile | null): ClaimRow {
+  return profile ? { ...row, profiles: mapProfileToClaimProfile(profile) } : row;
 }
 
 function getClaimServiceErrorMessage(message: string, action: "load" | "save" | "delete" = "load"): string {
@@ -435,12 +512,11 @@ function getEmbeddedProfile(row: ClaimRow): ClaimProfileRow | null {
 }
 
 function mapAuthor(row: ClaimRow): AppUser {
-  // PHASE 3 STEP 26
-  // Home feed debug query intentionally does not join profiles.
+  // PHASE 4 STEP 12
   const authorId = row.author_id ?? "unknown-author";
   const profile = getEmbeddedProfile(row);
   const username = profile?.username ?? "unknown";
-  const displayName = profile?.display_name || "Unknown User";
+  const displayName = profile?.display_name || profile?.username || "Unknown User";
   const createdAt = row.created_at ?? new Date().toISOString();
 
   return {
@@ -584,6 +660,8 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     authorUsername: author.username,
     authorDisplayName: author.displayName,
     authorVerified: author.verified,
+    authorReputation: author.reputationScore,
+    authorAvatarUrl: author.avatar,
     author,
   };
 }
@@ -680,6 +758,8 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     authorUsername: fallbackAuthor.username,
     authorDisplayName: fallbackAuthor.displayName,
     authorVerified: false,
+    authorReputation: fallbackAuthor.reputationScore,
+    authorAvatarUrl: fallbackAuthor.avatar,
     author: fallbackAuthor,
   };
 }
@@ -823,7 +903,7 @@ export async function fetchLatestClaimsDebug(): Promise<ClaimsResult> {
     console.log("[claims debug count]", data?.length);
     console.log("[claims debug first row]", data?.[0]);
 
-    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+    return getClaimsSuccessResult(await mergeAuthorProfilesIntoRows((data ?? []) as ClaimRow[]));
   } catch (error) {
     return getClaimsErrorResult(error, "Claim mapping failed");
   }
@@ -834,21 +914,20 @@ export async function fetchLatestClaimsPage(
   limit = DEFAULT_CLAIMS_PAGE_SIZE,
   offset = 0,
 ): Promise<ClaimsResult> {
-  // PHASE 3 STEP 26
-  void offset;
+  // PHASE 4 STEP 12
   // PHASE 3 STEP 27
   try {
     const { data, error } = await supabase
       .from("claims")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .range(offset, offset + limit - 1);
 
     if (error) {
       return getClaimsErrorResult(error);
     }
 
-    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+    return await getClaimsSuccessResultWithProfiles((data ?? []) as ClaimRow[]);
   } catch (error) {
     return getClaimsErrorResult(error, "Claim mapping failed");
   }
@@ -867,13 +946,13 @@ export async function searchClaimsPage(
   limit = DEFAULT_CLAIMS_PAGE_SIZE,
   offset = 0,
 ): Promise<ClaimsResult> {
-  void offset;
+  // PHASE 4 STEP 12
   try {
     const { data, error } = await supabase
       .from("claims")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .range(offset, offset + limit - 1);
 
     if (error) {
       return getClaimsErrorResult(error);
@@ -918,7 +997,7 @@ export async function searchClaimsPage(
       return true;
     });
 
-    return getClaimsSuccessResult(filteredRows);
+    return await getClaimsSuccessResultWithProfiles(filteredRows);
   } catch (error) {
     return getClaimsErrorResult(error, "Claim mapping failed");
   }
@@ -939,7 +1018,7 @@ export async function fetchClaimsByCategory(category: string): Promise<ClaimsRes
       return getClaimsErrorResult(error);
     }
 
-    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+    return await getClaimsSuccessResultWithProfiles((data ?? []) as ClaimRow[]);
   } catch (error) {
     return getClaimsErrorResult(error, "Claim mapping failed");
   }
@@ -960,7 +1039,7 @@ export async function fetchClaimsByStatus(status: ClaimStatus): Promise<ClaimsRe
       return getClaimsErrorResult(error);
     }
 
-    return getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+    return await getClaimsSuccessResultWithProfiles((data ?? []) as ClaimRow[]);
   } catch (error) {
     return getClaimsErrorResult(error, "Claim mapping failed");
   }
@@ -981,19 +1060,19 @@ export async function fetchTrendingClaimsPage(
   limit = DEFAULT_CLAIMS_PAGE_SIZE,
   offset = 0,
 ): Promise<ClaimsResult> {
-  void offset;
+  // PHASE 4 STEP 12
   try {
     const { data, error } = await supabase
       .from("claims")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .range(offset, offset + limit - 1);
 
     if (error) {
       return getClaimsErrorResult(error);
     }
 
-    const result = getClaimsSuccessResult((data ?? []) as ClaimRow[]);
+    const result = await getClaimsSuccessResultWithProfiles((data ?? []) as ClaimRow[]);
 
     return {
       ok: true,
@@ -1146,6 +1225,7 @@ export async function refreshClaimVerdict(claimId: string): Promise<ClaimResult>
 export async function fetchClaimById(id: string): Promise<ClaimResult> {
   // PHASE 3 STEP 29
   // PHASE 3 STEP 32
+  // PHASE 4 STEP 12
   const { data, error } = await supabase.from("claims").select("*").eq("id", id).single();
 
   if (error) {
@@ -1155,8 +1235,10 @@ export async function fetchClaimById(id: string): Promise<ClaimResult> {
     };
   }
 
+  const [rowWithProfile] = await mergeAuthorProfilesIntoRows(data ? [data as ClaimRow] : []);
+
   return {
-    claim: data ? mapClaimRowToClaim(data as ClaimRow) : null,
+    claim: rowWithProfile ? mapClaimRowToClaim(rowWithProfile) : null,
   };
 }
 
@@ -1176,7 +1258,7 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
 
   if (!insertedClaimId) {
     return {
-      claim: mapClaimRowToClaim(insertedRow),
+      claim: mapClaimRowToClaim(attachAuthorProfile(insertedRow, input.profile)),
       error: "Claim was saved, but Supabase did not return a claim id.",
     };
   }
@@ -1190,7 +1272,9 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
     .single();
 
   return {
-    claim: mapClaimRowToClaim((updatedData as ClaimRow | null) ?? { ...insertedRow, share_url: shareUrl }),
+    claim: mapClaimRowToClaim(
+      attachAuthorProfile((updatedData as ClaimRow | null) ?? { ...insertedRow, share_url: shareUrl }, input.profile),
+    ),
   };
 }
 
@@ -1217,8 +1301,10 @@ export async function updateClaim(id: string, updates: ClaimUpdates): Promise<Cl
     };
   }
 
+  const [rowWithProfile] = await mergeAuthorProfilesIntoRows(data ? [data as ClaimRow] : []);
+
   return {
-    claim: mapClaimRowToClaim(data as ClaimRow),
+    claim: rowWithProfile ? mapClaimRowToClaim(rowWithProfile) : null,
   };
 }
 

@@ -18,7 +18,6 @@ import {
   fetchClaimsByCategory as fetchRemoteClaimsByCategory,
   fetchClaimsByStatus as fetchRemoteClaimsByStatus,
   fetchClaimById as fetchRemoteClaimById,
-  fetchLatestClaimsDebug as fetchRemoteLatestClaimsDebug,
   fetchLatestClaimsPage as fetchRemoteLatestClaimsPage,
   fetchTrendingClaims as fetchRemoteTrendingClaims,
   fetchTrendingClaimsPage as fetchRemoteTrendingClaimsPage,
@@ -444,9 +443,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 11
   const fetchLatestClaims = useCallback(
     async () => {
-      // PHASE 3 STEP 26
+      // PHASE 4 STEP 12
       const nextClaims = await applyRemoteClaims(
-        await fetchRemoteLatestClaimsDebug(),
+        await fetchRemoteLatestClaimsPage(DEFAULT_CLAIMS_PAGE_SIZE, 0),
         true,
       );
       setClaimOffset(nextClaims.length);

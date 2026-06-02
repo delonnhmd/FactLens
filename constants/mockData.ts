@@ -111,6 +111,9 @@ export const mockClaims: Claim[] = [
     authorUsername: "newswatcher",
     authorDisplayName: "News Watcher",
     authorVerified: true,
+    // PHASE 4 STEP 12
+    authorReputation: 92,
+    authorAvatarUrl: null,
     author: {
       id: "user-01",
       username: "newswatcher",
@@ -182,6 +185,9 @@ export const mockClaims: Claim[] = [
     authorUsername: "factfinder",
     authorDisplayName: "Fact Finder",
     authorVerified: true,
+    // PHASE 4 STEP 12
+    authorReputation: 118,
+    authorAvatarUrl: null,
     author: {
       id: "user-02",
       username: "factfinder",
@@ -238,6 +244,9 @@ export const mockClaims: Claim[] = [
     authorUsername: "verifynow",
     authorDisplayName: "Verify Now",
     authorVerified: false,
+    // PHASE 4 STEP 12
+    authorReputation: 63,
+    authorAvatarUrl: null,
     author: {
       id: "user-03",
       username: "verifynow",
