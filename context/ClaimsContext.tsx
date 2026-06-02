@@ -811,7 +811,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       throw new Error("Profile required to post.");
     }
 
-    const result = await createRemoteClaim({
+    // PHASE 4 STEP 13
+    let result = await createRemoteClaim({
       authorId: currentUser.id,
       title: input.title,
       description: input.description,
@@ -821,6 +822,27 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       category: input.category,
       profile: authorProfile,
     });
+
+    if (
+      result.error &&
+      /author_id|foreign key|profiles|claims_author/i.test(result.error)
+    ) {
+      const profileResult = await ensureProfile();
+      authorProfile = profileResult.profile ?? authorProfile;
+
+      if (authorProfile) {
+        result = await createRemoteClaim({
+          authorId: currentUser.id,
+          title: input.title,
+          description: input.description,
+          sourceUrl: input.sourceUrl,
+          videoUrl: input.videoUrl,
+          imageUrl: input.imageUrl ?? null,
+          category: input.category,
+          profile: authorProfile,
+        });
+      }
+    }
 
     if (result.error || !result.claim) {
       throw new Error(result.error ?? "We could not save this claim. Please try again.");

@@ -11,7 +11,9 @@
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
 // PHASE 4 STEP 12
+// PHASE 4 STEP 13
 import { supabase } from "../lib/supabase";
+import { APP_CONFIG } from "../constants/appConfig";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
@@ -258,6 +260,27 @@ function getClaimsSuccessResult(rows: ClaimRow[]): ClaimsResult {
     ok: true,
     claims,
   };
+}
+
+// PHASE 4 STEP 13
+function removeUndefinedValues<T extends Record<string, unknown>>(payload: T): T {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
+// PHASE 4 STEP 13
+function formatSupabaseMutationError(error: SupabaseErrorLike): string {
+  const parts = getDebugErrorParts(error);
+
+  return [
+    `We could not save this claim: ${parts.message}`,
+    parts.code ? `Code: ${parts.code}` : "",
+    parts.details ? `Details: ${parts.details}` : "",
+    parts.hint ? `Hint: ${parts.hint}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // PHASE 4 STEP 12
@@ -775,22 +798,24 @@ export function mapClaimRowToClaim(row: ClaimRow): Claim {
 
 export function mapClaimToInsert(input: CreateClaimInput) {
   const normalizedSourceUrl = normalizeUrl(input.sourceUrl);
+  const safeSourceUrl = normalizedSourceUrl || (APP_CONFIG.TEST_MODE ? "https://www.pennyfloat.com" : "");
   const normalizedVideoUrl = input.videoUrl ? normalizeUrl(input.videoUrl) : "";
   const trimmedVideoUrl = normalizedVideoUrl || null;
   // PHASE 3 STEP 17
   // PHASE 3 STEP 22
   // PHASE 3 STEP 24
+  // PHASE 4 STEP 13
   const timing = createClaimTiming(VERIFICATION_MODE);
   console.log("[createClaim] timing:", timing);
-  console.log("[url] normalized source url:", normalizedSourceUrl);
-  console.log("[url] normalized source:", normalizedSourceUrl);
+  console.log("[url] normalized source url:", safeSourceUrl);
+  console.log("[url] normalized source:", safeSourceUrl);
 
-  return {
+  const payload = removeUndefinedValues({
     author_id: input.authorId,
     created_at: timing.createdAt,
     title: input.title.trim(),
     description: input.description.trim(),
-    source_url: normalizedSourceUrl,
+    source_url: safeSourceUrl,
     video_url: trimmedVideoUrl,
     image_url: input.imageUrl ?? null,
     category: input.category?.trim() || "Other",
@@ -825,16 +850,19 @@ export function mapClaimToInsert(input: CreateClaimInput) {
     min_votes_required: timing.minVotesRequired,
     expected_participation: timing.expectedParticipation,
     source_count: 0,
-    source_quality: "Unknown source",
+    source_quality: "unknown",
     // PHASE 4 STEP 9
     source_domain: null,
     source_score: null,
-    source_lean: null,
     source_reason: null,
     red_flags: [],
     ai_summary: null,
     expires_at: timing.expiresAt,
-  };
+  });
+
+  console.log("[create claim] insert payload:", payload);
+
+  return payload;
 }
 
 // PHASE 3 STEP 17
@@ -1244,12 +1272,21 @@ export async function fetchClaimById(id: string): Promise<ClaimResult> {
 
 export async function createClaim(input: CreateClaimInput): Promise<ClaimResult> {
   // PHASE 3 STEP 29
-  const { data, error } = await supabase.from("claims").insert(mapClaimToInsert(input)).select("*").single();
+  // PHASE 4 STEP 13
+  const payload = mapClaimToInsert(input);
+  const { data, error } = await supabase.from("claims").insert(payload).select("*").single();
 
   if (error) {
+    console.log("[create claim] insert error:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+
     return {
       claim: null,
-      error: getClaimServiceErrorMessage(error.message, "save"),
+      error: formatSupabaseMutationError(error),
     };
   }
 
@@ -1264,12 +1301,35 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   }
 
   const shareUrl = generateClaimShareUrl(insertedClaimId);
-  const { data: updatedData } = await supabase
+  const { data: updatedData, error: shareUpdateError } = await supabase
     .from("claims")
     .update({ share_url: shareUrl })
     .eq("id", insertedClaimId)
     .select("*")
     .single();
+
+  if (shareUpdateError) {
+    console.log("[create claim] share url update error:", {
+      claimId: insertedClaimId,
+      code: shareUpdateError.code,
+      message: shareUpdateError.message,
+      details: shareUpdateError.details,
+      hint: shareUpdateError.hint,
+    });
+  }
+
+  const refreshedClaim = await fetchClaimById(insertedClaimId);
+
+  if (refreshedClaim.claim) {
+    return refreshedClaim;
+  }
+
+  if (refreshedClaim.error) {
+    console.log("[create claim] refetch warning:", {
+      claimId: insertedClaimId,
+      error: refreshedClaim.error,
+    });
+  }
 
   return {
     claim: mapClaimRowToClaim(
