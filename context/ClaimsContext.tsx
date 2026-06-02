@@ -68,7 +68,8 @@ export interface CreateClaimInput {
 export interface EvidenceInput {
   url: string;
   note: string;
-  type: EvidenceType;
+  // PHASE 4 STEP 14B
+  type?: EvidenceType;
 }
 
 interface ClaimsContextValue {
@@ -1086,6 +1087,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   // PHASE 3 STEP 5
   // PHASE 4 STEP 14
+  // PHASE 4 STEP 14B
   const addEvidence = useCallback(
     async (claimId: string, evidenceInput: EvidenceInput) => {
       if (!currentUser) {

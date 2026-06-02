@@ -1,6 +1,7 @@
 // PHASE 3 STEP 5
 // PHASE 3 STEP 28
 // PHASE 4 STEP 14
+// PHASE 4 STEP 14B
 import { supabase } from "../lib/supabase";
 import { getSourceQuality } from "./sourceQuality";
 import { ensureProfileForUser } from "./profileService";
@@ -11,7 +12,7 @@ import { isValidSourceUrl, normalizeUrl } from "../utils/url";
 export interface EvidenceInput {
   url: string;
   note: string;
-  type: EvidenceType;
+  type?: EvidenceType;
 }
 
 export interface EvidenceUpdates {
@@ -92,8 +93,8 @@ function formatSupabaseEvidenceError(error: { message?: unknown; code?: unknown;
 }
 
 // PHASE 4 STEP 14
-function normalizeEvidenceType(type: EvidenceType | string): EvidenceType {
-  const normalizedType = type.trim().toUpperCase().replace(/\s+/g, "_");
+function normalizeEvidenceType(type?: EvidenceType | string): EvidenceType {
+  const normalizedType = type?.trim().toUpperCase().replace(/\s+/g, "_") || "ADDS_CONTEXT";
 
   if (normalizedType === "SUPPORTS_TRUE" || normalizedType === "TRUE") {
     return "SUPPORTS_TRUE";
@@ -123,7 +124,7 @@ function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string |
   }
 
   if (input.note !== undefined && !trimmedNote) {
-    return "Short note is required.";
+    return "Evidence note is required.";
   }
 
   if (trimmedNote && trimmedNote.length < 10) {
@@ -202,6 +203,16 @@ export async function addEvidence(
   input: EvidenceInput,
 ): Promise<EvidenceResult> {
   void userId;
+  // PHASE 4 STEP 14B
+  console.log("[evidence] claimId:", claimId);
+
+  if (!claimId) {
+    return {
+      evidence: null,
+      error: "Missing claim id.",
+    };
+  }
+
   const validationError = validateEvidenceInput(input);
 
   if (validationError) {
@@ -212,6 +223,7 @@ export async function addEvidence(
   }
 
   // PHASE 4 STEP 14
+  // PHASE 4 STEP 14B
   const { data: userData, error: userError } = await supabase.auth.getUser();
   const user = userData?.user;
 
@@ -240,11 +252,12 @@ export async function addEvidence(
   const payload = removeUndefinedValues({
     claim_id: claimId,
     user_id: user.id,
+    evidence_type: normalizedEvidenceType,
     url: normalizedUrl,
     note: input.note.trim(),
-    evidence_type: normalizedEvidenceType,
     source_quality_label: sourceQuality.label || null,
     source_quality_score: sourceQuality.score ?? null,
+    source_quality_reason: sourceQuality.reason ?? null,
   });
 
   console.log("[evidence] payload:", payload);
@@ -257,11 +270,14 @@ export async function addEvidence(
 
   if (error) {
     console.log("[evidence] error:", error);
+    console.log("[evidence] insert error:", error);
     return {
       evidence: null,
       error: formatSupabaseEvidenceError(error),
     };
   }
+
+  console.log("[evidence] inserted:", data);
 
   const countResult = await recalculateEvidenceCount(claimId);
 

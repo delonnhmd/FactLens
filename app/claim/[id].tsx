@@ -434,7 +434,8 @@ export default function ClaimDetailScreen() {
     }
 
     if (!trimmedNote) {
-      nextErrors.note = "Short note is required.";
+      // PHASE 4 STEP 14B
+      nextErrors.note = "Evidence note is required.";
     } else if (trimmedNote.length < 10) {
       nextErrors.note = "Short note must be at least 10 characters.";
     }
