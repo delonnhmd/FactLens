@@ -1,6 +1,7 @@
 # PHASE 4 STEP 9
 # PHASE 4 STEP 17
 # PHASE 4 STEP 18
+# PHASE 4 STEP 20B
 # Source trust label update
 import json
 from functools import lru_cache
@@ -79,9 +80,6 @@ DEFAULT_SOURCE_CREDIBILITY: dict[str, Any] = {
     "invalid": {"score": 20, "quality": "Invalid URL"},
 }
 
-TRUST_LABELS = {"Highly Trusted", "Trusted", "Use Caution", "Low Trust", "Not in FactLens library", "Invalid URL"}
-
-
 def get_source_message(score: int | None, quality: str | None) -> dict[str, str]:
     safe_quality = str(quality or "Not in FactLens library").strip() or "Not in FactLens library"
 
@@ -121,30 +119,9 @@ def get_source_message(score: int | None, quality: str | None) -> dict[str, str]
     }
 
 
-def get_trust_label(score: int | None, quality: str | None = None) -> str:
-    if quality in TRUST_LABELS and quality not in {"Not in FactLens library", "Invalid URL"}:
-        return str(quality)
-
-    if quality == "Invalid URL":
-        return "Invalid URL"
-
-    if score is None:
-        return "Not in FactLens library"
-
-    if score >= 90:
-        return "Highly Trusted"
-
-    if score >= 75:
-        return "Trusted"
-
-    if score >= 40:
-        return "Use Caution"
-
-    return "Low Trust"
-
-
 # PHASE 4 STEP 17
 # PHASE 4 STEP 20
+# PHASE 4 STEP 20B
 SOURCE_QUALITY_ALLOWED_VALUES = {
     "official",
     "mainstream",
@@ -154,53 +131,86 @@ SOURCE_QUALITY_ALLOWED_VALUES = {
     "unknown",
 }
 
-SOURCE_QUALITY_BAD_VALUES = {
-    "verify",
-    "verified",
-    "verification",
-    "moderate",
-    "moderate credibility",
-    "credible",
-    "not credible",
-    "opinion",
-    "question",
-    "satire",
-    "promotion",
-    "unclear",
-    "not_fact_checkable",
-    "needs_more_evidence",
-    "low_risk",
-    "medium_risk",
-    "high_risk",
-}
+# PHASE 4 STEP 20B
+def source_trust_label(source_score: int | None) -> str:
+    if source_score is None:
+        return "Unknown source"
+
+    if source_score >= 85:
+        return "Strong Source"
+
+    if source_score >= 65:
+        return "Medium Source"
+
+    if source_score >= 50:
+        return "Use Caution"
+
+    return "Weak / Unknown Source"
 
 
+# PHASE 4 STEP 20B
+def get_source_warning_level(source_score: int | None) -> str:
+    if source_score is None:
+        return "medium"
+
+    if source_score >= 85:
+        return "low"
+
+    if source_score >= 65:
+        return "medium"
+
+    if source_score >= 50:
+        return "medium"
+
+    return "high"
+
+
+# PHASE 4 STEP 20B
 def normalize_source_quality(value: object) -> str:
     normalized = str(value or "").strip().lower()
 
     if normalized in SOURCE_QUALITY_ALLOWED_VALUES:
         return normalized
 
-    if normalized in SOURCE_QUALITY_BAD_VALUES:
-        return "unknown"
+    return "unknown"
 
-    if normalized in {"government source", "academic institution", "uk academic institution", "max planck institute", "national institutes of health", "world health organization", "united nations", "european union official", "highly trusted"}:
+
+# PHASE 4 STEP 20B
+def infer_source_quality_category(domain: str, source_score: int, source_detail: str | None) -> str:
+    detail = str(source_detail or "").strip().lower()
+
+    explicit_category = normalize_source_quality(detail)
+    if explicit_category != "unknown":
+        return explicit_category
+
+    if (
+        domain.endswith(".gov")
+        or domain.endswith(".edu")
+        or domain.endswith(".ac.uk")
+        or domain.endswith(".mpg.de")
+        or domain.endswith(".nih.gov")
+        or domain.endswith(".who.int")
+        or domain.endswith(".un.org")
+        or domain.endswith(".europa.eu")
+        or detail
+        in {
+            "government source",
+            "academic institution",
+            "uk academic institution",
+            "max planck institute",
+            "national institutes of health",
+            "world health organization",
+            "united nations",
+            "european union official",
+        }
+    ):
         return "official"
 
-    if normalized in {"mainstream", "trusted"}:
-        return "mainstream"
-
-    if normalized in {"specialized", "non-profit organization"}:
+    if detail in {"non-profit organization"} or domain.endswith(".org"):
         return "specialized"
 
-    if normalized in {"social"}:
-        return "social"
-
-    if normalized in {"blog"}:
-        return "blog"
-
-    if normalized in {"use caution", "low trust", "not in factlens library", "invalid url", "german domain", "french domain", "japanese domain", "uk domain"}:
-        return "unknown"
+    if source_score >= 75 and detail in {"highly trusted", "trusted"}:
+        return "mainstream"
 
     return "unknown"
 
@@ -264,19 +274,25 @@ def _domain_matches(domain: str, candidate: str) -> bool:
     return domain == candidate or domain.endswith(f".{candidate}")
 
 
-def _score_source_values(domain: str, quality: str, source_score: int) -> dict:
+def _score_source_values(domain: str, source_quality: str, source_score: int, source_detail: str | None = None) -> dict:
     bounded_score = max(0, min(int(source_score), 100))
-    trust_label = get_trust_label(bounded_score, quality)
-    source_message = get_source_message(bounded_score, quality)
+    db_source_quality = normalize_source_quality(source_quality)
+    display_detail = str(source_detail or source_trust_label(bounded_score)).strip()
+    trust_label = source_trust_label(bounded_score)
+    source_message = get_source_message(bounded_score, display_detail)
 
     return {
         "domain": domain,
         "source_domain": domain,
-        "source_quality": normalize_source_quality(quality),
+        # PHASE 4 STEP 20B
+        # Database category only. User-facing trust labels stay in separate fields.
+        "source_quality": db_source_quality,
         "source_score": bounded_score,
         "source_trust_label": trust_label,
         "source_quality_label": trust_label,
-        "source_detail": quality,
+        "source_detail": display_detail,
+        "source_warning_level": get_source_warning_level(bounded_score),
+        "suggested_user_action": source_message["text"],
         "source_message": source_message["text"],
         "source_message_color": source_message["color"],
         "source_reason": source_message["text"],
@@ -284,11 +300,14 @@ def _score_source_values(domain: str, quality: str, source_score: int) -> dict:
 
 
 def _score_result(domain: str, metadata: dict[str, Any]) -> dict:
-    return _score_source_values(
-        domain,
-        str(metadata.get("quality") or "Not in FactLens library"),
-        int(metadata.get("score", 45)),
-    )
+    source_score = int(metadata.get("score", 45))
+    source_detail = str(metadata.get("quality") or "Not in FactLens library")
+    source_quality = normalize_source_quality(metadata.get("source_quality"))
+
+    if source_quality == "unknown":
+        source_quality = infer_source_quality_category(domain, source_score, source_detail)
+
+    return _score_source_values(domain, source_quality, source_score, source_detail)
 
 
 def get_source_score(source_url: str | None) -> dict:
@@ -303,43 +322,43 @@ def get_source_score(source_url: str | None) -> dict:
             return _score_result(domain, metadata)
 
     if domain.endswith(".gov"):
-        return _score_source_values(domain, "Government source", 92)
+        return _score_source_values(domain, "official", 92, "Government source")
 
     if domain.endswith(".edu"):
-        return _score_source_values(domain, "Academic institution", 90)
+        return _score_source_values(domain, "official", 90, "Academic institution")
 
     if domain.endswith(".ac.uk"):
-        return _score_source_values(domain, "UK academic institution", 90)
+        return _score_source_values(domain, "official", 90, "UK academic institution")
 
     if domain.endswith(".mpg.de"):
-        return _score_source_values(domain, "Max Planck Institute", 93)
+        return _score_source_values(domain, "official", 93, "Max Planck Institute")
 
     if domain.endswith(".nih.gov"):
-        return _score_source_values(domain, "National Institutes of Health", 97)
+        return _score_source_values(domain, "official", 97, "National Institutes of Health")
 
     if domain.endswith(".who.int"):
-        return _score_source_values(domain, "World Health Organization", 96)
+        return _score_source_values(domain, "official", 96, "World Health Organization")
 
     if domain.endswith(".un.org"):
-        return _score_source_values(domain, "United Nations", 94)
+        return _score_source_values(domain, "official", 94, "United Nations")
 
     if domain.endswith(".europa.eu"):
-        return _score_source_values(domain, "European Union official", 91)
+        return _score_source_values(domain, "official", 91, "European Union official")
 
     if domain.endswith(".org"):
-        return _score_source_values(domain, "Non-profit organization", 60)
+        return _score_source_values(domain, "specialized", 60, "Non-profit organization")
 
     if domain.endswith(".de"):
-        return _score_source_values(domain, "German domain", 55)
+        return _score_source_values(domain, "unknown", 55, "German domain")
 
     if domain.endswith(".fr"):
-        return _score_source_values(domain, "French domain", 55)
+        return _score_source_values(domain, "unknown", 55, "French domain")
 
     if domain.endswith(".jp"):
-        return _score_source_values(domain, "Japanese domain", 55)
+        return _score_source_values(domain, "unknown", 55, "Japanese domain")
 
     if domain.endswith(".co.uk"):
-        return _score_source_values(domain, "UK domain", 58)
+        return _score_source_values(domain, "unknown", 58, "UK domain")
 
     return _score_result(domain, library["unknown"])
 

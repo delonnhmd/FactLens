@@ -7,6 +7,7 @@
 # PHASE 4 STEP 17
 # PHASE 4 STEP 18
 # PHASE 4 STEP 20
+# PHASE 4 STEP 20B
 import json
 import os
 from typing import Literal
@@ -443,6 +444,7 @@ def _build_prompt(
         "FACTUAL means it can be verified by evidence, such as 'Coffee improves memory' or 'City council approved a transit program'. "
         "QUESTION means the user asks a question instead of making a claim. PROMOTION means advertising or self-promotion. SATIRE means joke, parody, or satire. UNCLEAR means too vague to classify. "
         "If claim_type is OPINION, QUESTION, SATIRE, or PROMOTION, set ai_status to NOT_FACT_CHECKABLE, ai_confidence to 0.5, source_count to 0, explain why in red_flags, and say in ai_summary that it is not a factual claim that can be verified as true or fake. "
+        # PHASE 4 STEP 20B
         "source_quality must be exactly one of: official, mainstream, specialized, social, blog, unknown. "
         "Never return verify, verified, verification, credible, not credible, moderate, moderate credibility, needs_more_evidence, low_risk, medium_risk, high_risk, opinion, question, satire, promotion, unclear, or not_fact_checkable as source_quality. "
         "If you want to say verify with additional evidence or moderate credibility, put that text in source_reason, ai_summary, or red_flags, never in source_quality. "

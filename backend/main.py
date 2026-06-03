@@ -288,6 +288,7 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 # PHASE 4 STEP 16
 # PHASE 4 STEP 17
 # PHASE 4 STEP 20
+# PHASE 4 STEP 20B
 def build_claim_ai_update_payload(analysis: dict) -> dict:
     claim_type = str(analysis.get("claim_type") or "UNCLEAR").upper()
     if claim_type not in {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}:
@@ -366,10 +367,12 @@ def format_supabase_response_error(error: object) -> dict:
 # PHASE 4 STEP 5D
 # PHASE 4 STEP 16
 # PHASE 4 STEP 20
+# PHASE 4 STEP 20B
 def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) -> dict:
     update_payload = build_claim_ai_update_payload(ai_result)
     # PHASE 4 STEP 17
     # PHASE 4 STEP 20
+    # PHASE 4 STEP 20B
     update_payload["source_quality"] = normalize_source_quality(update_payload.get("source_quality"))
     if update_payload["source_quality"] not in SOURCE_QUALITY_ALLOWED_VALUES:
         print("[ai] invalid source_quality blocked:", update_payload["source_quality"], flush=True)
