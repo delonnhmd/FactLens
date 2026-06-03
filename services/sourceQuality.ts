@@ -1,6 +1,7 @@
 // PHASE 2 STEP 5
 // PHASE 4 STEP 9
 // PHASE 4 STEP 18
+// PHASE 4 STEP 18B
 export type SourceQualityLabel =
   | "Tier 1 - Authoritative"
   | "Tier 2 - Established"
@@ -18,13 +19,11 @@ export interface SourceQuality {
   label: SourceQualityLabel;
   score: number;
   reason: string;
-  lean: string;
 }
 
 type DomainCredibility = {
   score: number;
   quality: SourceQualityLabel;
-  lean: string;
 };
 
 // PHASE 4 STEP 18
@@ -50,46 +49,46 @@ const MAINSTREAM_DOMAINS = ["nbcnews.com", "cbsnews.com", "abcnews.go.com", "abc
 const SOCIAL_DOMAINS = ["youtube.com", "youtu.be", "tiktok.com", "x.com", "twitter.com", "facebook.com", "fb.watch", "instagram.com", "reddit.com"];
 
 const DOMAIN_LIBRARY: Record<string, DomainCredibility> = {
-  "reuters.com": { score: 98, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "apnews.com": { score: 97, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "c-span.org": { score: 97, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "bbc.com": { score: 95, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "pbs.org": { score: 94, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "economist.com": { score: 92, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "npr.org": { score: 92, quality: "Tier 1 - Authoritative", lean: "Center-left" },
-  "wsj.com": { score: 90, quality: "Tier 1 - Authoritative", lean: "Center-right" },
-  "nytimes.com": { score: 88, quality: "Tier 1 - Authoritative", lean: "Center-left" },
-  "politico.com": { score: 88, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "axios.com": { score: 87, quality: "Tier 1 - Authoritative", lean: "Center" },
-  "washingtonpost.com": { score: 87, quality: "Tier 1 - Authoritative", lean: "Center-left" },
-  "theatlantic.com": { score: 80, quality: "Tier 2 - Established", lean: "Center-left" },
-  "foxnews.com": { score: 78, quality: "Tier 2 - Established", lean: "Right" },
-  "nationalreview.com": { score: 74, quality: "Tier 2 - Established", lean: "Right" },
-  "newsweek.com": { score: 74, quality: "Tier 2 - Established", lean: "Center-left" },
-  "cnn.com": { score: 76, quality: "Tier 2 - Established", lean: "Left" },
-  "msnbc.com": { score: 72, quality: "Tier 2 - Established", lean: "Left" },
-  "nypost.com": { score: 70, quality: "Tier 2 - Established", lean: "Right" },
-  "realclearpolitics.com": { score: 70, quality: "Tier 2 - Established", lean: "Center-right" },
-  "washingtonexaminer.com": { score: 68, quality: "Tier 2 - Established", lean: "Right" },
-  "thehill.com": { score: 82, quality: "Tier 2 - Established", lean: "Center" },
-  "vox.com": { score: 72, quality: "Tier 3 - Mixed", lean: "Left" },
-  "huffpost.com": { score: 65, quality: "Tier 3 - Mixed", lean: "Left" },
-  "motherjones.com": { score: 66, quality: "Tier 3 - Mixed", lean: "Left" },
-  "thenation.com": { score: 62, quality: "Tier 3 - Mixed", lean: "Left" },
-  "slate.com": { score: 68, quality: "Tier 3 - Mixed", lean: "Left" },
-  "salon.com": { score: 60, quality: "Tier 3 - Mixed", lean: "Left" },
-  "dailywire.com": { score: 60, quality: "Tier 3 - Mixed", lean: "Right" },
-  "thefederalist.com": { score: 58, quality: "Tier 3 - Mixed", lean: "Right" },
-  "dailycaller.com": { score: 58, quality: "Tier 3 - Mixed", lean: "Right" },
-  "townhall.com": { score: 55, quality: "Tier 3 - Mixed", lean: "Right" },
-  "newsmax.com": { score: 52, quality: "Tier 3 - Mixed", lean: "Right" },
-  "breitbart.com": { score: 35, quality: "Tier 4 - Low credibility", lean: "Right" },
-  "mediamatters.org": { score: 38, quality: "Tier 4 - Low credibility", lean: "Left" },
-  "shareblue.com": { score: 25, quality: "Tier 4 - Low credibility", lean: "Left" },
-  "palmerreport.com": { score: 20, quality: "Tier 4 - Low credibility", lean: "Left" },
-  "oann.com": { score: 30, quality: "Tier 4 - Low credibility", lean: "Right" },
-  "thegatewaypundit.com": { score: 10, quality: "Tier 4 - Low credibility", lean: "Right" },
-  "infowars.com": { score: 5, quality: "Tier 4 - Low credibility", lean: "Right" },
+  "reuters.com": { score: 98, quality: "Tier 1 - Authoritative" },
+  "apnews.com": { score: 97, quality: "Tier 1 - Authoritative" },
+  "c-span.org": { score: 97, quality: "Tier 1 - Authoritative" },
+  "bbc.com": { score: 95, quality: "Tier 1 - Authoritative" },
+  "pbs.org": { score: 94, quality: "Tier 1 - Authoritative" },
+  "economist.com": { score: 92, quality: "Tier 1 - Authoritative" },
+  "npr.org": { score: 92, quality: "Tier 1 - Authoritative" },
+  "wsj.com": { score: 90, quality: "Tier 1 - Authoritative" },
+  "nytimes.com": { score: 88, quality: "Tier 1 - Authoritative" },
+  "politico.com": { score: 88, quality: "Tier 1 - Authoritative" },
+  "axios.com": { score: 87, quality: "Tier 1 - Authoritative" },
+  "washingtonpost.com": { score: 87, quality: "Tier 1 - Authoritative" },
+  "theatlantic.com": { score: 80, quality: "Tier 2 - Established" },
+  "foxnews.com": { score: 78, quality: "Tier 2 - Established" },
+  "nationalreview.com": { score: 74, quality: "Tier 2 - Established" },
+  "newsweek.com": { score: 74, quality: "Tier 2 - Established" },
+  "cnn.com": { score: 76, quality: "Tier 2 - Established" },
+  "msnbc.com": { score: 72, quality: "Tier 2 - Established" },
+  "nypost.com": { score: 70, quality: "Tier 2 - Established" },
+  "realclearpolitics.com": { score: 70, quality: "Tier 2 - Established" },
+  "washingtonexaminer.com": { score: 68, quality: "Tier 2 - Established" },
+  "thehill.com": { score: 82, quality: "Tier 2 - Established" },
+  "vox.com": { score: 72, quality: "Tier 3 - Mixed" },
+  "huffpost.com": { score: 65, quality: "Tier 3 - Mixed" },
+  "motherjones.com": { score: 66, quality: "Tier 3 - Mixed" },
+  "thenation.com": { score: 62, quality: "Tier 3 - Mixed" },
+  "slate.com": { score: 68, quality: "Tier 3 - Mixed" },
+  "salon.com": { score: 60, quality: "Tier 3 - Mixed" },
+  "dailywire.com": { score: 60, quality: "Tier 3 - Mixed" },
+  "thefederalist.com": { score: 58, quality: "Tier 3 - Mixed" },
+  "dailycaller.com": { score: 58, quality: "Tier 3 - Mixed" },
+  "townhall.com": { score: 55, quality: "Tier 3 - Mixed" },
+  "newsmax.com": { score: 52, quality: "Tier 3 - Mixed" },
+  "breitbart.com": { score: 35, quality: "Tier 4 - Low credibility" },
+  "mediamatters.org": { score: 38, quality: "Tier 4 - Low credibility" },
+  "shareblue.com": { score: 25, quality: "Tier 4 - Low credibility" },
+  "palmerreport.com": { score: 20, quality: "Tier 4 - Low credibility" },
+  "oann.com": { score: 30, quality: "Tier 4 - Low credibility" },
+  "thegatewaypundit.com": { score: 10, quality: "Tier 4 - Low credibility" },
+  "infowars.com": { score: 5, quality: "Tier 4 - Low credibility" },
 };
 
 function getHostname(url: string): string | null {
@@ -128,28 +127,28 @@ export function getSourceScore(url: string): DomainCredibility {
   const hostname = getHostname(url);
 
   if (!hostname || !hostname.includes(".")) {
-    return { score: 20, quality: "Invalid URL", lean: "Unknown" };
+    return { score: 20, quality: "Invalid URL" };
   }
 
   // PHASE 4 STEP 18
   if (hostname.endsWith(".gov")) {
-    return { score: 90, quality: "Strong Source", lean: "Unknown" };
+    return { score: 90, quality: "Strong Source" };
   }
 
   if (hostname.endsWith(".edu")) {
-    return { score: 90, quality: "Strong Source", lean: "Unknown" };
+    return { score: 90, quality: "Strong Source" };
   }
 
   if (hostnameMatchesAny(hostname, OFFICIAL_DOMAINS)) {
-    return { score: 90, quality: "Strong Source", lean: "Unknown" };
+    return { score: 90, quality: "Strong Source" };
   }
 
   if (hostnameMatchesAny(hostname, SOCIAL_DOMAINS)) {
-    return { score: 35, quality: "Social Source", lean: "Unknown" };
+    return { score: 35, quality: "Social Source" };
   }
 
   if (hostnameMatchesAny(hostname, SPECIALIZED_DOMAINS)) {
-    return { score: 70, quality: "Medium Source", lean: "Unknown" };
+    return { score: 70, quality: "Medium Source" };
   }
 
   const libraryResult = findDomainCredibility(hostname);
@@ -159,10 +158,10 @@ export function getSourceScore(url: string): DomainCredibility {
   }
 
   if (hostnameMatchesAny(hostname, MAINSTREAM_DOMAINS)) {
-    return { score: 75, quality: "Strong Source", lean: "Unknown" };
+    return { score: 75, quality: "Strong Source" };
   }
 
-  return { score: 40, quality: "Unknown source", lean: "Unknown" };
+  return { score: 40, quality: "Unknown source" };
 }
 
 export function getSourceCredibilityLabel(value: string | null | undefined): string {
@@ -224,7 +223,6 @@ export function getSourceQuality(url: string): SourceQuality {
   return {
     label: sourceScore.quality,
     score: sourceScore.score,
-    lean: sourceScore.lean,
     reason: isKnownSource
       ? "Domain matched the FactLens credibility library. Score is based on journalistic and institutional source signals."
       : sourceScore.quality === "Invalid URL"

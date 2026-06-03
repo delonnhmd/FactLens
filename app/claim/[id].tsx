@@ -8,6 +8,7 @@
 // PHASE 4 STEP 10
 // PHASE 4 STEP 15
 // PHASE 4 STEP 18
+// PHASE 4 STEP 18B
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -103,7 +104,6 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
     label: evidence.sourceQualityLabel as SourceQuality["label"],
     score: evidence.sourceQualityScore ?? fallbackQuality.score,
     reason: evidence.sourceQualityReason ?? fallbackQuality.reason,
-    lean: fallbackQuality.lean,
   };
 }
 
