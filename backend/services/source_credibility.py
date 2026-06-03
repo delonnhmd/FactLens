@@ -144,10 +144,47 @@ def get_trust_label(score: int | None, quality: str | None = None) -> str:
 
 
 # PHASE 4 STEP 17
+# PHASE 4 STEP 20
+SOURCE_QUALITY_ALLOWED_VALUES = {
+    "official",
+    "mainstream",
+    "specialized",
+    "social",
+    "blog",
+    "unknown",
+}
+
+SOURCE_QUALITY_BAD_VALUES = {
+    "verify",
+    "verified",
+    "verification",
+    "moderate",
+    "moderate credibility",
+    "credible",
+    "not credible",
+    "opinion",
+    "question",
+    "satire",
+    "promotion",
+    "unclear",
+    "not_fact_checkable",
+    "needs_more_evidence",
+    "low_risk",
+    "medium_risk",
+    "high_risk",
+}
+
+
 def normalize_source_quality(value: object) -> str:
     normalized = str(value or "").strip().lower()
 
-    if normalized in {"official", "government source", "academic institution", "uk academic institution", "max planck institute", "national institutes of health", "world health organization", "united nations", "european union official", "highly trusted"}:
+    if normalized in SOURCE_QUALITY_ALLOWED_VALUES:
+        return normalized
+
+    if normalized in SOURCE_QUALITY_BAD_VALUES:
+        return "unknown"
+
+    if normalized in {"government source", "academic institution", "uk academic institution", "max planck institute", "national institutes of health", "world health organization", "united nations", "european union official", "highly trusted"}:
         return "official"
 
     if normalized in {"mainstream", "trusted"}:
@@ -161,9 +198,6 @@ def normalize_source_quality(value: object) -> str:
 
     if normalized in {"blog"}:
         return "blog"
-
-    if normalized in {"opinion", "question", "satire", "promotion", "unclear", "not_fact_checkable"}:
-        return "unknown"
 
     if normalized in {"use caution", "low trust", "not in factlens library", "invalid url", "german domain", "french domain", "japanese domain", "uk domain"}:
         return "unknown"

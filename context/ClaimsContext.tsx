@@ -10,6 +10,7 @@
 // PHASE 4 STEP 10B
 // PHASE 4 STEP 17
 // PHASE 4 STEP 18
+// PHASE 4 STEP 20
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -35,6 +36,7 @@ import {
   voteOnClaim as voteOnRemoteClaim,
 } from "../services/voteService";
 import {
+  formatAiPrecheckErrorForDisplay,
   retryAiPrecheckForClaim,
   runAiPrecheckForClaim,
   type AiPrecheckResponse,
@@ -205,7 +207,8 @@ function getStringListField(value: unknown): string[] {
 }
 
 function getAiPrecheckErrorMessage(result: AiPrecheckResponse): string {
-  return [result.error, result.details, result.hint].filter(Boolean).join(" ") || "AI pre-check unavailable.";
+  // PHASE 4 STEP 20
+  return formatAiPrecheckErrorForDisplay([result.error, result.details, result.hint], "AI pre-check unavailable.");
 }
 
 function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckResponse): Claim {

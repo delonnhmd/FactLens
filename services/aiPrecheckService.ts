@@ -7,6 +7,7 @@
 // PHASE 4 STEP 10
 // PHASE 4 STEP 10B
 // PHASE 4 STEP 15
+// PHASE 4 STEP 20
 import { API_CONFIG } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
@@ -35,6 +36,31 @@ export interface AiPrecheckResponse {
 
 const AI_PRECHECK_TIMEOUT_MS = 12000;
 
+// PHASE 4 STEP 20
+function isSourceQualityConstraintError(message: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("claims_source_quality_check") ||
+    (normalizedMessage.includes("source_quality") && normalizedMessage.includes("check constraint")) ||
+    (normalizedMessage.includes("source_quality") && normalizedMessage.includes("violates"))
+  );
+}
+
+// PHASE 4 STEP 20
+export function formatAiPrecheckErrorForDisplay(parts: Array<unknown>, fallback = "AI pre-check unavailable."): string {
+  const message = parts
+    .filter((part) => part !== null && part !== undefined && part !== "")
+    .map((part) => (typeof part === "string" ? part : JSON.stringify(part)))
+    .join(" ");
+
+  if (isSourceQualityConstraintError(message)) {
+    return "AI pre-check failed because source quality value was invalid. Please retry after update.";
+  }
+
+  return message || fallback;
+}
+
 function getBackendErrorMessage(data: Partial<AiPrecheckResponse>, status: number): string {
   const detail =
     typeof data.detail === "string"
@@ -43,7 +69,10 @@ function getBackendErrorMessage(data: Partial<AiPrecheckResponse>, status: numbe
         ? JSON.stringify(data.detail)
         : null;
 
-  return [data.error, detail, data.details, data.hint].filter(Boolean).join(" ") || `AI pre-check failed with HTTP ${status}.`;
+  return formatAiPrecheckErrorForDisplay(
+    [data.error, detail, data.details, data.hint],
+    `AI pre-check failed with HTTP ${status}.`,
+  );
 }
 
 async function postAiPrecheck(
@@ -95,6 +124,14 @@ async function postAiPrecheck(
       };
     }
 
+    const responseError = formatAiPrecheckErrorForDisplay(
+      [json.error, json.detail, json.details, json.hint],
+      "",
+    );
+    const shouldHideDebugDetails = isSourceQualityConstraintError(
+      [json.error, json.detail, json.details, json.hint].filter(Boolean).join(" "),
+    );
+
     return {
       ok: Boolean(json.ok),
       claim_id: json.claim_id ?? claimId,
@@ -110,9 +147,9 @@ async function postAiPrecheck(
       red_flags: json.red_flags ?? [],
       ai_summary: json.ai_summary ?? null,
       ai_status: json.ai_status ?? null,
-      error: json.error ?? null,
-      details: json.details ?? null,
-      hint: json.hint ?? null,
+      error: responseError || json.error || null,
+      details: shouldHideDebugDetails ? null : json.details ?? null,
+      hint: shouldHideDebugDetails ? null : json.hint ?? null,
       update_payload: json.update_payload ?? null,
       updated_claim: json.updated_claim ?? null,
     };

@@ -29,25 +29,33 @@ try:
         analyze_claim_with_openai,
         analyze_claim_with_openai_response,
         get_openai_model,
-        normalize_source_quality,
         test_openai_connection,
     )
     from services.ai_library_loader import load_factlens_ai_library
-    from services.source_credibility import score_source_url
+    from services.source_credibility import normalize_source_quality, score_source_url
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
         analyze_claim_with_openai_response,
         get_openai_model,
-        normalize_source_quality,
         test_openai_connection,
     )
     from backend.services.ai_library_loader import load_factlens_ai_library
-    from backend.services.source_credibility import score_source_url
+    from backend.services.source_credibility import normalize_source_quality, score_source_url
 
 
 load_dotenv()
 app = FastAPI(title="FactLens backend")
+
+# PHASE 4 STEP 20
+SOURCE_QUALITY_ALLOWED_VALUES = {
+    "official",
+    "mainstream",
+    "specialized",
+    "social",
+    "blog",
+    "unknown",
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -279,6 +287,7 @@ def normalize_red_flags(red_flags: object) -> list[str]:
 # PHASE 4 STEP 5D
 # PHASE 4 STEP 16
 # PHASE 4 STEP 17
+# PHASE 4 STEP 20
 def build_claim_ai_update_payload(analysis: dict) -> dict:
     claim_type = str(analysis.get("claim_type") or "UNCLEAR").upper()
     if claim_type not in {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}:
@@ -356,10 +365,16 @@ def format_supabase_response_error(error: object) -> dict:
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
 # PHASE 4 STEP 16
+# PHASE 4 STEP 20
 def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) -> dict:
     update_payload = build_claim_ai_update_payload(ai_result)
     # PHASE 4 STEP 17
+    # PHASE 4 STEP 20
     update_payload["source_quality"] = normalize_source_quality(update_payload.get("source_quality"))
+    if update_payload["source_quality"] not in SOURCE_QUALITY_ALLOWED_VALUES:
+        print("[ai] invalid source_quality blocked:", update_payload["source_quality"], flush=True)
+        update_payload["source_quality"] = "unknown"
+
     print(f"[{endpoint_label}] Supabase project_ref:", get_supabase_project_ref(), flush=True)
     print(f"[{endpoint_label}] claim_id:", claim_id, flush=True)
     print("[ai] normalized source_quality:", update_payload["source_quality"], flush=True)
