@@ -5,6 +5,7 @@ import type { Claim, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
 import { getSourceCredibilityLabel, getSourceQuality } from "../services/sourceQuality";
 
+// PHASE 4 STEP 18
 const verdictLabels = {
   COMMUNITY_TRUE: "Community Says True",
   COMMUNITY_FAKE: "Community Says Fake",
@@ -66,25 +67,52 @@ function getSourceDomain(sourceUrl: string): string {
 }
 
 function getShortSourceQuality(label: string | null | undefined): string {
+  // PHASE 4 STEP 18
+  const normalizedRawLabel = label?.trim().toLowerCase();
+
+  if (normalizedRawLabel === "official" || normalizedRawLabel === "mainstream") {
+    return "Strong Source";
+  }
+
+  if (normalizedRawLabel === "specialized") {
+    return "Medium Source";
+  }
+
+  if (normalizedRawLabel === "social") {
+    return "Social Source";
+  }
+
+  if (normalizedRawLabel === "blog") {
+    return "Weak Source";
+  }
+
+  if (normalizedRawLabel === "unknown") {
+    return "Unknown Source";
+  }
+
   const normalizedLabel = getSourceCredibilityLabel(label);
 
+  if (normalizedLabel === "Strong Source" || normalizedLabel === "Medium Source" || normalizedLabel === "Social Source" || normalizedLabel === "Weak Source" || normalizedLabel === "Unknown Source") {
+    return normalizedLabel;
+  }
+
   if (normalizedLabel === "Tier 1 - Authoritative") {
-    return "Strong";
+    return "Strong Source";
   }
 
   if (normalizedLabel === "Tier 2 - Established") {
-    return "Medium";
+    return "Strong Source";
   }
 
   if (normalizedLabel === "Tier 3 - Mixed") {
-    return "Mixed";
+    return "Medium Source";
   }
 
   if (normalizedLabel === "Tier 4 - Low credibility") {
-    return "Low";
+    return "Weak Source";
   }
 
-  return "Unknown";
+  return "Unknown Source";
 }
 
 function getAiDotColor(claim: Claim): string {
@@ -111,8 +139,10 @@ function getAiSummary(claim: Claim): string {
 function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
   const sourceQuality = useMemo(() => getSourceQuality(claim.sourceUrl), [claim.sourceUrl]);
   const sourceDomain = getSourceDomain(claim.sourceUrl);
+  // PHASE 4 STEP 18
+  const useLocalSourceFallback = (!claim.sourceQuality || claim.sourceQuality === "unknown") && claim.sourceScore === null;
   const sourceScore = typeof claim.sourceScore === "number" ? Math.round(claim.sourceScore) : sourceQuality.score;
-  const sourceQualityLabel = getShortSourceQuality(claim.sourceQuality || sourceQuality.label);
+  const sourceQualityLabel = getShortSourceQuality(useLocalSourceFallback ? sourceQuality.label : claim.sourceQuality || sourceQuality.label);
   const verdictLabel =
     claim.status === "COMMUNITY_TRUE" ||
     claim.status === "COMMUNITY_FAKE" ||

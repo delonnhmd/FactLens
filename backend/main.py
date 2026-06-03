@@ -12,6 +12,7 @@
 # PHASE 4 STEP 9
 # PHASE 4 STEP 10
 # PHASE 4 STEP 17
+# PHASE 4 STEP 18
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -361,7 +362,6 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
     update_payload["source_quality"] = normalize_source_quality(update_payload.get("source_quality"))
     print(f"[{endpoint_label}] Supabase project_ref:", get_supabase_project_ref(), flush=True)
     print(f"[{endpoint_label}] claim_id:", claim_id, flush=True)
-    print("[ai] source_lean disabled until schema added", flush=True)
     print("[ai] normalized source_quality:", update_payload["source_quality"], flush=True)
     print("[ai] claim_type:", update_payload.get("claim_type"), flush=True)
     print(f"[{endpoint_label}] AI result:", ai_result, flush=True)

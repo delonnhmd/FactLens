@@ -1,5 +1,6 @@
 # PHASE 4 STEP 9
 # PHASE 4 STEP 17
+# PHASE 4 STEP 18
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -9,8 +10,8 @@ from urllib.parse import urlparse
 
 SOURCE_CREDIBILITY_PATH = Path(__file__).resolve().parents[1] / "ai_library" / "source_credibility.json"
 
-# Credibility scores are based on journalistic standards only. Political lean is
-# informational metadata and must never change the score.
+# PHASE 4 STEP 18
+# Credibility scores are based on journalistic and institutional source signals only.
 DEFAULT_DOMAIN_LIBRARY: dict[str, dict[str, Any]] = {
     "reuters.com": {"score": 98, "quality": "Tier 1 - Authoritative", "lean": "Center"},
     "apnews.com": {"score": 97, "quality": "Tier 1 - Authoritative", "lean": "Center"},
@@ -58,6 +59,51 @@ DEFAULT_SOURCE_CREDIBILITY: dict[str, Any] = {
     "domains": DEFAULT_DOMAIN_LIBRARY,
     "unknown": {"score": 40, "quality": "Unknown source", "lean": "Unknown"},
     "invalid": {"score": 20, "quality": "Invalid URL", "lean": "Unknown"},
+}
+
+OFFICIAL_DOMAINS = {
+    "who.int",
+    "cdc.gov",
+    "fda.gov",
+    "sec.gov",
+    "federalreserve.gov",
+    "nih.gov",
+    "nasa.gov",
+    "noaa.gov",
+    "irs.gov",
+    "treasury.gov",
+    "harvard.edu",
+    "stanford.edu",
+    "mit.edu",
+    "berkeley.edu",
+}
+
+SPECIALIZED_DOMAINS = {
+    "healthline.com",
+    "mayoclinic.org",
+    "clevelandclinic.org",
+    "webmd.com",
+    "investopedia.com",
+}
+
+MAINSTREAM_DOMAINS = {
+    "nbcnews.com",
+    "cbsnews.com",
+    "abcnews.go.com",
+    "abcnews.com",
+    "usatoday.com",
+}
+
+SOCIAL_DOMAINS = {
+    "youtube.com",
+    "youtu.be",
+    "tiktok.com",
+    "x.com",
+    "twitter.com",
+    "facebook.com",
+    "fb.watch",
+    "instagram.com",
+    "reddit.com",
 }
 
 
@@ -154,14 +200,29 @@ def _domain_matches(domain: str, candidate: str) -> bool:
     return domain == candidate or domain.endswith(f".{candidate}")
 
 
-def _score_result(domain: str, metadata: dict[str, Any], source_reason: str) -> dict:
+def _score_source_values(domain: str, source_quality: str, source_score: int, source_reason: str) -> dict:
+    normalized_quality = normalize_source_quality(source_quality)
+
     return {
         "domain": domain,
-        "source_quality": normalize_source_quality(metadata.get("quality")),
-        "source_score": max(0, min(int(metadata.get("score", 40)), 100)),
-        "source_lean": str(metadata.get("lean") or "Unknown"),
+        "source_domain": domain,
+        "source_quality": normalized_quality,
+        "source_score": max(0, min(int(source_score), 100)),
         "source_reason": source_reason,
     }
+
+
+def _score_result(domain: str, metadata: dict[str, Any], source_reason: str) -> dict:
+    return _score_source_values(
+        domain,
+        normalize_source_quality(metadata.get("quality")),
+        int(metadata.get("score", 40)),
+        source_reason,
+    )
+
+
+def _domain_in_group(domain: str, candidates: set[str]) -> bool:
+    return any(_domain_matches(domain, candidate) for candidate in candidates)
 
 
 def get_source_score(source_url: str | None) -> dict:
@@ -171,13 +232,62 @@ def get_source_score(source_url: str | None) -> dict:
     if not str(source_url or "").strip() or not domain or "." not in domain:
         return _score_result(domain, library["invalid"], "Invalid source URL.")
 
+    # PHASE 4 STEP 18
+    if domain.endswith(".gov"):
+        return _score_source_values(
+            domain,
+            "official",
+            90,
+            "Government or official public institution source.",
+        )
+
+    if domain.endswith(".edu"):
+        return _score_source_values(
+            domain,
+            "official",
+            90,
+            "Educational or institutional source.",
+        )
+
+    if _domain_in_group(domain, OFFICIAL_DOMAINS):
+        return _score_source_values(
+            domain,
+            "official",
+            90,
+            "Government or official public institution source.",
+        )
+
+    if _domain_in_group(domain, SOCIAL_DOMAINS):
+        return _score_source_values(
+            domain,
+            "social",
+            35,
+            "Social platform source. Treat as a weak signal unless supported by evidence.",
+        )
+
+    if _domain_in_group(domain, SPECIALIZED_DOMAINS):
+        return _score_source_values(
+            domain,
+            "specialized",
+            70,
+            "Specialized source. Useful signal, but the specific claim may still need corroboration.",
+        )
+
     for candidate, metadata in library["domains"].items():
         if _domain_matches(domain, candidate):
             return _score_result(
                 domain,
                 metadata,
-                "Domain matched the FactLens credibility library. Score is based on journalistic standards only; political lean is informational and not used in scoring.",
+                "Domain matched the FactLens credibility library. Score is based on journalistic standards.",
             )
+
+    if _domain_in_group(domain, MAINSTREAM_DOMAINS):
+        return _score_source_values(
+            domain,
+            "mainstream",
+            75,
+            "Mainstream news source.",
+        )
 
     return _score_result(
         domain,

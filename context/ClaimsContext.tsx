@@ -9,6 +9,7 @@
 // PHASE 4 STEP 10
 // PHASE 4 STEP 10B
 // PHASE 4 STEP 17
+// PHASE 4 STEP 18
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -216,8 +217,6 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const sourceCount = getNumberField(updatedClaim.source_count ?? result.source_count) ?? claim.sourceCount;
   const sourceDomain = getStringField(updatedClaim.source_domain ?? result.source_domain) ?? claim.sourceDomain;
   const sourceScore = getNumberField(updatedClaim.source_score ?? result.source_score) ?? claim.sourceScore;
-  // PHASE 4 STEP 16
-  const sourceLean = getStringField(updatedClaim.source_lean) ?? claim.sourceLean;
   const sourceReason = getStringField(updatedClaim.source_reason ?? result.source_reason) ?? claim.sourceReason;
   const evidenceUsedCount = getNumberField(updatedClaim.evidence_used_count ?? result.evidence_used_count) ?? claim.evidenceUsedCount;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
@@ -232,7 +231,6 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     sourceCount,
     sourceDomain,
     sourceScore,
-    sourceLean,
     sourceReason,
     evidenceUsedCount,
     redFlags,

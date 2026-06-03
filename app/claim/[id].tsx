@@ -7,6 +7,7 @@
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
 // PHASE 4 STEP 15
+// PHASE 4 STEP 18
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -114,6 +115,28 @@ function formatPercent(value: number | null | undefined): string {
 
 function formatSourceQualityLabel(value: string | null | undefined): string {
   return getSourceCredibilityLabel(value);
+}
+
+// PHASE 4 STEP 18
+function isInstitutionalSourceUrl(sourceUrl: string): boolean {
+  try {
+    const parsedUrl = new URL(sourceUrl.includes("://") ? sourceUrl : `https://${sourceUrl}`);
+    const hostname = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
+
+    return hostname.endsWith(".edu") || hostname.endsWith(".gov");
+  } catch {
+    const normalizedSourceUrl = sourceUrl.trim().toLowerCase();
+
+    return normalizedSourceUrl.includes(".edu") || normalizedSourceUrl.includes(".gov");
+  }
+}
+
+function getClaimSourceQualityText(sourceUrl: string, sourceQuality: string | null | undefined, sourceScore: number | null): string {
+  if (sourceScore === null && isInstitutionalSourceUrl(sourceUrl)) {
+    return "Institutional source pending AI check";
+  }
+
+  return formatSourceQualityLabel(sourceQuality);
 }
 
 // PHASE 4 STEP 7
@@ -663,6 +686,8 @@ export default function ClaimDetailScreen() {
   const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
+  // PHASE 4 STEP 18
+  const sourceQualityText = getClaimSourceQualityText(claim.sourceUrl, claim.sourceQuality, claim.sourceScore);
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
@@ -752,15 +777,11 @@ export default function ClaimDetailScreen() {
                 </View>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Source quality</Text>
-                  <Text style={styles.aiDetailValue}>{formatSourceQualityLabel(claim.sourceQuality)}</Text>
+                  <Text style={styles.aiDetailValue}>{sourceQualityText}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Source score</Text>
                   <Text style={styles.aiDetailValue}>{formatSourceCredibilityScore(claim.sourceScore)}</Text>
-                </View>
-                <View style={styles.aiDetailItem}>
-                  <Text style={styles.aiDetailLabel}>Political lean</Text>
-                  <Text style={styles.aiDetailValue}>{claim.sourceLean || mainSourceQuality.lean || "Unknown"}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Claim type</Text>
@@ -865,10 +886,9 @@ export default function ClaimDetailScreen() {
           </Text>
           <View style={styles.sourceQualityPanel}>
             <SourceQualityBadge quality={mainSourceQuality} showScore />
-            <Text style={styles.sourceQualityReason}>Source quality: {formatSourceQualityLabel(claim.sourceQuality)}</Text>
+            <Text style={styles.sourceQualityReason}>Source quality: {sourceQualityText}</Text>
             <Text style={styles.sourceQualityReason}>Source score: {formatSourceCredibilityScore(claim.sourceScore)}</Text>
             <Text style={styles.sourceQualityReason}>Source domain: {claim.sourceDomain || "Pending"}</Text>
-            <Text style={styles.sourceQualityReason}>Political lean: {claim.sourceLean || mainSourceQuality.lean || "Unknown"}</Text>
             <Text style={styles.sourceQualityReason}>Source reason: {claim.sourceReason || "Source score pending."}</Text>
             {sourceNeedsEvidence ? (
               <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>

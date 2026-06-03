@@ -5,6 +5,7 @@
 # PHASE 4 STEP 9
 # PHASE 4 STEP 10
 # PHASE 4 STEP 17
+# PHASE 4 STEP 18
 import json
 import os
 from typing import Literal
@@ -199,7 +200,7 @@ def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
     next_analysis = {
         **analysis,
         "source_quality": source_quality,
-        "source_domain": str(source_metadata.get("domain") or ""),
+        "source_domain": str(source_metadata.get("source_domain") or source_metadata.get("domain") or ""),
         "source_score": max(0, min(normalized_score, 100)),
         "source_reason": str(source_metadata.get("source_reason") or ""),
     }
@@ -455,11 +456,10 @@ def _build_prompt(
     # PHASE 4 STEP 9
     # PHASE 4 STEP 10
     # PHASE 4 STEP 16
+    # PHASE 4 STEP 18
     ai_library = load_factlens_ai_library()
     ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
-    source_metadata_for_prompt = {
-        key: value for key, value in source_metadata.items() if key != "source_lean"
-    }
+    source_metadata_for_prompt = dict(source_metadata)
     source_metadata_json = json.dumps(source_metadata_for_prompt, ensure_ascii=True, sort_keys=True)
     evidence_json = json.dumps(_normalize_evidence_rows(evidence_rows), ensure_ascii=True, sort_keys=True)
     system_prompt = (
@@ -476,6 +476,9 @@ def _build_prompt(
         "If claim_type is OPINION, QUESTION, SATIRE, or PROMOTION, set ai_status to NOT_FACT_CHECKABLE, ai_confidence to 0.5, source_count to 0, explain why in red_flags, and say in ai_summary that it is not a factual claim that can be verified as true or fake. "
         "source_quality must only be one of: official, mainstream, specialized, social, blog, unknown. "
         "Never return opinion, question, satire, promotion, unclear, or not_fact_checkable as source_quality. Those values belong only in claim_type. "
+        "FactLens already scored the source using source_domain, source_quality, source_score, and source_reason. "
+        "Do not override official, mainstream, specialized, or social source_quality from FactLens source scoring. "
+        "Use source quality as a signal, but do not assume the source supports the claim unless the content actually matches the claim. "
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "
