@@ -1,13 +1,22 @@
 // PHASE 2 STEP 5
 // FactLens UI redesign
 // PHASE 4 STEP 18
+// Source trust label update
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
 import type { SourceQuality, SourceQualityLabel } from "../services/sourceQuality";
 
 function getQualityColors(label: SourceQualityLabel) {
-  if (label === "Tier 1 - Authoritative" || label === "Tier 2 - Established" || label === "Strong Source" || label === "Medium Source") {
+  if (label === "Highly Trusted") {
+    return {
+      backgroundColor: theme.colors.successBg,
+      color: theme.colors.success,
+      borderColor: theme.colors.successBg,
+    };
+  }
+
+  if (label === "Trusted") {
     return {
       backgroundColor: theme.colors.sourceBg,
       color: theme.colors.sourceText,
@@ -15,7 +24,7 @@ function getQualityColors(label: SourceQualityLabel) {
     };
   }
 
-  if (label === "Tier 3 - Mixed" || label === "Social Source") {
+  if (label === "Use Caution" || label === "Not in FactLens library") {
     return {
       backgroundColor: theme.colors.warningBg,
       color: theme.colors.warning,
@@ -23,7 +32,7 @@ function getQualityColors(label: SourceQualityLabel) {
     };
   }
 
-  if (label === "Tier 4 - Low credibility" || label === "Weak Source") {
+  if (label === "Low Trust" || label === "Invalid URL") {
     return {
       backgroundColor: theme.colors.dangerBg,
       color: theme.colors.danger,

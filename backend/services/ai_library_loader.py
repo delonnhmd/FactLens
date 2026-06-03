@@ -54,7 +54,7 @@ DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
     },
     "source_credibility": {
         "domains": {},
-        "unknown": {"score": 40, "quality": "Unknown source", "lean": "Unknown"},
+        "unknown": {"score": 45, "quality": "Not in FactLens library", "lean": "Unknown"},
         "invalid": {"score": 20, "quality": "Invalid URL", "lean": "Unknown"},
     },
     "red_flag_rules": {

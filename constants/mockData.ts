@@ -33,7 +33,7 @@ const verificationFields = (createdAt: string) => ({
   minVotesRequired: 5,
   expectedParticipation: 10,
   sourceCount: 0,
-  sourceQuality: "Unknown source" as const,
+  sourceQuality: "unknown" as const,
   sourceDomain: null,
   sourceScore: null,
   sourceReason: null,

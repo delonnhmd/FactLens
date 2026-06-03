@@ -2,208 +2,303 @@
   "domains": {
     "reuters.com": {
       "score": 98,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "apnews.com": {
       "score": 97,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "c-span.org": {
       "score": 97,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "bbc.com": {
       "score": 95,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "pbs.org": {
       "score": 94,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "economist.com": {
       "score": 92,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "npr.org": {
       "score": 92,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center-left"
     },
     "wsj.com": {
       "score": 90,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center-right"
     },
     "nytimes.com": {
       "score": 88,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center-left"
     },
     "politico.com": {
       "score": 88,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "axios.com": {
       "score": 87,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center"
     },
     "washingtonpost.com": {
       "score": 87,
-      "quality": "Tier 1 - Authoritative",
+      "quality": "Highly Trusted",
       "lean": "Center-left"
     },
     "theatlantic.com": {
       "score": 80,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Center-left"
     },
     "foxnews.com": {
       "score": 78,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Right"
     },
     "nationalreview.com": {
       "score": 74,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Right"
     },
     "newsweek.com": {
       "score": 74,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Center-left"
     },
     "cnn.com": {
       "score": 76,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Left"
     },
     "msnbc.com": {
       "score": 72,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Left"
     },
     "nypost.com": {
       "score": 70,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Right"
     },
     "realclearpolitics.com": {
       "score": 70,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Center-right"
     },
     "washingtonexaminer.com": {
       "score": 68,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Right"
     },
     "thehill.com": {
       "score": 82,
-      "quality": "Tier 2 - Established",
+      "quality": "Trusted",
       "lean": "Center"
     },
     "vox.com": {
       "score": 72,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Left"
     },
     "huffpost.com": {
       "score": 65,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Left"
     },
     "motherjones.com": {
       "score": 66,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Left"
     },
     "thenation.com": {
       "score": 62,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Left"
     },
     "slate.com": {
       "score": 68,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Left"
     },
     "salon.com": {
       "score": 60,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Left"
     },
     "dailywire.com": {
       "score": 60,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Right"
     },
     "thefederalist.com": {
       "score": 58,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Right"
     },
     "dailycaller.com": {
       "score": 58,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Right"
     },
     "townhall.com": {
       "score": 55,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Right"
     },
     "newsmax.com": {
       "score": 52,
-      "quality": "Tier 3 - Mixed",
+      "quality": "Use Caution",
       "lean": "Right"
     },
     "breitbart.com": {
       "score": 35,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Right"
     },
     "mediamatters.org": {
       "score": 38,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Left"
     },
     "shareblue.com": {
       "score": 25,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Left"
     },
     "palmerreport.com": {
       "score": 20,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Left"
     },
     "oann.com": {
       "score": 30,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Right"
     },
     "thegatewaypundit.com": {
       "score": 10,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Right"
     },
     "infowars.com": {
       "score": 5,
-      "quality": "Tier 4 - Low credibility",
+      "quality": "Low Trust",
       "lean": "Right"
+    },
+    "pubmed.ncbi.nlm.nih.gov": {
+      "score": 97,
+      "quality": "Highly Trusted",
+      "lean": "Official"
+    },
+    "nih.gov": {
+      "score": 97,
+      "quality": "Highly Trusted",
+      "lean": "Official"
+    },
+    "who.int": {
+      "score": 96,
+      "quality": "Highly Trusted",
+      "lean": "Official"
+    },
+    "cdc.gov": {
+      "score": 96,
+      "quality": "Highly Trusted",
+      "lean": "Official"
+    },
+    "nasa.gov": {
+      "score": 96,
+      "quality": "Highly Trusted",
+      "lean": "Official"
+    },
+    "nature.com": {
+      "score": 95,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "science.org": {
+      "score": 95,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "bbc.co.uk": {
+      "score": 95,
+      "quality": "Highly Trusted",
+      "lean": "Center"
+    },
+    "mit.edu": {
+      "score": 94,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "harvard.edu": {
+      "score": 94,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "stanford.edu": {
+      "score": 94,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "mpg.de": {
+      "score": 93,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "dw.com": {
+      "score": 88,
+      "quality": "Highly Trusted",
+      "lean": "Center"
+    },
+    "springer.com": {
+      "score": 88,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "sciencedirect.com": {
+      "score": 88,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "france24.com": {
+      "score": 85,
+      "quality": "Highly Trusted",
+      "lean": "Center"
+    },
+    "theguardian.com": {
+      "score": 84,
+      "quality": "Trusted",
+      "lean": "Center-left"
+    },
+    "jstor.org": {
+      "score": 87,
+      "quality": "Highly Trusted",
+      "lean": "Neutral"
+    },
+    "aljazeera.com": {
+      "score": 78,
+      "quality": "Trusted",
+      "lean": "Center"
     }
   },
   "unknown": {
     "score": 40,
-    "quality": "Unknown source",
+    "quality": "Not in FactLens library",
     "lean": "Unknown"
   },
   "invalid": {

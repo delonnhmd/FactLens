@@ -3,9 +3,10 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
-import { getSourceCredibilityLabel, getSourceQuality } from "../services/sourceQuality";
+import { getSourceMessage, getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
 
 // PHASE 4 STEP 18
+// Source trust label update
 const verdictLabels = {
   COMMUNITY_TRUE: "Community Says True",
   COMMUNITY_FAKE: "Community Says Fake",
@@ -66,55 +67,6 @@ function getSourceDomain(sourceUrl: string): string {
   }
 }
 
-function getShortSourceQuality(label: string | null | undefined): string {
-  // PHASE 4 STEP 18
-  const normalizedRawLabel = label?.trim().toLowerCase();
-
-  if (normalizedRawLabel === "official" || normalizedRawLabel === "mainstream") {
-    return "Strong Source";
-  }
-
-  if (normalizedRawLabel === "specialized") {
-    return "Medium Source";
-  }
-
-  if (normalizedRawLabel === "social") {
-    return "Social Source";
-  }
-
-  if (normalizedRawLabel === "blog") {
-    return "Weak Source";
-  }
-
-  if (normalizedRawLabel === "unknown") {
-    return "Unknown Source";
-  }
-
-  const normalizedLabel = getSourceCredibilityLabel(label);
-
-  if (normalizedLabel === "Strong Source" || normalizedLabel === "Medium Source" || normalizedLabel === "Social Source" || normalizedLabel === "Weak Source" || normalizedLabel === "Unknown Source") {
-    return normalizedLabel;
-  }
-
-  if (normalizedLabel === "Tier 1 - Authoritative") {
-    return "Strong Source";
-  }
-
-  if (normalizedLabel === "Tier 2 - Established") {
-    return "Strong Source";
-  }
-
-  if (normalizedLabel === "Tier 3 - Mixed") {
-    return "Medium Source";
-  }
-
-  if (normalizedLabel === "Tier 4 - Low credibility") {
-    return "Weak Source";
-  }
-
-  return "Unknown Source";
-}
-
 function getAiDotColor(claim: Claim): string {
   if (claim.isFlagged) {
     return "#E24B4A";
@@ -142,7 +94,13 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // PHASE 4 STEP 18
   const useLocalSourceFallback = (!claim.sourceQuality || claim.sourceQuality === "unknown") && claim.sourceScore === null;
   const sourceScore = typeof claim.sourceScore === "number" ? Math.round(claim.sourceScore) : sourceQuality.score;
-  const sourceQualityLabel = getShortSourceQuality(useLocalSourceFallback ? sourceQuality.label : claim.sourceQuality || sourceQuality.label);
+  const sourceQualityLabel = useLocalSourceFallback
+    ? sourceQuality.label
+    : getSourceTrustLabel(sourceScore, claim.sourceQuality || sourceQuality.label);
+  const sourceMessage = useMemo(
+    () => getSourceMessage(sourceScore, sourceQuality.label),
+    [sourceQuality.label, sourceScore],
+  );
   const verdictLabel =
     claim.status === "COMMUNITY_TRUE" ||
     claim.status === "COMMUNITY_FAKE" ||
@@ -244,6 +202,19 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
               {sourceQualityLabel} {"\u00B7"} {sourceScore}/100
             </Text>
           </View>
+
+          <Text
+            style={[
+              styles.sourceMessage,
+              sourceMessage.color === "green" && styles.sourceMessageGreen,
+              sourceMessage.color === "blue" && styles.sourceMessageBlue,
+              sourceMessage.color === "amber" && styles.sourceMessageAmber,
+              sourceMessage.color === "red" && styles.sourceMessageRed,
+            ]}
+            numberOfLines={1}
+          >
+            {sourceMessage.text}
+          </Text>
 
           {claim.evidenceCount > 0 ? (
             <Text style={styles.evidenceText}>
@@ -402,6 +373,22 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  sourceMessage: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  sourceMessageGreen: {
+    color: theme.colors.success,
+  },
+  sourceMessageBlue: {
+    color: theme.colors.sourceText,
+  },
+  sourceMessageAmber: {
+    color: theme.colors.warning,
+  },
+  sourceMessageRed: {
+    color: theme.colors.danger,
   },
   evidenceText: {
     color: theme.colors.subtext,

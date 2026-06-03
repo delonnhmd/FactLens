@@ -265,6 +265,7 @@ def _fallback_source_risk_analysis(
     source_count = 0
     source_quality = normalize_source_quality(scored_source.get("source_quality"))
     source_score = int(scored_source.get("source_score") or 40)
+    source_message = str(scored_source.get("source_message") or scored_source.get("source_reason") or "")
     ai_summary = "No strong source signal found. Community voting and evidence are needed."
     ai_status: AiStatus = "NEEDS_MORE_EVIDENCE"
     claim_type: ClaimType = "FACTUAL"
@@ -299,7 +300,7 @@ def _fallback_source_risk_analysis(
         ai_summary = "The source has a mixed credibility score, so corroborating evidence may be needed."
     elif source_quality == "unknown":
         ai_confidence = 0.40
-        ai_summary = "Unknown source. The domain is not in the FactLens credibility library."
+        ai_summary = source_message or "This source needs community verification."
     else:
         ai_confidence = 0.35
         red_flags.append("Low credibility source needs corroborating evidence")
@@ -484,7 +485,7 @@ def _build_prompt(
         "If source is weak or unknown, reduce confidence. "
         "Official source metadata can increase confidence only if that source supports the claim. "
         "Social source metadata must not be treated as strong evidence alone. "
-        "Unknown source metadata should lower confidence. "
+        "Unlisted source metadata should lower confidence. "
         "Source score is not final truth. It is only one signal. "
         "Community evidence links are user-submitted signals, not final truth. "
         "Increase confidence only if community evidence supports the claim. "

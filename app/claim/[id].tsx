@@ -26,8 +26,10 @@ import { useClaims } from "../../context/ClaimsContext";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
 import {
   formatSourceCredibilityScore,
-  getSourceCredibilityLabel,
+  getSourceMessage,
   getSourceQuality,
+  getSourceTrustLabel,
+  type SourceMessageColor,
   type SourceQuality,
 } from "../../services/sourceQuality";
 import { getScoreLockAt, getVoteAcceptUntil } from "../../utils/verificationTiming";
@@ -104,6 +106,7 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
     label: evidence.sourceQualityLabel as SourceQuality["label"],
     score: evidence.sourceQualityScore ?? fallbackQuality.score,
     reason: evidence.sourceQualityReason ?? fallbackQuality.reason,
+    messageColor: fallbackQuality.messageColor,
   };
 }
 
@@ -111,32 +114,6 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
 function formatPercent(value: number | null | undefined): string {
   const normalized = value === null || value === undefined ? 0.5 : value > 1 ? value / 100 : value;
   return `${Math.round(normalized * 100)}%`;
-}
-
-function formatSourceQualityLabel(value: string | null | undefined): string {
-  return getSourceCredibilityLabel(value);
-}
-
-// PHASE 4 STEP 18
-function isInstitutionalSourceUrl(sourceUrl: string): boolean {
-  try {
-    const parsedUrl = new URL(sourceUrl.includes("://") ? sourceUrl : `https://${sourceUrl}`);
-    const hostname = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
-
-    return hostname.endsWith(".edu") || hostname.endsWith(".gov");
-  } catch {
-    const normalizedSourceUrl = sourceUrl.trim().toLowerCase();
-
-    return normalizedSourceUrl.includes(".edu") || normalizedSourceUrl.includes(".gov");
-  }
-}
-
-function getClaimSourceQualityText(sourceUrl: string, sourceQuality: string | null | undefined, sourceScore: number | null): string {
-  if (sourceScore === null && isInstitutionalSourceUrl(sourceUrl)) {
-    return "Institutional source pending AI check";
-  }
-
-  return formatSourceQualityLabel(sourceQuality);
 }
 
 // PHASE 4 STEP 7
@@ -150,6 +127,22 @@ function formatClaimType(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getSourceMessageStyle(color: SourceMessageColor) {
+  if (color === "green") {
+    return styles.sourceMessageGreen;
+  }
+
+  if (color === "blue") {
+    return styles.sourceMessageBlue;
+  }
+
+  if (color === "red") {
+    return styles.sourceMessageRed;
+  }
+
+  return styles.sourceMessageAmber;
 }
 
 export default function ClaimDetailScreen() {
@@ -686,8 +679,12 @@ export default function ClaimDetailScreen() {
   const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
-  // PHASE 4 STEP 18
-  const sourceQualityText = getClaimSourceQualityText(claim.sourceUrl, claim.sourceQuality, claim.sourceScore);
+  // Source trust label update
+  const displayedSourceScore = typeof claim.sourceScore === "number" ? claim.sourceScore : mainSourceQuality.score;
+  const displayedSourceTrust = typeof claim.sourceScore === "number"
+    ? getSourceTrustLabel(claim.sourceScore, claim.sourceQuality)
+    : mainSourceQuality.label;
+  const displayedSourceMessage = getSourceMessage(displayedSourceScore, mainSourceQuality.label);
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
@@ -698,8 +695,6 @@ export default function ClaimDetailScreen() {
     "AI pre-check is pending. Community voting and evidence are still needed.";
   // PHASE 4 STEP 7
   const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
-  // PHASE 4 STEP 9
-  const sourceNeedsEvidence = typeof claim.sourceScore === "number" && claim.sourceScore < 50;
   // PHASE 4 STEP 3
   const canRetryAiPrecheck =
     claim.aiCheck.status === "PENDING" ||
@@ -776,23 +771,19 @@ export default function ClaimDetailScreen() {
                   <Text style={styles.aiDetailValue}>{formatPercent(claim.aiCheck.confidence)}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
-                  <Text style={styles.aiDetailLabel}>Source quality</Text>
-                  <Text style={styles.aiDetailValue}>{sourceQualityText}</Text>
+                  <Text style={styles.aiDetailLabel}>Source trust</Text>
+                  <Text style={styles.aiDetailValue}>{displayedSourceTrust}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Source score</Text>
-                  <Text style={styles.aiDetailValue}>{formatSourceCredibilityScore(claim.sourceScore)}</Text>
+                  <Text style={styles.aiDetailValue}>{formatSourceCredibilityScore(displayedSourceScore)}</Text>
                 </View>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Claim type</Text>
                   <Text style={styles.aiDetailValue}>{formatClaimType(claim.claimType)}</Text>
                 </View>
               </View>
-              <Text style={styles.aiText}>Source domain: {claim.sourceDomain || "Pending"}</Text>
-              <Text style={styles.aiText}>Source reason: {claim.sourceReason || "Source score pending."}</Text>
-              {sourceNeedsEvidence ? (
-                <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>
-              ) : null}
+              <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color)]}>{displayedSourceMessage.text}</Text>
               <Text style={styles.aiText}>Evidence used by AI: {evidenceUsedCount}</Text>
               <Text style={styles.aiText}>
                 {evidenceUsedCount > 0
@@ -885,15 +876,9 @@ export default function ClaimDetailScreen() {
             {claim.sourceUrl}
           </Text>
           <View style={styles.sourceQualityPanel}>
-            <SourceQualityBadge quality={mainSourceQuality} showScore />
-            <Text style={styles.sourceQualityReason}>Source quality: {sourceQualityText}</Text>
-            <Text style={styles.sourceQualityReason}>Source score: {formatSourceCredibilityScore(claim.sourceScore)}</Text>
-            <Text style={styles.sourceQualityReason}>Source domain: {claim.sourceDomain || "Pending"}</Text>
-            <Text style={styles.sourceQualityReason}>Source reason: {claim.sourceReason || "Source score pending."}</Text>
-            {sourceNeedsEvidence ? (
-              <Text style={styles.sourceWarning}>Source needs stronger supporting evidence.</Text>
-            ) : null}
-            <Text style={styles.sourceQualityReason}>{mainSourceQuality.reason}</Text>
+            <SourceQualityBadge quality={mainSourceQuality} />
+            <Text style={styles.sourceQualityReason}>Score: {formatSourceCredibilityScore(displayedSourceScore)}</Text>
+            <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color)]}>{displayedSourceMessage.text}</Text>
           </View>
         </View>
 
@@ -1554,6 +1539,23 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
     lineHeight: theme.typography.small.lineHeight,
+  },
+  sourceMessage: {
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "600",
+    lineHeight: theme.typography.small.lineHeight,
+  },
+  sourceMessageGreen: {
+    color: theme.colors.success,
+  },
+  sourceMessageBlue: {
+    color: theme.colors.sourceText,
+  },
+  sourceMessageAmber: {
+    color: theme.colors.warning,
+  },
+  sourceMessageRed: {
+    color: theme.colors.danger,
   },
   copyButton: {
     alignItems: "center",
