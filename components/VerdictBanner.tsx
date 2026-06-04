@@ -4,21 +4,30 @@ import { theme } from "../constants/theme";
 import type { ClaimStatus } from "../types/claim";
 
 function getVerdictConfig(status: ClaimStatus) {
-  if (status === "COMMUNITY_TRUE") {
+  if (status === "FINALIZED_TRUE" || status === "COMMUNITY_TRUE") {
     return {
-      label: "Community says true",
+      label: "Finalized true",
       badge: "True",
       badgeColor: theme.colors.success,
       badgeTextColor: theme.colors.successBg,
     };
   }
 
-  if (status === "COMMUNITY_FAKE") {
+  if (status === "FINALIZED_FAKE" || status === "COMMUNITY_FAKE") {
     return {
-      label: "Community says fake",
+      label: "Finalized fake",
       badge: "Fake",
       badgeColor: theme.colors.danger,
       badgeTextColor: theme.colors.dangerBg,
+    };
+  }
+
+  if (status === "INSUFFICIENT_DATA") {
+    return {
+      label: "Insufficient data",
+      badge: "Insufficient",
+      badgeColor: theme.colors.warning,
+      badgeTextColor: theme.colors.warningBg,
     };
   }
 
@@ -28,6 +37,24 @@ function getVerdictConfig(status: ClaimStatus) {
       badge: "Unsure",
       badgeColor: theme.colors.warning,
       badgeTextColor: theme.colors.warningBg,
+    };
+  }
+
+  if (status === "EARLY_VERDICT") {
+    return {
+      label: "Early verdict candidate",
+      badge: "Early",
+      badgeColor: theme.colors.warning,
+      badgeTextColor: theme.colors.warningBg,
+    };
+  }
+
+  if (status === "LOCKED" || status === "VOTING_CLOSED") {
+    return {
+      label: "Voting locked",
+      badge: "Locked",
+      badgeColor: theme.colors.subtext,
+      badgeTextColor: theme.colors.secondarySurface,
     };
   }
 
@@ -42,17 +69,20 @@ function getVerdictConfig(status: ClaimStatus) {
 interface VerdictBannerProps {
   status: ClaimStatus;
   verdictLabel?: string;
-  finalScore: string;
-  aiScore: string;
-  communityScore: string;
+  // PHASE 4 STEP 26
+  currentPhase: number;
+  timeLabel: string;
+  minVotesLabel: string;
+  earlyVerdictFired: boolean;
 }
 
 export function VerdictBanner({
   status,
   verdictLabel,
-  finalScore,
-  aiScore,
-  communityScore,
+  currentPhase,
+  timeLabel,
+  minVotesLabel,
+  earlyVerdictFired,
 }: VerdictBannerProps) {
   const config = getVerdictConfig(status);
 
@@ -67,16 +97,16 @@ export function VerdictBanner({
       </View>
       <View style={styles.scoreGrid}>
         <View style={styles.scoreCell}>
-          <Text style={styles.scoreValue}>{finalScore}</Text>
-          <Text style={styles.scoreLabel}>Final score</Text>
+          <Text style={styles.scoreValue}>Phase {currentPhase}</Text>
+          <Text style={styles.scoreLabel}>Current phase</Text>
         </View>
         <View style={[styles.scoreCell, styles.scoreDivider]}>
-          <Text style={styles.scoreValue}>{aiScore}</Text>
-          <Text style={styles.scoreLabel}>AI score</Text>
+          <Text style={styles.scoreValue}>{timeLabel}</Text>
+          <Text style={styles.scoreLabel}>Time remaining</Text>
         </View>
         <View style={[styles.scoreCell, styles.scoreDivider]}>
-          <Text style={styles.scoreValue}>{communityScore}</Text>
-          <Text style={styles.scoreLabel}>Community</Text>
+          <Text style={styles.scoreValue}>{minVotesLabel}</Text>
+          <Text style={styles.scoreLabel}>{earlyVerdictFired ? "Early verdict fired" : "Minimum votes"}</Text>
         </View>
       </View>
     </View>

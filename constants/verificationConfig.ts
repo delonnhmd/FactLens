@@ -2,6 +2,7 @@
 // PHASE 3 STEP 24
 // PHASE 3 STEP 28
 // PHASE 3 STEP 29
+// PHASE 4 STEP 26
 import { APP_CONFIG } from "./appConfig";
 import type { VerificationMode } from "../types/verification";
 

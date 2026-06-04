@@ -79,9 +79,19 @@ const evidenceTypeConfig: Record<EvidenceType, { label: string; backgroundColor:
 
 // PHASE 3 STEP 10
 const verdictLabels = {
+  // PHASE 4 STEP 26
+  FINALIZED_TRUE: "Finalized true",
+  FINALIZED_FAKE: "Finalized fake",
+  INSUFFICIENT_DATA: "Insufficient data",
+  LOCKED: "Voting locked",
+  EARLY_VERDICT: "Early verdict candidate",
+  ACTIVE: "Active voting",
+  PENDING: "Pending",
   COMMUNITY_TRUE: "Community says true",
   COMMUNITY_FAKE: "Community says fake",
   NEEDS_MORE_EVIDENCE: "Needs more evidence",
+  VOTING_CLOSED: "Voting closed",
+  OPEN: "Open voting",
 };
 
 const compactReportReasons: Array<{ label: string; value: ReportReason }> = [
@@ -774,15 +784,30 @@ export default function ClaimDetailScreen() {
 
   // PHASE 3 STEP 32
   const totalVotes = claim.totalVotes;
-  const votingOpen = claim.status === "OPEN" && isVotingOpen(claim);
+  // PHASE 4 STEP 26
+  const votingOpen =
+    (claim.status === "OPEN" || claim.status === "ACTIVE" || claim.status === "EARLY_VERDICT") &&
+    isVotingOpen(claim);
   // PHASE 3 STEP 22
   const voteWindowClosesAt = getVoteAcceptUntil(claim);
   const scoreLockAt = getScoreLockAt(claim);
   // PHASE 3 STEP 22
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote) || voteSubmitting;
-  const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
+  const finalStatus =
+    claim.status === "FINALIZED_TRUE" ||
+    claim.status === "FINALIZED_FAKE" ||
+    claim.status === "INSUFFICIENT_DATA" ||
+    claim.status === "NEEDS_MORE_EVIDENCE" ||
+    claim.status === "COMMUNITY_TRUE" ||
+    claim.status === "COMMUNITY_FAKE";
+  const automaticVerdict = finalStatus ? calculateAutomaticVerdict(claim, claim.mode) : undefined;
   // PHASE 3 STEP 10
   const verdictTitle =
+    claim.status === "FINALIZED_TRUE" ||
+    claim.status === "FINALIZED_FAKE" ||
+    claim.status === "INSUFFICIENT_DATA" ||
+    claim.status === "EARLY_VERDICT" ||
+    claim.status === "LOCKED" ||
     claim.status === "COMMUNITY_TRUE" ||
     claim.status === "COMMUNITY_FAKE" ||
     claim.status === "NEEDS_MORE_EVIDENCE"
@@ -792,7 +817,7 @@ export default function ClaimDetailScreen() {
   const verdictCalculatedText = claim.verdictCalculatedAt
     ? new Date(claim.verdictCalculatedAt).toLocaleString()
     : "Pending save";
-  const engineVerdict = verdictTitle ?? (claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
+  const engineVerdict = verdictTitle ?? (claim.status === "LOCKED" || claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   // PHASE 4 STEP 10
@@ -851,10 +876,17 @@ export default function ClaimDetailScreen() {
         : claim.userVote
           ? "You already voted on this claim."
           : "Choose one option before voting closes.";
+  // PHASE 4 STEP 26
   const phaseLabel = claim.phase4Locked
-    ? "Phase 4 · Locked"
-    : `Phase ${claim.currentPhase} · ${votingOpen ? "Voting" : "Locking"}`;
-  const timeLabel = votingOpen ? `${getTimeRemaining(voteWindowClosesAt)} remaining` : "Voting closed";
+    ? "Phase 4 - Locked"
+    : `Phase ${claim.currentPhase} - ${votingOpen ? "Voting" : "Locking"}`;
+  const scoreLockPassed = new Date(scoreLockAt).getTime() <= Date.now();
+  const timeLabel = votingOpen
+    ? `${getTimeRemaining(voteWindowClosesAt)} voting left`
+    : scoreLockPassed
+      ? "Finalized"
+      : `${getTimeRemaining(scoreLockAt)} to final lock`;
+  const minVotesLabel = `${totalVotes}/${claim.minVotesRequired}`;
   // PHASE 4 STEP 16
   const reportButtonActive = reportSubmitting || Boolean(selectedReportReason);
   const shareClaim = () => {
@@ -881,9 +913,10 @@ export default function ClaimDetailScreen() {
           <VerdictBanner
             status={claim.status}
             verdictLabel={engineVerdict}
-            finalScore={formatPercent(claim.finalScore)}
-            aiScore={formatPercent(claim.aiCheck.confidence)}
-            communityScore={formatPercent(claim.weightedCommunityScore)}
+            currentPhase={claim.currentPhase}
+            timeLabel={timeLabel}
+            minVotesLabel={minVotesLabel}
+            earlyVerdictFired={claim.earlyVerdictFired}
           />
           <View style={styles.claimBody}>
             <View style={styles.titleRow}>
@@ -1319,11 +1352,15 @@ export default function ClaimDetailScreen() {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.label}>Test voting window</Text>
+          <Text style={styles.label}>Verification timeline</Text>
           <PhaseStatusRow timeLabel={timeLabel} phaseLabel={phaseLabel} />
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
           <Text style={styles.date}>Voting closes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
           <Text style={styles.date}>Verdict locks {new Date(scoreLockAt).toLocaleString()}</Text>
+          <Text style={styles.date}>Minimum votes: {minVotesLabel}</Text>
+          <Text style={styles.date}>
+            Early verdict: {claim.earlyVerdictFired ? "Candidate triggered" : "Not triggered"}
+          </Text>
         </View>
 
         <View style={styles.card}>
@@ -1344,18 +1381,6 @@ export default function ClaimDetailScreen() {
               </Text>
             </View>
             <View style={styles.engineItem}>
-              <Text style={styles.engineLabel}>AI confidence</Text>
-              <Text style={styles.engineValue}>{formatPercent(claim.aiCheck.confidence)}</Text>
-            </View>
-            <View style={styles.engineItem}>
-              <Text style={styles.engineLabel}>Weighted community</Text>
-              <Text style={styles.engineValue}>{formatPercent(claim.weightedCommunityScore)}</Text>
-            </View>
-            <View style={styles.engineItem}>
-              <Text style={styles.engineLabel}>Final score</Text>
-              <Text style={styles.engineValue}>{formatPercent(claim.finalScore)}</Text>
-            </View>
-            <View style={styles.engineItem}>
               <Text style={styles.engineLabel}>Early verdict</Text>
               <Text style={styles.engineValue}>{claim.earlyVerdictFired ? "Fired" : "No"}</Text>
             </View>
@@ -1374,10 +1399,10 @@ export default function ClaimDetailScreen() {
           </View>
         </View>
 
-        {!votingOpen && verdictTitle ? (
+        {!votingOpen && finalStatus && verdictTitle ? (
           <View style={styles.card}>
             <Text style={styles.label}>System verdict</Text>
-            <StatusBadge status={claim.status === "OPEN" ? automaticVerdict?.status ?? "NEEDS_MORE_EVIDENCE" : claim.status} />
+            <StatusBadge status={claim.status} />
             <Text style={styles.verdictTitle}>{verdictTitle}</Text>
             {verdictReason ? <Text style={styles.verdictReason}>{verdictReason}</Text> : null}
             <View style={styles.verdictMetaPanel}>

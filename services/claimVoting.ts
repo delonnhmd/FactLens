@@ -16,7 +16,14 @@ import {
   mapVerificationVerdictToStatus,
 } from "./verificationEngine";
 
-export type AutomaticVerdictStatus = "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE";
+// PHASE 4 STEP 26
+export type AutomaticVerdictStatus =
+  | "FINALIZED_TRUE"
+  | "FINALIZED_FAKE"
+  | "INSUFFICIENT_DATA"
+  | "NEEDS_MORE_EVIDENCE"
+  | "COMMUNITY_TRUE"
+  | "COMMUNITY_FAKE";
 
 export interface AutomaticVerdict {
   status: AutomaticVerdictStatus;
@@ -70,8 +77,14 @@ export function calculateAutomaticVerdict(
   now = new Date(),
 ): AutomaticVerdict {
   const result = calculateClaimVerificationResult(claim, mode, now);
-  const status = mapVerificationVerdictToStatus(result.verdict);
+  const status =
+    !result.min_votes_met && result.time_remaining_seconds === 0
+      ? "INSUFFICIENT_DATA"
+      : mapVerificationVerdictToStatus(result.verdict);
   const labels: Record<AutomaticVerdictStatus, string> = {
+    FINALIZED_TRUE: "Finalized True",
+    FINALIZED_FAKE: "Finalized Fake",
+    INSUFFICIENT_DATA: "Insufficient Data",
     COMMUNITY_TRUE: "Community Says True",
     COMMUNITY_FAKE: "Community Says Fake",
     NEEDS_MORE_EVIDENCE: "Needs More Evidence",
@@ -97,17 +110,24 @@ export function canUserVote(
 
 export function getCurrentClaimStatus(claim: Claim, now = new Date()): ClaimStatus {
   // PHASE 3 STEP 10
-  if (claim.status === "COMMUNITY_TRUE" || claim.status === "COMMUNITY_FAKE" || claim.status === "NEEDS_MORE_EVIDENCE") {
+  if (
+    claim.status === "FINALIZED_TRUE" ||
+    claim.status === "FINALIZED_FAKE" ||
+    claim.status === "INSUFFICIENT_DATA" ||
+    claim.status === "NEEDS_MORE_EVIDENCE" ||
+    claim.status === "COMMUNITY_TRUE" ||
+    claim.status === "COMMUNITY_FAKE"
+  ) {
     return claim.status;
   }
 
   if (isVotingOpen(claim, now)) {
-    return "OPEN";
+    return claim.earlyVerdictFired || claim.status === "EARLY_VERDICT" ? "EARLY_VERDICT" : "ACTIVE";
   }
 
   // PHASE 3 STEP 22
   if (new Date(getScoreLockAt(claim)).getTime() > now.getTime()) {
-    return "VOTING_CLOSED";
+    return "LOCKED";
   }
 
   return calculateAutomaticVerdict(claim).status;

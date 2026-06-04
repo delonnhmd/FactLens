@@ -17,22 +17,25 @@ const trueClosedCreatedAt = hoursAgo(28);
 const evidenceClosedCreatedAt = hoursAgo(30);
 
 // PHASE 3 STEP 17
+// PHASE 4 STEP 26
 const minutesAfter = (createdAt: string, minutes: number) =>
   new Date(new Date(createdAt).getTime() + minutes * 60 * 1000).toISOString();
 
 const verificationFields = (createdAt: string) => ({
-  mode: "test" as const,
+  mode: "production" as const,
   currentPhase: 1,
-  voteAcceptUntil: minutesAfter(createdAt, 10),
-  scoreLockAt: minutesAfter(createdAt, 15),
+  voteWindowMinutes: 20 * 60,
+  voteWindowEnd: minutesAfter(createdAt, 20 * 60),
+  voteAcceptUntil: minutesAfter(createdAt, 20 * 60),
+  scoreLockAt: minutesAfter(createdAt, 24 * 60),
   publishedAt: null,
   phase4Locked: false,
   earlyVerdictFired: false,
   suspiciousActivity: false,
   weightedCommunityScore: 0.5,
   finalScore: 0.5,
-  minVotesRequired: 5,
-  expectedParticipation: 10,
+  minVotesRequired: 15,
+  expectedParticipation: 30,
   sourceCount: 0,
   sourceQuality: "unknown" as const,
   sourceDomain: null,

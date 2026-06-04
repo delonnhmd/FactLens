@@ -7,6 +7,14 @@ import type { SourceQuality, VerificationMode } from "./verification";
 
 // PHASE 2 STEP 3
 export type ClaimStatus =
+  // PHASE 4 STEP 26
+  | "PENDING"
+  | "ACTIVE"
+  | "EARLY_VERDICT"
+  | "FINALIZED_TRUE"
+  | "FINALIZED_FAKE"
+  | "INSUFFICIENT_DATA"
+  | "LOCKED"
   | "OPEN"
   | "VOTING_CLOSED"
   | "COMMUNITY_TRUE"
@@ -130,6 +138,9 @@ export interface Claim {
   // PHASE 3 STEP 17
   mode: VerificationMode;
   currentPhase: number;
+  // PHASE 4 STEP 26
+  voteWindowMinutes: number;
+  voteWindowEnd: string;
   voteAcceptUntil: string;
   scoreLockAt: string;
   publishedAt: string | null;

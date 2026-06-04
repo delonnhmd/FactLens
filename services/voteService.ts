@@ -283,7 +283,9 @@ export async function voteOnClaim(
 
   if (
     claimResult.claim.publishedAt ||
-    claimResult.claim.phase4Locked ||
+    claimResult.claim.status === "FINALIZED_TRUE" ||
+    claimResult.claim.status === "FINALIZED_FAKE" ||
+    claimResult.claim.status === "INSUFFICIENT_DATA" ||
     claimResult.claim.status === "COMMUNITY_TRUE" ||
     claimResult.claim.status === "COMMUNITY_FAKE" ||
     claimResult.claim.status === "NEEDS_MORE_EVIDENCE"
@@ -294,7 +296,7 @@ export async function voteOnClaim(
     };
   }
 
-  if (claimResult.claim.status === "VOTING_CLOSED") {
+  if (claimResult.claim.phase4Locked || claimResult.claim.status === "VOTING_CLOSED" || claimResult.claim.status === "LOCKED") {
     return {
       claim: claimResult.claim,
       error: "Voting is closed. Final score is being locked.",

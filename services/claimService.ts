@@ -24,6 +24,9 @@ import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import { normalizeUrl } from "../utils/url";
 import { formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
 import {
+  createClaimTiming,
+  createProductionModeTiming,
+  createTestModeTiming,
   getScoreLockAt,
   getVoteAcceptUntil,
 } from "../utils/verificationTiming";
@@ -44,6 +47,9 @@ type ClaimAiStatus = AiCheck["status"];
 export type ClaimFeedFilter =
   | "ALL"
   | "OPEN_VOTING"
+  | "FINALIZED_TRUE"
+  | "FINALIZED_FAKE"
+  | "INSUFFICIENT_DATA"
   | "COMMUNITY_TRUE"
   | "COMMUNITY_FAKE"
   | "NEEDS_MORE_EVIDENCE"
@@ -59,7 +65,11 @@ export interface ClaimSearchFilters {
 
 // PHASE 3 STEP 10
 interface AutomaticVerdictResult {
-  status: Extract<ClaimStatus, "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE">;
+  // PHASE 4 STEP 26
+  status: Extract<
+    ClaimStatus,
+    "FINALIZED_TRUE" | "FINALIZED_FAKE" | "INSUFFICIENT_DATA" | "NEEDS_MORE_EVIDENCE" | "COMMUNITY_TRUE" | "COMMUNITY_FAKE"
+  >;
   resultLabel: string;
   reason: string;
   totalVotes: number;
@@ -110,6 +120,9 @@ export interface ClaimRow {
   // PHASE 3 STEP 17
   mode?: string | null;
   current_phase?: number | null;
+  // PHASE 4 STEP 26
+  vote_window_minutes?: number | null;
+  vote_window_end?: string | null;
   vote_accept_until?: string | null;
   score_lock_at?: string | null;
   published_at?: string | null;
@@ -374,6 +387,13 @@ function getClaimServiceErrorMessage(message: string, action: "load" | "save" | 
 
 function mapStatus(status: string | null): ClaimStatus {
   if (
+    status === "PENDING" ||
+    status === "ACTIVE" ||
+    status === "EARLY_VERDICT" ||
+    status === "FINALIZED_TRUE" ||
+    status === "FINALIZED_FAKE" ||
+    status === "INSUFFICIENT_DATA" ||
+    status === "LOCKED" ||
     status === "OPEN" ||
     status === "VOTING_CLOSED" ||
     status === "COMMUNITY_TRUE" ||
@@ -384,6 +404,27 @@ function mapStatus(status: string | null): ClaimStatus {
   }
 
   return "OPEN";
+}
+
+// PHASE 4 STEP 26
+function isTerminalClaimStatus(status: ClaimStatus): boolean {
+  return (
+    status === "FINALIZED_TRUE" ||
+    status === "FINALIZED_FAKE" ||
+    status === "INSUFFICIENT_DATA" ||
+    status === "NEEDS_MORE_EVIDENCE" ||
+    status === "COMMUNITY_TRUE" ||
+    status === "COMMUNITY_FAKE"
+  );
+}
+
+// PHASE 4 STEP 26
+function getPublishedStatus(result: ReturnType<typeof buildVerificationResponse>): ClaimStatus {
+  if (!result.min_votes_met) {
+    return "INSUFFICIENT_DATA";
+  }
+
+  return mapVerificationVerdictToStatus(result.verdict);
 }
 
 function mapAiStatus(status: string | null): ClaimAiStatus {
@@ -426,7 +467,12 @@ function mapClaimType(claimType: string | null | undefined): ClaimType {
 
 // PHASE 3 STEP 17
 function mapVerificationMode(mode: string | null | undefined): VerificationMode {
-  return mode === "production" ? "production" : "test";
+  // PHASE 4 STEP 26
+  if (mode === "test" || mode === "production") {
+    return mode;
+  }
+
+  return VERIFICATION_MODE;
 }
 
 // PHASE 4 STEP 17
@@ -521,8 +567,15 @@ export function calculateAutomaticVerdict(
   claim: Pick<Claim, "id" | "createdAt" | "aiCheck" | "votesTrue" | "votesFake" | "votesUnsure">,
 ): AutomaticVerdictResult {
   const verificationResult = calculateClaimVerificationResult(claim);
-  const status = mapVerificationVerdictToStatus(verificationResult.verdict);
+  // PHASE 4 STEP 26
+  const status =
+    !verificationResult.min_votes_met && verificationResult.time_remaining_seconds === 0
+      ? "INSUFFICIENT_DATA"
+      : mapVerificationVerdictToStatus(verificationResult.verdict);
   const labels: Record<AutomaticVerdictResult["status"], string> = {
+    FINALIZED_TRUE: "Finalized True",
+    FINALIZED_FAKE: "Finalized Fake",
+    INSUFFICIENT_DATA: "Insufficient Data",
     COMMUNITY_TRUE: "Community Says True",
     COMMUNITY_FAKE: "Community Says Fake",
     NEEDS_MORE_EVIDENCE: "Needs More Evidence",
@@ -590,7 +643,12 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   // PHASE 3 STEP 22
   const voteAcceptUntil = getVoteAcceptUntil(row);
   const scoreLockAt = getScoreLockAt(row);
-  const expiresAt = isValidDateString(row.expires_at) ? row.expires_at : createdAt;
+  const expiresAt = isValidDateString(row.expires_at) ? row.expires_at : scoreLockAt;
+  // PHASE 4 STEP 26
+  const voteWindowEnd = isValidDateString(row.vote_window_end) ? row.vote_window_end : voteAcceptUntil;
+  const voteWindowMinutes =
+    row.vote_window_minutes ??
+    Math.max(0, Math.round((new Date(voteWindowEnd).getTime() - new Date(createdAt).getTime()) / (60 * 1000)));
   const aiFlags = mapStringList(row.red_flags);
   // PHASE 4 STEP 6
   // PHASE 4 STEP 7
@@ -662,6 +720,8 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     verdictCalculatedAt: row.verdict_calculated_at ?? null,
     mode,
     currentPhase: row.current_phase ?? engineResult.current_phase,
+    voteWindowMinutes,
+    voteWindowEnd,
     voteAcceptUntil,
     scoreLockAt,
     publishedAt: row.published_at ?? null,
@@ -709,8 +769,11 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
 function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
   const createdAt = row.created_at ?? new Date().toISOString();
   const claimId = row.id ?? `broken-${createdAt}`;
-  const scoreLockAt = new Date(new Date(createdAt).getTime() + 15 * 60 * 1000).toISOString();
-  const voteAcceptUntil = new Date(new Date(createdAt).getTime() + 10 * 60 * 1000).toISOString();
+  const mode = mapVerificationMode(row.mode);
+  const fallbackTiming = mode === "production" ? createProductionModeTiming(createdAt) : createTestModeTiming(createdAt);
+  const scoreLockAt = row.score_lock_at ?? fallbackTiming.scoreLockAt;
+  const voteAcceptUntil = row.vote_accept_until ?? row.vote_window_end ?? fallbackTiming.voteAcceptUntil;
+  const voteWindowEnd = row.vote_window_end ?? voteAcceptUntil;
   const fallbackAuthor: AppUser = {
     id: row.author_id ?? "unknown-author",
     username: "unknown",
@@ -764,8 +827,10 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     totalVotes: row.total_votes ?? 0,
     verdictReason: row.verdict_reason ?? null,
     verdictCalculatedAt: row.verdict_calculated_at ?? null,
-    mode: mapVerificationMode(row.mode),
+    mode,
     currentPhase: row.current_phase ?? 0,
+    voteWindowMinutes: row.vote_window_minutes ?? fallbackTiming.voteWindowMinutes,
+    voteWindowEnd,
     voteAcceptUntil,
     scoreLockAt,
     publishedAt: row.published_at ?? null,
@@ -774,8 +839,8 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     suspiciousActivity: row.suspicious_activity ?? false,
     weightedCommunityScore: row.weighted_community_score ?? 0.5,
     finalScore: row.final_score ?? 0.5,
-    minVotesRequired: row.min_votes_required ?? 5,
-    expectedParticipation: row.expected_participation ?? 10,
+    minVotesRequired: row.min_votes_required ?? fallbackTiming.minVotesRequired,
+    expectedParticipation: row.expected_participation ?? fallbackTiming.expectedParticipation,
     sourceCount: row.source_count ?? 0,
     sourceQuality: mapSourceQuality(row.source_quality),
     sourceDomain: row.source_domain ?? null,
@@ -822,14 +887,12 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
   const safeSourceUrl = normalizedSourceUrl || (APP_CONFIG.TEST_MODE ? "https://www.pennyfloat.com" : "");
   const normalizedVideoUrl = input.videoUrl ? normalizeUrl(input.videoUrl) : "";
   const trimmedVideoUrl = normalizedVideoUrl || null;
-  // PHASE 4 STEP 13B
-  const now = new Date();
-  const createdAt = now.toISOString();
-  const voteAcceptUntil = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
-  const scoreLockAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
-  const expiresAt = scoreLockAt;
+  // PHASE 4 STEP 26
+  const timing = createClaimTiming(VERIFICATION_MODE);
+  const createdAt = timing.createdAt;
   console.log("[url] normalized source url:", safeSourceUrl);
   console.log("[url] normalized source:", safeSourceUrl);
+  console.log("[createClaim] production timing:", timing);
 
   const payload = removeUndefinedValues({
     author_id: authorId,
@@ -848,7 +911,7 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
     total_votes: 0,
     verdict_reason: null,
     verdict_calculated_at: null,
-    status: "OPEN",
+    status: "ACTIVE",
     ai_status: "PENDING",
     // PHASE 4 STEP 7
     claim_type: "UNCLEAR",
@@ -858,18 +921,20 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
     evidence_count: 0,
     evidence_used_count: 0,
     is_flagged: false,
-    mode: "test",
-    current_phase: 0,
-    vote_accept_until: voteAcceptUntil,
-    score_lock_at: scoreLockAt,
+    mode: timing.mode,
+    current_phase: 1,
+    vote_window_minutes: timing.voteWindowMinutes,
+    vote_window_end: timing.voteWindowEnd,
+    vote_accept_until: timing.voteAcceptUntil,
+    score_lock_at: timing.scoreLockAt,
     published_at: null,
     phase4_locked: false,
     early_verdict_fired: false,
     suspicious_activity: false,
     weighted_community_score: 0,
     final_score: 0,
-    min_votes_required: 5,
-    expected_participation: 10,
+    min_votes_required: timing.minVotesRequired,
+    expected_participation: timing.expectedParticipation,
     source_count: 0,
     source_quality: "unknown",
     // PHASE 4 STEP 9
@@ -878,7 +943,7 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
     source_reason: null,
     red_flags: [],
     ai_summary: null,
-    expires_at: expiresAt,
+    expires_at: timing.expiresAt,
   });
 
   console.log("[create claim] insert payload:", payload);
@@ -1023,12 +1088,19 @@ export async function searchClaimsPage(
         return false;
       }
 
-      if (filters.filter === "COMMUNITY_TRUE" || filters.filter === "COMMUNITY_FAKE" || filters.filter === "NEEDS_MORE_EVIDENCE") {
+      if (
+        filters.filter === "FINALIZED_TRUE" ||
+        filters.filter === "FINALIZED_FAKE" ||
+        filters.filter === "INSUFFICIENT_DATA" ||
+        filters.filter === "COMMUNITY_TRUE" ||
+        filters.filter === "COMMUNITY_FAKE" ||
+        filters.filter === "NEEDS_MORE_EVIDENCE"
+      ) {
         return row.status === filters.filter;
       }
 
       if (filters.filter === "OPEN_VOTING") {
-        return row.status === "OPEN";
+        return row.status === "OPEN" || row.status === "ACTIVE" || row.status === "EARLY_VERDICT";
       }
 
       if (filters.filter === "FLAGGED") {
@@ -1142,11 +1214,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 
   const latestClaim = latestClaimResult.claim;
 
-  if (
-    latestClaim.status === "COMMUNITY_TRUE" ||
-    latestClaim.status === "COMMUNITY_FAKE" ||
-    latestClaim.status === "NEEDS_MORE_EVIDENCE"
-  ) {
+  if (isTerminalClaimStatus(latestClaim.status)) {
     return latestClaimResult;
   }
 
@@ -1161,13 +1229,21 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
 
   const verificationResponse = buildVerificationResponse(latestClaim, votesResult.votes);
   const scoreLockPassed = new Date(latestClaim.scoreLockAt).getTime() <= Date.now();
-  const shouldPublish = scoreLockPassed || verificationResponse.early_verdict_fired;
-  const publishedStatus = mapVerificationVerdictToStatus(verificationResponse.verdict);
+  // PHASE 4 STEP 26
+  const voteWindowClosed = new Date(latestClaim.voteAcceptUntil).getTime() <= Date.now();
+  const shouldPublish = scoreLockPassed;
+  const publishedStatus = getPublishedStatus(verificationResponse);
   const finalizedAt = new Date().toISOString();
   const verdictReason =
-    verificationResponse.vote_count < latestClaim.minVotesRequired
+    !verificationResponse.min_votes_met
       ? "Minimum vote requirement was not met."
       : getVerificationVerdictReason(verificationResponse);
+  const interimStatus: ClaimStatus =
+    verificationResponse.early_verdict_fired && !shouldPublish
+      ? "EARLY_VERDICT"
+      : verificationResponse.phase4_locked || voteWindowClosed
+        ? "LOCKED"
+        : "ACTIVE";
   const updateRow = {
     current_phase: verificationResponse.current_phase,
     phase4_locked: verificationResponse.phase4_locked,
@@ -1176,7 +1252,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
     weighted_community_score: verificationResponse.weighted_community_score,
     final_score: verificationResponse.final_score,
     total_votes: verificationResponse.vote_count,
-    ...(verificationResponse.phase4_locked && !shouldPublish ? { status: "VOTING_CLOSED" } : {}),
+    ...(!shouldPublish ? { status: interimStatus } : {}),
     ...(shouldPublish
       ? {
           status: publishedStatus,
@@ -1197,7 +1273,7 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
     weightedCommunityScore: verificationResponse.weighted_community_score,
     finalScore: verificationResponse.final_score,
     totalVotes: verificationResponse.vote_count,
-    ...(verificationResponse.phase4_locked && !shouldPublish ? { status: "VOTING_CLOSED" as ClaimStatus } : {}),
+    ...(!shouldPublish ? { status: interimStatus } : {}),
     ...(shouldPublish
       ? {
           status: publishedStatus,
@@ -1236,15 +1312,7 @@ export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResu
   const now = Date.now();
   const finalizedClaims = await Promise.all(
     claims.map(async (claim) => {
-      if (
-        claim.status === "COMMUNITY_TRUE" ||
-        claim.status === "COMMUNITY_FAKE" ||
-        claim.status === "NEEDS_MORE_EVIDENCE"
-      ) {
-        return claim;
-      }
-
-      if (new Date(claim.voteAcceptUntil).getTime() > now && new Date(claim.scoreLockAt).getTime() > now) {
+      if (isTerminalClaimStatus(claim.status)) {
         return claim;
       }
 

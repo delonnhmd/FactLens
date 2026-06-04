@@ -1,13 +1,16 @@
 import { memo, useCallback, useMemo } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import type { Claim, ReportReason, VoteOption } from "../types/claim";
+import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
 import { getSourceMessage, getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
 
 // PHASE 4 STEP 18
 // Source trust label update
-const verdictLabels = {
+const verdictLabels: Partial<Record<ClaimStatus, string>> = {
+  FINALIZED_TRUE: "Finalized True",
+  FINALIZED_FAKE: "Finalized Fake",
+  INSUFFICIENT_DATA: "Insufficient data",
   COMMUNITY_TRUE: "Community Says True",
   COMMUNITY_FAKE: "Community Says Fake",
   NEEDS_MORE_EVIDENCE: "Needs more evidence",
@@ -102,6 +105,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     [sourceQuality.label, sourceScore],
   );
   const verdictLabel =
+    claim.status === "FINALIZED_TRUE" ||
+    claim.status === "FINALIZED_FAKE" ||
+    claim.status === "INSUFFICIENT_DATA" ||
     claim.status === "COMMUNITY_TRUE" ||
     claim.status === "COMMUNITY_FAKE" ||
     claim.status === "NEEDS_MORE_EVIDENCE"
@@ -183,6 +189,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
               <Text
                 style={[
                   styles.verdictBadge,
+                  claim.status === "FINALIZED_TRUE" && styles.verdictTrue,
+                  claim.status === "FINALIZED_FAKE" && styles.verdictFake,
+                  claim.status === "INSUFFICIENT_DATA" && styles.verdictEvidence,
                   claim.status === "COMMUNITY_TRUE" && styles.verdictTrue,
                   claim.status === "COMMUNITY_FAKE" && styles.verdictFake,
                   claim.status === "NEEDS_MORE_EVIDENCE" && styles.verdictEvidence,

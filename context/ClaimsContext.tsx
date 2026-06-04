@@ -690,7 +690,11 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const expiredOpenClaims = claimsRef.current.filter(
       (claim) =>
-        (claim.status === "OPEN" || claim.status === "VOTING_CLOSED") &&
+        (claim.status === "OPEN" ||
+          claim.status === "ACTIVE" ||
+          claim.status === "EARLY_VERDICT" ||
+          claim.status === "LOCKED" ||
+          claim.status === "VOTING_CLOSED") &&
         // PHASE 3 STEP 22
         new Date(getVoteAcceptUntil(claim)).getTime() <= now.getTime() &&
         !finalizingExpiredClaimIdsRef.current.has(claim.id),
@@ -1091,7 +1095,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      if (refreshedClaim.claim && refreshedClaim.claim.status !== "OPEN") {
+      if (
+        refreshedClaim.claim &&
+        refreshedClaim.claim.status !== "OPEN" &&
+        refreshedClaim.claim.status !== "ACTIVE" &&
+        refreshedClaim.claim.status !== "EARLY_VERDICT"
+      ) {
         // PHASE 3 STEP 20
         throw new Error("Voting is closed.");
       }

@@ -27,6 +27,9 @@ type TrendingFilter =
   | "OPEN"
   | "CLOSED"
   | "NEEDS_MORE_EVIDENCE"
+  | "FINALIZED_TRUE"
+  | "FINALIZED_FAKE"
+  | "INSUFFICIENT_DATA"
   | "COMMUNITY_TRUE"
   | "COMMUNITY_FAKE";
 
@@ -35,6 +38,9 @@ const trendingFilters: Array<{ label: string; value: TrendingFilter }> = [
   { label: "Open voting", value: "OPEN" },
   { label: "Closed", value: "CLOSED" },
   { label: "Needs more evidence", value: "NEEDS_MORE_EVIDENCE" },
+  { label: "Finalized true", value: "FINALIZED_TRUE" },
+  { label: "Finalized fake", value: "FINALIZED_FAKE" },
+  { label: "Insufficient data", value: "INSUFFICIENT_DATA" },
   { label: "Community says true", value: "COMMUNITY_TRUE" },
   { label: "Community says fake", value: "COMMUNITY_FAKE" },
 ];
@@ -48,11 +54,11 @@ function claimMatchesFilter(claim: Claim, filter: TrendingFilter): boolean {
   }
 
   if (filter === "OPEN") {
-    return claim.status === "OPEN" && isVotingOpen(claim);
+    return (claim.status === "OPEN" || claim.status === "ACTIVE" || claim.status === "EARLY_VERDICT") && isVotingOpen(claim);
   }
 
   if (filter === "CLOSED") {
-    return claim.status !== "OPEN" || !isVotingOpen(claim);
+    return (claim.status !== "OPEN" && claim.status !== "ACTIVE" && claim.status !== "EARLY_VERDICT") || !isVotingOpen(claim);
   }
 
   return claim.status === filter;

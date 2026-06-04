@@ -341,13 +341,19 @@ export function calculateVerificationResult(input: VerificationInput): Verificat
   const community = calculateWeightedCommunityScore(input.votes, input.mode, now);
   const aiConfidence = normalizeAiConfidence(input.aiScan?.ai_confidence);
   const finalScore = calculateFinalScore(aiConfidence, community.score);
-  const earlyVoteThreshold = Math.ceil((input.expectedParticipation ?? config.expectedParticipation) * 0.5);
+  // PHASE 4 STEP 26
+  const suspiciousActivity =
+    community.suspiciousActivity ||
+    detectNewAccountVoteSurge(input.votes) ||
+    detectSameIpSession(input.votes);
+  const earlyVoteThreshold = Math.max(config.minVotes, Math.ceil((input.expectedParticipation ?? config.expectedParticipation) * 0.5));
   const earlyVerdictFired =
     phase === 2 &&
     community.voteCount >= earlyVoteThreshold &&
+    !suspiciousActivity &&
     (finalScore >= VERIFICATION_THRESHOLDS.earlyTrue || finalScore <= VERIFICATION_THRESHOLDS.earlyFake);
   const phase4Locked = isPhase4Locked(input.submittedAt, input.mode, now);
-  const publishReady = earlyVerdictFired || isVerdictPublished(input.submittedAt, input.mode, now);
+  const publishReady = isVerdictPublished(input.submittedAt, input.mode, now);
   const verdict = getVerdict(finalScore, community.voteCount, config.minVotes, publishReady);
 
   return {
@@ -362,10 +368,7 @@ export function calculateVerificationResult(input: VerificationInput): Verificat
     final_score: roundScore(finalScore),
     verdict,
     early_verdict_fired: earlyVerdictFired,
-    suspicious_activity:
-      community.suspiciousActivity ||
-      detectNewAccountVoteSurge(input.votes) ||
-      detectSameIpSession(input.votes),
+    suspicious_activity: suspiciousActivity,
     phase4_locked: phase4Locked,
   };
 }
@@ -398,7 +401,8 @@ export function createAggregateVotesFromClaim(claim: Pick<Claim, "id" | "created
 
 export function calculateClaimVerificationResult(
   claim: Pick<Claim, "id" | "createdAt" | "aiCheck" | "votesTrue" | "votesFake" | "votesUnsure">,
-  mode: VerificationMode = "test",
+  // PHASE 4 STEP 26
+  mode: VerificationMode = DEFAULT_VERIFICATION_MODE,
   now = new Date(),
 ): VerificationEngineResult {
   const aggregateVotes = createAggregateVotesFromClaim(claim);
@@ -458,13 +462,14 @@ export function buildVerificationResponse(
   });
 }
 
-export function mapVerificationVerdictToStatus(verdict: VerificationVerdict): "COMMUNITY_TRUE" | "COMMUNITY_FAKE" | "NEEDS_MORE_EVIDENCE" {
+// PHASE 4 STEP 26
+export function mapVerificationVerdictToStatus(verdict: VerificationVerdict): "FINALIZED_TRUE" | "FINALIZED_FAKE" | "NEEDS_MORE_EVIDENCE" {
   if (verdict === "true") {
-    return "COMMUNITY_TRUE";
+    return "FINALIZED_TRUE";
   }
 
   if (verdict === "fake") {
-    return "COMMUNITY_FAKE";
+    return "FINALIZED_FAKE";
   }
 
   return "NEEDS_MORE_EVIDENCE";
@@ -472,7 +477,7 @@ export function mapVerificationVerdictToStatus(verdict: VerificationVerdict): "C
 
 export function getVerificationVerdictReason(result: VerificationEngineResult): string {
   if (!result.min_votes_met) {
-    return "Not enough community votes.";
+    return "Minimum vote requirement was not met.";
   }
 
   if (result.suspicious_activity) {

@@ -20,6 +20,9 @@ type TimingInput = {
   vote_accept_until?: string | null;
   scoreLockAt?: string | null;
   score_lock_at?: string | null;
+  // PHASE 4 STEP 26
+  voteWindowEnd?: string | null;
+  vote_window_end?: string | null;
 };
 
 export interface VerificationTiming {
@@ -27,13 +30,21 @@ export interface VerificationTiming {
   createdAt: string;
   expiresAt: string;
   voteAcceptUntil: string;
+  // PHASE 4 STEP 26
+  voteWindowEnd: string;
+  voteWindowMinutes: number;
   scoreLockAt: string;
   minVotesRequired: number;
   expectedParticipation: number;
 }
 
 function normalizeMode(mode: VerificationMode | string | null | undefined): VerificationMode {
-  return mode === "production" ? "production" : DEFAULT_VERIFICATION_MODE;
+  // PHASE 4 STEP 26
+  if (mode === "test" || mode === "production") {
+    return mode;
+  }
+
+  return DEFAULT_VERIFICATION_MODE;
 }
 
 function isValidDateString(value: string | null | undefined): value is string {
@@ -64,6 +75,8 @@ function createTiming(mode: VerificationMode, createdAt = new Date().toISOString
     createdAt,
     expiresAt,
     voteAcceptUntil,
+    voteWindowEnd: voteAcceptUntil,
+    voteWindowMinutes: config.voteWindowMinutes,
     scoreLockAt,
     minVotesRequired: config.minVotesRequired,
     expectedParticipation: config.expectedParticipation,
@@ -83,7 +96,8 @@ export function createProductionModeTiming(createdAt = new Date().toISOString())
 }
 
 export function getVoteAcceptUntil(claim: TimingInput): string {
-  const explicitValue = claim.voteAcceptUntil ?? claim.vote_accept_until;
+  // PHASE 4 STEP 26
+  const explicitValue = claim.voteAcceptUntil ?? claim.vote_accept_until ?? claim.voteWindowEnd ?? claim.vote_window_end;
 
   if (isValidDateString(explicitValue)) {
     return explicitValue;

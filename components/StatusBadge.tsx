@@ -6,6 +6,42 @@ import { theme } from "../constants/theme";
 
 // PHASE 2 STEP 3
 const statusConfig: Record<ClaimStatus, { label: string; backgroundColor: string; color: string }> = {
+  // PHASE 4 STEP 26
+  PENDING: {
+    label: "Pending",
+    backgroundColor: theme.colors.secondarySurface,
+    color: theme.colors.subtext,
+  },
+  ACTIVE: {
+    label: "Active",
+    backgroundColor: theme.colors.phaseBg,
+    color: theme.colors.phaseText,
+  },
+  EARLY_VERDICT: {
+    label: "Early verdict",
+    backgroundColor: theme.colors.warningBg,
+    color: theme.colors.warning,
+  },
+  FINALIZED_TRUE: {
+    label: "Finalized true",
+    backgroundColor: theme.colors.successBg,
+    color: theme.colors.success,
+  },
+  FINALIZED_FAKE: {
+    label: "Finalized fake",
+    backgroundColor: theme.colors.dangerBg,
+    color: theme.colors.danger,
+  },
+  INSUFFICIENT_DATA: {
+    label: "Insufficient data",
+    backgroundColor: theme.colors.warningBg,
+    color: theme.colors.warning,
+  },
+  LOCKED: {
+    label: "Locked",
+    backgroundColor: theme.colors.secondarySurface,
+    color: theme.colors.subtext,
+  },
   OPEN: {
     label: "Open",
     backgroundColor: theme.colors.phaseBg,
