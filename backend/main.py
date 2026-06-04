@@ -32,6 +32,7 @@ try:
         test_openai_connection,
     )
     from services.ai_library_loader import load_factlens_ai_library
+    from services.source_page_fetcher import fetch_source_page
     from services.source_credibility import score_source_url
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
@@ -41,6 +42,7 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         test_openai_connection,
     )
     from backend.services.ai_library_loader import load_factlens_ai_library
+    from backend.services.source_page_fetcher import fetch_source_page
     from backend.services.source_credibility import score_source_url
 
 
@@ -161,6 +163,12 @@ class AiPrecheckResponse(BaseModel):
     source_domain: str | None = None
     source_score: int | None = None
     source_reason: str | None = None
+    # PHASE 4 STEP 21
+    source_read_status: str | None = None
+    source_page_title: str | None = None
+    source_excerpt: str | None = None
+    source_supports_claim: bool | None = None
+    source_support_summary: str | None = None
     # PHASE 4 STEP 10
     evidence_used_count: int | None = None
     red_flags: list[str] | None = None
@@ -223,12 +231,15 @@ def ai_library():
 def analyze_claim(payload: AiPrecheckRequest) -> dict:
     # PHASE 4 STEP 9
     source_metadata = score_source_url(payload.source_url)
+    # PHASE 4 STEP 21
+    source_page = fetch_source_page(payload.source_url)
     return analyze_claim_with_openai(
         title=payload.title,
         description=payload.description,
         source_url=payload.source_url,
         category=payload.category,
         source_metadata=source_metadata,
+        source_page=source_page,
     )
 
 
@@ -237,6 +248,15 @@ def log_source_score(endpoint_label: str, source_metadata: dict) -> None:
     print("[source] domain:", source_metadata.get("domain"), flush=True)
     print("[source] quality:", source_metadata.get("source_quality"), flush=True)
     print("[source] score:", source_metadata.get("source_score"), flush=True)
+
+
+# PHASE 4 STEP 21
+def log_source_page(endpoint_label: str, source_page: dict) -> None:
+    print(f"[{endpoint_label}] source_read_status:", source_page.get("status"), flush=True)
+    print(f"[{endpoint_label}] source_page_title:", source_page.get("title"), flush=True)
+    if source_page.get("error"):
+        print(f"[{endpoint_label}] source_page_error:", source_page.get("error"), flush=True)
+    print(f"[{endpoint_label}] source_excerpt_chars:", len(str(source_page.get("excerpt") or "")), flush=True)
 
 
 # PHASE 4 STEP 10
@@ -329,6 +349,12 @@ def build_claim_ai_update_payload(analysis: dict) -> dict:
         "source_domain": analysis.get("source_domain"),
         "source_score": analysis.get("source_score"),
         "source_reason": analysis.get("source_reason"),
+        # PHASE 4 STEP 21
+        "source_read_status": analysis.get("source_read_status") or "not_read",
+        "source_page_title": analysis.get("source_page_title") or None,
+        "source_excerpt": analysis.get("source_excerpt") or None,
+        "source_supports_claim": analysis.get("source_supports_claim"),
+        "source_support_summary": analysis.get("source_support_summary") or None,
         # PHASE 4 STEP 10
         "evidence_used_count": analysis.get("evidence_used_count", 0),
         "source_count": source_count,
@@ -424,7 +450,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, source_read_status, source_page_title, source_excerpt, source_supports_claim, source_support_summary, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -488,6 +514,12 @@ def build_ai_error_analysis() -> dict:
         "ai_confidence": 0.5,
         "source_count": 0,
         "source_quality": "unknown",
+        # PHASE 4 STEP 21
+        "source_read_status": "not_read",
+        "source_page_title": None,
+        "source_excerpt": None,
+        "source_supports_claim": None,
+        "source_support_summary": "Source page was not read because AI pre-check failed.",
         # PHASE 4 STEP 10
         "evidence_used_count": 0,
         "red_flags": ["AI pre-check failed"],
@@ -529,6 +561,12 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "source_domain": updated_claim.get("source_domain"),
         "source_score": updated_claim.get("source_score"),
         "source_reason": updated_claim.get("source_reason"),
+        # PHASE 4 STEP 21
+        "source_read_status": updated_claim.get("source_read_status"),
+        "source_page_title": updated_claim.get("source_page_title"),
+        "source_excerpt": updated_claim.get("source_excerpt"),
+        "source_supports_claim": updated_claim.get("source_supports_claim"),
+        "source_support_summary": updated_claim.get("source_support_summary"),
         # PHASE 4 STEP 10
         "evidence_used_count": updated_claim.get("evidence_used_count"),
         "red_flags": red_flags,
@@ -619,12 +657,16 @@ def ai_precheck_test(payload: AiPrecheckTestRequest):
     # PHASE 4 STEP 9
     source_metadata = score_source_url(payload.source_url)
     log_source_score("ai/precheck/test", source_metadata)
+    # PHASE 4 STEP 21
+    source_page = fetch_source_page(payload.source_url)
+    log_source_page("ai/precheck/test", source_page)
     result = analyze_claim_with_openai_response(
         title=payload.title,
         description=payload.description,
         source_url=payload.source_url,
         category=payload.category,
         source_metadata=source_metadata,
+        source_page=source_page,
     )
 
     if result.get("ok"):
@@ -647,12 +689,16 @@ def ai_precheck(payload: AiPrecheckRequest):
     # PHASE 4 STEP 9
     source_metadata = score_source_url(payload.source_url)
     log_source_score("ai/precheck", source_metadata)
+    # PHASE 4 STEP 21
+    source_page = fetch_source_page(payload.source_url)
+    log_source_page("ai/precheck", source_page)
     ai_result = analyze_claim_with_openai(
         title=payload.title,
         description=payload.description,
         source_url=payload.source_url,
         category=payload.category,
         source_metadata=source_metadata,
+        source_page=source_page,
     )
     print("[ai/precheck] called", flush=True)
     print(f"[ai/precheck] OPENAI_MODEL={get_openai_model()}", flush=True)
@@ -708,6 +754,9 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
         # PHASE 4 STEP 9
         source_metadata = score_source_url(retry_payload.source_url)
         log_source_score("ai/precheck/retry", source_metadata)
+        # PHASE 4 STEP 21
+        source_page = fetch_source_page(retry_payload.source_url)
+        log_source_page("ai/precheck/retry", source_page)
         # PHASE 4 STEP 10
         evidence_rows = fetch_evidence_rows(claim_id)
         ai_result = analyze_claim_with_openai(
@@ -716,6 +765,7 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
             source_url=retry_payload.source_url,
             category=retry_payload.category,
             source_metadata=source_metadata,
+            source_page=source_page,
             evidence_rows=evidence_rows,
         )
         # PHASE 4 STEP 7

@@ -8,6 +8,7 @@
 # PHASE 4 STEP 18
 # PHASE 4 STEP 20
 # PHASE 4 STEP 20B
+# PHASE 4 STEP 21
 import json
 import os
 from typing import Literal
@@ -43,6 +44,8 @@ class FactLensAiPrecheckResult(BaseModel):
     ai_confidence: float
     source_count: int
     source_quality: str
+    source_supports_claim: bool | None = None
+    source_support_summary: str = ""
     evidence_used_count: int = 0
     red_flags: list[str]
     ai_summary: str
@@ -188,6 +191,40 @@ def _attach_source_metadata(analysis: dict, source_metadata: dict) -> dict:
     return next_analysis
 
 
+# PHASE 4 STEP 21
+def _attach_source_page_metadata(analysis: dict, source_page: dict | None = None) -> dict:
+    source_page = source_page or {}
+    read_status = str(source_page.get("status") or "not_read").strip().lower()
+
+    if read_status not in {"read", "failed", "not_read"}:
+        read_status = "failed"
+
+    source_supports_claim = analysis.get("source_supports_claim")
+    if not isinstance(source_supports_claim, bool):
+        source_supports_claim = None
+
+    source_excerpt = str(source_page.get("excerpt") or "").strip()[:6000]
+    if read_status != "read" or not source_excerpt:
+        source_supports_claim = None
+
+    source_support_summary = str(analysis.get("source_support_summary") or "").strip()
+    page_error = str(source_page.get("error") or "").strip()
+
+    if read_status != "read":
+        source_support_summary = f"Source page could not be read: {page_error}" if page_error else "Source page was not read."
+    elif not source_support_summary:
+        source_support_summary = "Source page was read, but source-support analysis is pending."
+
+    return {
+        **analysis,
+        "source_read_status": read_status,
+        "source_page_title": str(source_page.get("title") or "").strip()[:300],
+        "source_excerpt": source_excerpt,
+        "source_supports_claim": source_supports_claim,
+        "source_support_summary": source_support_summary[:500],
+    }
+
+
 # PHASE 4 STEP 10
 def _normalize_evidence_rows(evidence_rows: list[dict] | None = None) -> list[dict]:
     normalized_rows: list[dict] = []
@@ -223,6 +260,7 @@ def _fallback_source_risk_analysis(
     openai_missing: bool = False,
     source_metadata: dict | None = None,
     evidence_rows: list[dict] | None = None,
+    source_page: dict | None = None,
 ) -> dict:
     source_url_lower = source_url.strip().lower()
     scored_source = _get_source_metadata(source_url, source_metadata)
@@ -242,7 +280,10 @@ def _fallback_source_risk_analysis(
     non_fact_checkable_type = _classify_non_fact_checkable(title, description)
     if non_fact_checkable_type and non_fact_checkable_type != "UNCLEAR":
         return _attach_evidence_metadata(
-            _attach_source_metadata(_not_fact_checkable_analysis(non_fact_checkable_type), scored_source),
+            _attach_source_page_metadata(
+                _attach_source_metadata(_not_fact_checkable_analysis(non_fact_checkable_type), scored_source),
+                source_page,
+            ),
             normalized_evidence,
         )
 
@@ -299,12 +340,17 @@ def _fallback_source_risk_analysis(
         "ai_confidence": round(ai_confidence, 2),
         "source_count": source_count,
         "source_quality": source_quality,
+        "source_supports_claim": None,
+        "source_support_summary": "",
         "red_flags": red_flags,
         "ai_summary": ai_summary,
         "ai_status": ai_status,
     }
 
-    return _attach_evidence_metadata(_attach_source_metadata(analysis, scored_source), normalized_evidence)
+    return _attach_evidence_metadata(
+        _attach_source_page_metadata(_attach_source_metadata(analysis, scored_source), source_page),
+        normalized_evidence,
+    )
 
 
 def _error_analysis() -> dict:
@@ -368,12 +414,25 @@ def _normalize_analysis(raw_result: dict) -> dict:
         evidence_used_count = 0
 
     ai_summary = str(raw_result.get("ai_summary") or "").strip()
+    source_supports_claim = raw_result.get("source_supports_claim")
+    if not isinstance(source_supports_claim, bool):
+        source_supports_claim = None
+
+    source_support_summary = str(raw_result.get("source_support_summary") or "").strip()
 
     if not ai_summary:
         if ai_status == "NOT_FACT_CHECKABLE":
             ai_summary = "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake."
         else:
             ai_summary = "AI pre-check could not find enough support. Community voting and evidence are still needed."
+
+    if not source_support_summary:
+        if source_supports_claim is True:
+            source_support_summary = "The source excerpt appears to support the claim."
+        elif source_supports_claim is False:
+            source_support_summary = "The source excerpt does not appear to support the claim."
+        else:
+            source_support_summary = "The source excerpt was missing or not enough to evaluate support."
 
     if ai_status == "NOT_FACT_CHECKABLE" and not red_flags:
         red_flags = [f"Claim type is {claim_type.lower()}, not a factual news claim"]
@@ -383,6 +442,8 @@ def _normalize_analysis(raw_result: dict) -> dict:
         "ai_confidence": ai_confidence,
         "source_count": max(source_count, 0),
         "source_quality": source_quality,
+        "source_supports_claim": source_supports_claim,
+        "source_support_summary": source_support_summary[:500],
         "evidence_used_count": max(evidence_used_count, 0),
         "red_flags": [str(flag) for flag in red_flags[:8]],
         "ai_summary": ai_summary[:500],
@@ -420,6 +481,7 @@ def _build_prompt(
     source_url: str,
     category: str,
     source_metadata: dict,
+    source_page: dict | None = None,
     evidence_rows: list[dict] | None = None,
 ) -> list[dict]:
     # PHASE 4 STEP 8
@@ -431,6 +493,14 @@ def _build_prompt(
     ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
     source_metadata_for_prompt = dict(source_metadata)
     source_metadata_json = json.dumps(source_metadata_for_prompt, ensure_ascii=True, sort_keys=True)
+    source_page_for_prompt = {
+        "status": str((source_page or {}).get("status") or "not_read"),
+        "title": str((source_page or {}).get("title") or ""),
+        "meta_description": str((source_page or {}).get("meta_description") or ""),
+        "excerpt": str((source_page or {}).get("excerpt") or "")[:6000],
+        "error": str((source_page or {}).get("error") or ""),
+    }
+    source_page_json = json.dumps(source_page_for_prompt, ensure_ascii=True, sort_keys=True)
     evidence_json = json.dumps(_normalize_evidence_rows(evidence_rows), ensure_ascii=True, sort_keys=True)
     system_prompt = (
         "You are the AI pre-check engine for FactLens. "
@@ -452,6 +522,14 @@ def _build_prompt(
         "FactLens already scored the source using source_domain, source_quality, source_score, and source_reason. "
         "Do not override official, mainstream, specialized, or social source_quality from FactLens source scoring. "
         "Use source quality as a signal, but do not assume the source supports the claim unless the content actually matches the claim. "
+        # PHASE 4 STEP 21
+        "You are given fetched source page content with source_page_title, source_meta_description, and source_excerpt. "
+        "Evaluate whether the fetched source excerpt appears to support the user's claim, partially support it, contradict it, is unrelated, or is weak evidence. "
+        "Set source_supports_claim to true only when the source excerpt clearly supports the claim. "
+        "Set source_supports_claim to false when the source excerpt contradicts the claim, is unrelated, or is too weak to support it. "
+        "Set source_supports_claim to null when the source excerpt is missing, unreadable, or not enough to evaluate. "
+        "Do not hallucinate source content beyond the provided excerpt. Keep source_support_summary concise. "
+        "Return JSON with source_supports_claim and source_support_summary. "
         "Do not claim certainty. Do not say definitely true or definitely fake. "
         "Do not invent sources. If not enough evidence, say NEEDS_MORE_EVIDENCE. "
         "If source is weak or unknown, reduce confidence. "
@@ -477,6 +555,11 @@ def _build_prompt(
         f"Source score: {source_metadata.get('source_score')}\n"
         f"Source quality: {source_metadata.get('source_quality')}\n"
         f"FactLens source metadata: {source_metadata_json}\n"
+        f"Source page read status: {source_page_for_prompt.get('status')}\n"
+        f"Source page title: {source_page_for_prompt.get('title')}\n"
+        f"Source meta description: {source_page_for_prompt.get('meta_description')}\n"
+        f"Source excerpt: {source_page_for_prompt.get('excerpt')}\n"
+        f"Fetched source page: {source_page_json}\n"
         f"Community evidence: {evidence_json}"
     )
 
@@ -567,6 +650,7 @@ def analyze_claim_with_openai_response(
     source_url: str,
     category: str,
     source_metadata: dict | None = None,
+    source_page: dict | None = None,
     evidence_rows: list[dict] | None = None,
 ) -> dict:
     # PHASE 4 STEP 9
@@ -586,6 +670,7 @@ def analyze_claim_with_openai_response(
                 openai_missing=True,
                 source_metadata=scored_source,
                 evidence_rows=normalized_evidence,
+                source_page=source_page,
             ),
         }
 
@@ -595,7 +680,7 @@ def analyze_claim_with_openai_response(
         client = OpenAI(api_key=api_key)
         response = client.responses.parse(
             model=model,
-            input=_build_prompt(title, description, source_url, category, scored_source, normalized_evidence),
+            input=_build_prompt(title, description, source_url, category, scored_source, source_page, normalized_evidence),
             text_format=FactLensAiPrecheckResult,
         )
         parsed = getattr(response, "output_parsed", None)
@@ -605,7 +690,10 @@ def analyze_claim_with_openai_response(
             return {
                 "ok": True,
                 **_attach_evidence_metadata(
-                    _attach_source_metadata(_normalize_analysis(_model_to_dict(parsed)), scored_source),
+                    _attach_source_page_metadata(
+                        _attach_source_metadata(_normalize_analysis(_model_to_dict(parsed)), scored_source),
+                        source_page,
+                    ),
                     normalized_evidence,
                 ),
             }
@@ -622,7 +710,10 @@ def analyze_claim_with_openai_response(
             return {
                 "ok": True,
                 **_attach_evidence_metadata(
-                    _attach_source_metadata(_normalize_analysis(raw_result), scored_source),
+                    _attach_source_page_metadata(
+                        _attach_source_metadata(_normalize_analysis(raw_result), scored_source),
+                        source_page,
+                    ),
                     normalized_evidence,
                 ),
             }
@@ -634,7 +725,10 @@ def analyze_claim_with_openai_response(
         print(f"[openai] AI pre-check failure: {error}", flush=True)
         return {
             "ok": False,
-            **_attach_evidence_metadata(_attach_source_metadata(_error_analysis(), scored_source), normalized_evidence),
+            **_attach_evidence_metadata(
+                _attach_source_page_metadata(_attach_source_metadata(_error_analysis(), scored_source), source_page),
+                normalized_evidence,
+            ),
             "error": "AI pre-check failed. Please retry.",
         }
 
@@ -645,12 +739,16 @@ def analyze_claim_with_openai(
     source_url: str,
     category: str,
     source_metadata: dict | None = None,
+    source_page: dict | None = None,
     evidence_rows: list[dict] | None = None,
 ) -> dict:
-    result = analyze_claim_with_openai_response(title, description, source_url, category, source_metadata, evidence_rows)
+    result = analyze_claim_with_openai_response(title, description, source_url, category, source_metadata, source_page, evidence_rows)
 
     if result.get("ok"):
         return {key: value for key, value in result.items() if key not in {"ok", "error", "raw"}}
 
     scored_source = _get_source_metadata(source_url, source_metadata)
-    return _attach_evidence_metadata(_attach_source_metadata(_error_analysis(), scored_source), evidence_rows)
+    return _attach_evidence_metadata(
+        _attach_source_page_metadata(_attach_source_metadata(_error_analysis(), scored_source), source_page),
+        evidence_rows,
+    )
