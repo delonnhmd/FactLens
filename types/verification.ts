@@ -6,7 +6,18 @@ export type VerificationMode = "test" | "production";
 export type VerificationVerdict = "true" | "fake" | "unsure" | "pending";
 // PHASE 4 STEP 9
 export type SourceQuality = string;
-export type VerificationUserRole = "new_user" | "new" | "regular" | "verified" | "high_accuracy" | "expert";
+// PHASE 5 STEP 1
+export type VerificationUserRole =
+  | "new_user"
+  | "new"
+  | "regular"
+  | "verified"
+  | "high_accuracy"
+  | "expert"
+  | "LOW_TRUST"
+  | "BASIC"
+  | "TRUSTED"
+  | "HIGH_TRUST";
 
 // PHASE 3 STEP 17
 export interface VerificationTrustProfile {
@@ -16,6 +27,8 @@ export interface VerificationTrustProfile {
   accuracyRate?: number | null;
   trustTier?: VerificationUserRole | null;
   trustWeightOverride?: number | null;
+  // PHASE 5 STEP 1
+  trustScore?: number | null;
 }
 
 export interface AiScanOutput {
@@ -43,6 +56,8 @@ export interface VerificationVote {
   // PHASE 3 STEP 17
   voteValue?: number | null;
   trustWeight?: number | null;
+  // PHASE 5 STEP 1
+  trustScore?: number | null;
   accepted?: boolean;
   suspicious?: boolean;
   rejectedReason?: string | null;

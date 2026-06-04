@@ -57,8 +57,21 @@ const verificationFields = (createdAt: string) => ({
 const userTrustFields = {
   votesCast: 0,
   accuracyRate: null,
-  trustTier: "new" as const,
+  // PHASE 5 STEP 1
+  trustTier: "BASIC" as const,
   trustWeightOverride: null,
+  trustScore: 50,
+  rankTitle: "Claim Checker",
+  highestRankAchieved: "Claim Checker",
+  reputationPoints: 0,
+  monthlyReputationPoints: 0,
+  correctVotes: 0,
+  incorrectVotes: 0,
+  evidenceCount: 0,
+  helpfulEvidenceCount: 0,
+  suspiciousFlags: 0,
+  badgeList: [],
+  lastActiveAt: null,
 };
 
 // PHASE 2 STEP 2

@@ -40,6 +40,7 @@ import type { Claim, ClaimStatus, AiCheck, ClaimType } from "../types/claim";
 import type { SourceQuality, VerificationMode, VerificationVote } from "../types/verification";
 import type { User as AppUser } from "../types/user";
 import { ensureProfileForUser, type Profile } from "./profileService";
+import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
 
 type ClaimAiStatus = AiCheck["status"];
 
@@ -86,6 +87,20 @@ interface ClaimProfileRow {
   accuracy_rate?: number | null;
   trust_tier?: string | null;
   trust_weight_override?: number | null;
+  // PHASE 5 STEP 1
+  trust_score?: number | null;
+  rank_title?: string | null;
+  correct_votes?: number | null;
+  incorrect_votes?: number | null;
+  evidence_count?: number | null;
+  helpful_evidence_count?: number | null;
+  suspicious_flags?: number | null;
+  reputation_points?: number | null;
+  badge_list?: unknown;
+  last_active_at?: string | null;
+  highest_rank_achieved?: string | null;
+  monthly_reputation_points?: number | null;
+  monthly_reset_at?: string | null;
   created_at?: string | null;
 }
 
@@ -205,7 +220,8 @@ export interface ClaimsResult {
 const DEFAULT_CLAIM_LIMIT = 50;
 // PHASE 3 STEP 11
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
-const CLAIM_PROFILE_SELECT = "id,username,display_name,verified,reputation_score,avatar_url";
+const CLAIM_PROFILE_SELECT =
+  "id,username,display_name,verified,reputation_score,avatar_url,votes_cast,accuracy_rate,trust_tier,trust_weight_override,trust_score,rank_title,correct_votes,incorrect_votes,evidence_count,helpful_evidence_count,suspicious_flags,reputation_points,badge_list,last_active_at,highest_rank_achieved,monthly_reputation_points,monthly_reset_at,created_at";
 
 interface SupabaseErrorLike {
   code?: string;
@@ -235,6 +251,23 @@ function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
     details: error.details,
     hint: error.hint,
   });
+}
+
+// PHASE 5 STEP 1
+async function processClaimReputation(claimId: string) {
+  const { error } = await supabase.rpc("process_claim_reputation", {
+    target_claim_id: claimId,
+  });
+
+  if (error) {
+    console.log("[claims reputation warning]", {
+      claimId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+  }
 }
 
 function getClaimLoadError(error: unknown): string {
@@ -311,6 +344,20 @@ function mapProfileToClaimProfile(profile: Profile): ClaimProfileRow {
     accuracy_rate: profile.accuracy_rate,
     trust_tier: profile.trust_tier,
     trust_weight_override: profile.trust_weight_override,
+    // PHASE 5 STEP 1
+    trust_score: profile.trust_score,
+    rank_title: profile.rank_title,
+    correct_votes: profile.correct_votes,
+    incorrect_votes: profile.incorrect_votes,
+    evidence_count: profile.evidence_count,
+    helpful_evidence_count: profile.helpful_evidence_count,
+    suspicious_flags: profile.suspicious_flags,
+    reputation_points: profile.reputation_points,
+    badge_list: profile.badge_list,
+    last_active_at: profile.last_active_at,
+    highest_rank_achieved: profile.highest_rank_achieved,
+    monthly_reputation_points: profile.monthly_reputation_points,
+    monthly_reset_at: profile.monthly_reset_at,
     created_at: profile.created_at,
   };
 }
@@ -536,12 +583,17 @@ function mapTrustTier(tier: string | null | undefined): AppUser["trustTier"] {
     tier === "regular" ||
     tier === "verified" ||
     tier === "high_accuracy" ||
-    tier === "expert"
+    tier === "expert" ||
+    // PHASE 5 STEP 1
+    tier === "LOW_TRUST" ||
+    tier === "BASIC" ||
+    tier === "TRUSTED" ||
+    tier === "HIGH_TRUST"
   ) {
     return tier;
   }
 
-  return "new";
+  return "BASIC";
 }
 
 // PHASE 3 STEP 9
@@ -604,6 +656,14 @@ function mapAuthor(row: ClaimRow): AppUser {
   const username = profile?.username ?? "unknown";
   const displayName = profile?.display_name || profile?.username || "Unknown User";
   const createdAt = row.created_at ?? new Date().toISOString();
+  // PHASE 5 STEP 1
+  const badgeList = parseBadgeList(profile?.badge_list);
+  const trustScore = profile?.trust_score ?? 50;
+  const rankTitle = getDisplayRankTitle({
+    trustScore,
+    rankTitle: profile?.rank_title,
+    highestRankAchieved: profile?.highest_rank_achieved,
+  });
 
   return {
     id: authorId,
@@ -611,12 +671,24 @@ function mapAuthor(row: ClaimRow): AppUser {
     displayName,
     avatar: profile?.avatar_url ?? null,
     verified: profile?.verified ?? false,
-    reputationScore: profile?.reputation_score ?? 0,
+    reputationScore: profile?.reputation_points ?? profile?.reputation_score ?? 0,
     joinedAt: profile?.created_at ?? createdAt,
     votesCast: profile?.votes_cast ?? 0,
     accuracyRate: profile?.accuracy_rate ?? null,
     trustTier: mapTrustTier(profile?.trust_tier),
     trustWeightOverride: profile?.trust_weight_override ?? null,
+    trustScore,
+    rankTitle,
+    highestRankAchieved: profile?.highest_rank_achieved ?? rankTitle,
+    reputationPoints: profile?.reputation_points ?? profile?.reputation_score ?? 0,
+    monthlyReputationPoints: profile?.monthly_reputation_points ?? 0,
+    correctVotes: profile?.correct_votes ?? 0,
+    incorrectVotes: profile?.incorrect_votes ?? 0,
+    evidenceCount: profile?.evidence_count ?? 0,
+    helpfulEvidenceCount: profile?.helpful_evidence_count ?? 0,
+    suspiciousFlags: profile?.suspicious_flags ?? 0,
+    badgeList,
+    lastActiveAt: profile?.last_active_at ?? null,
   };
 }
 
@@ -784,8 +856,21 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     joinedAt: createdAt,
     votesCast: 0,
     accuracyRate: null,
-    trustTier: "new",
+    trustTier: "BASIC",
     trustWeightOverride: null,
+    // PHASE 5 STEP 1
+    trustScore: 50,
+    rankTitle: "Claim Checker",
+    highestRankAchieved: "Claim Checker",
+    reputationPoints: 0,
+    monthlyReputationPoints: 0,
+    correctVotes: 0,
+    incorrectVotes: 0,
+    evidenceCount: 0,
+    helpfulEvidenceCount: 0,
+    suspiciousFlags: 0,
+    badgeList: [],
+    lastActiveAt: null,
   };
 
   console.log("[claim mapping failed]", {
@@ -1291,9 +1376,32 @@ export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult
     // Client-side verdict saving is best-effort. RLS can block this for non-authors,
     // but the feed should still render the fetched claim.
     logClaimFinalizeWarning(claimId, error);
+    // PHASE 5 STEP 1
+    if (shouldPublish) {
+      const { error: rpcError } = await supabase.rpc("finalize_expired_claim", {
+        target_claim_id: claimId,
+      });
+
+      if (rpcError) {
+        logClaimFinalizeWarning(claimId, rpcError);
+      } else {
+        await processClaimReputation(claimId);
+        const refreshedAfterRpc = await fetchClaimById(claimId);
+
+        if (refreshedAfterRpc.claim) {
+          return refreshedAfterRpc;
+        }
+      }
+    }
+
     return {
       claim: localFinalizedClaim,
     };
+  }
+
+  // PHASE 5 STEP 1
+  if (shouldPublish) {
+    await processClaimReputation(claimId);
   }
 
   const refreshedClaim = await fetchClaimById(claimId);

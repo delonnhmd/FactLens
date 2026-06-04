@@ -12,6 +12,7 @@ type IoniconName =
   | 'search-outline'
   | 'add-circle-outline'
   | 'flame-outline'
+  | 'trophy-outline'
   | 'person-outline';
 
 function TabIcon({
@@ -93,6 +94,17 @@ export default function TabLayout() {
           tabBarLabel: 'Trending',
           tabBarIcon: ({ color, size }) => (
             <TabIcon name="flame-outline" color={color} size={size} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="leaderboard"
+        options={{
+          title: 'Leaderboard',
+          tabBarLabel: 'Leaderboard',
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="trophy-outline" color={color} size={size} />
           ),
         }}
       />

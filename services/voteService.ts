@@ -9,6 +9,7 @@ import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
 import type { Profile } from "./profileService";
+import { getVoteTrustWeight } from "../utils/reputation";
 
 export type VoteType = "TRUE" | "FAKE" | "UNSURE";
 type VoteTypeInput = VoteOption | VoteType | string;
@@ -139,7 +140,8 @@ export function getVoteValue(normalizedVoteType: VoteType): number | null {
     return 0.0;
   }
 
-  return null;
+  // PHASE 5 STEP 1
+  return 0.5;
 }
 
 function getVoteErrorMessage(message: string): string {
@@ -264,7 +266,6 @@ export async function voteOnClaim(
   voteType: VoteTypeInput,
   profile?: Profile | null,
 ): Promise<ClaimVoteResult> {
-  void profile;
   const claimResult = await fetchClaimById(claimId);
 
   if (claimResult.error || !claimResult.claim) {
@@ -321,7 +322,10 @@ export async function voteOnClaim(
   const normalizedVoteType = normalizeVoteType(voteType);
   const appVoteOption = toAppVoteOption(normalizedVoteType);
   const voteValue = getVoteValue(normalizedVoteType);
-  const trustWeight = 1.0;
+  // PHASE 5 STEP 1
+  const trustWeight = profile?.trust_weight_override ?? getVoteTrustWeight({
+    trustScore: profile?.trust_score,
+  });
   console.log("[vote] normalizedVoteType:", normalizedVoteType);
   console.log("[vote] voteValue:", voteValue);
 
@@ -430,25 +434,6 @@ export async function voteOnClaim(
       claim: claimResult.claim,
       error: getVoteErrorMessage(error.message),
     };
-  }
-
-  if (profile) {
-    const { error: profileUpdateError } = await supabase
-      .from("profiles")
-      .update({
-        votes_cast: (profile.votes_cast ?? 0) + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId);
-
-    if (profileUpdateError) {
-      console.log("[vote] Profile votes_cast update failed", {
-        userId,
-        code: profileUpdateError.code,
-        message: profileUpdateError.message,
-        details: profileUpdateError.details,
-      });
-    }
   }
 
   console.log("[vote] inserted vote, refetching claim:", claimId);

@@ -9,6 +9,7 @@ import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthProfile } from "../../services/authProfile";
+import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
 
 export default function ProfileScreen() {
   // PHASE 3 STEP 2
@@ -35,6 +36,17 @@ export default function ProfileScreen() {
   // PHASE 3 STEP 18C
   const visibleProfileError = profile ? "" : profileError;
   const visibleActionError = profile ? "" : actionError;
+  // PHASE 5 STEP 1
+  const rankInfo = getDisplayRankInfo(profile ? {
+    trustScore: profile.trust_score,
+    rankTitle: profile.rank_title,
+    highestRankAchieved: profile.highest_rank_achieved,
+  } : null);
+  const rankProgress = getRankProgress(profile ? {
+    trustScore: profile.trust_score,
+  } : null);
+  const badges = getTopBadges(profile?.badge_list ?? [], 8);
+  const totalVotes = (profile?.correct_votes ?? 0) + (profile?.incorrect_votes ?? 0);
 
   const handleSignOut = async () => {
     await signOut();
@@ -120,6 +132,28 @@ export default function ProfileScreen() {
               </View>
             ) : null}
 
+            {profile ? (
+              <View style={styles.rankPanel}>
+                <View style={styles.rankHeaderRow}>
+                  <View style={styles.rankIcon}>
+                    <Text style={styles.rankIconText}>FL</Text>
+                  </View>
+                  <View style={styles.rankTextBlock}>
+                    <Text style={styles.rankTitle}>{rankInfo.title}</Text>
+                    <Text style={styles.rankSubtitle}>Your contributor rank</Text>
+                  </View>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${Math.round(rankProgress.progress * 100)}%` }]} />
+                </View>
+                <Text style={styles.progressText}>
+                  {rankProgress.nextTitle
+                    ? `${profile.trust_score}/100 trust score toward ${rankProgress.nextTitle}`
+                    : "Top rank reached"}
+                </Text>
+              </View>
+            ) : null}
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Email</Text>
               <Text style={styles.detailValue}>{fallbackProfile.email || "No email on account"}</Text>
@@ -137,10 +171,52 @@ export default function ProfileScreen() {
               </Text>
             </View>
 
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Reputation score</Text>
-              <Text style={styles.reputationBadge}>{profile?.reputation_score ?? 0}</Text>
-            </View>
+            {profile ? (
+              <>
+                <View style={styles.statsGrid}>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Trust Score</Text>
+                    <Text style={styles.statValue}>{profile.trust_score}</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Reputation</Text>
+                    <Text style={styles.statValue}>{formatPoints(profile.reputation_points)}</Text>
+                    <Text style={styles.statHint}>This month: {formatPoints(profile.monthly_reputation_points)}</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Correct Votes</Text>
+                    <Text style={styles.statValue}>{profile.correct_votes}</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Total Votes</Text>
+                    <Text style={styles.statValue}>{totalVotes || profile.votes_cast}</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Evidence Added</Text>
+                    <Text style={styles.statValue}>{profile.evidence_count}</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Text style={styles.statLabel}>Helpful Evidence</Text>
+                    <Text style={styles.statValue}>{profile.helpful_evidence_count}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.badgeSection}>
+                  <Text style={styles.detailLabel}>Badges earned</Text>
+                  {badges.length > 0 ? (
+                    <View style={styles.badgeWrap}>
+                      {badges.map((badge) => (
+                        <Text key={badge.id} style={styles.contributorBadge}>
+                          {badge.name}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.detailValue}>Earn your first badge by voting or adding evidence.</Text>
+                  )}
+                </View>
+              </>
+            ) : null}
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Account created</Text>
@@ -269,6 +345,113 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     paddingHorizontal: 12,
     paddingVertical: 6,
+  },
+  // PHASE 5 STEP 1
+  rankPanel: {
+    backgroundColor: theme.colors.phaseBg,
+    borderColor: "#DCD8FF",
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  rankHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  rankIcon: {
+    alignItems: "center",
+    backgroundColor: theme.colors.ai,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  rankIconText: {
+    color: theme.colors.background,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  rankTextBlock: {
+    flex: 1,
+  },
+  rankTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  rankSubtitle: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  progressTrack: {
+    backgroundColor: "rgba(83, 74, 183, 0.18)",
+    borderRadius: 999,
+    height: 8,
+    overflow: "hidden",
+  },
+  progressFill: {
+    backgroundColor: theme.colors.ai,
+    borderRadius: 999,
+    height: "100%",
+  },
+  progressText: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    marginTop: theme.spacing.sm,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  statBox: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    flexBasis: "48%",
+    flexGrow: 1,
+    padding: theme.spacing.md,
+  },
+  statLabel: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: "600",
+    marginBottom: theme.spacing.xs,
+  },
+  statValue: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  statHint: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  badgeSection: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+  },
+  badgeWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  contributorBadge: {
+    backgroundColor: theme.colors.sourceBg,
+    borderRadius: 999,
+    color: theme.colors.sourceText,
+    fontSize: 11,
+    fontWeight: "600",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   successText: {
     color: theme.colors.success,

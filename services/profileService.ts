@@ -8,6 +8,7 @@ import { APP_CONFIG } from "../constants/appConfig";
 import { supabase } from "../lib/supabase";
 import { generateFallbackUsername, normalizeUsername } from "../utils/username";
 import type { VerificationUserRole } from "../types/verification";
+import { parseBadgeList, type ReputationBadge } from "../utils/reputation";
 
 export interface Profile {
   id: string;
@@ -21,6 +22,20 @@ export interface Profile {
   accuracy_rate: number | null;
   trust_tier: VerificationUserRole;
   trust_weight_override: number | null;
+  // PHASE 5 STEP 1
+  trust_score: number;
+  rank_title: string;
+  correct_votes: number;
+  incorrect_votes: number;
+  evidence_count: number;
+  helpful_evidence_count: number;
+  suspicious_flags: number;
+  reputation_points: number;
+  badge_list: ReputationBadge[];
+  last_active_at: string | null;
+  highest_rank_achieved: string;
+  monthly_reputation_points: number;
+  monthly_reset_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +51,20 @@ type ProfileRow = {
   accuracy_rate?: number | null;
   trust_tier?: VerificationUserRole | null;
   trust_weight_override?: number | null;
+  // PHASE 5 STEP 1
+  trust_score?: number | null;
+  rank_title?: string | null;
+  correct_votes?: number | null;
+  incorrect_votes?: number | null;
+  evidence_count?: number | null;
+  helpful_evidence_count?: number | null;
+  suspicious_flags?: number | null;
+  reputation_points?: number | null;
+  badge_list?: unknown;
+  last_active_at?: string | null;
+  highest_rank_achieved?: string | null;
+  monthly_reputation_points?: number | null;
+  monthly_reset_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -103,8 +132,22 @@ function mapProfileRowToProfile(row: ProfileRow): Profile {
     reputation_score: row.reputation_score ?? 0,
     votes_cast: row.votes_cast ?? 0,
     accuracy_rate: row.accuracy_rate ?? null,
-    trust_tier: row.trust_tier ?? "new_user",
+    // PHASE 5 STEP 1
+    trust_tier: row.trust_tier ?? "BASIC",
     trust_weight_override: row.trust_weight_override ?? null,
+    trust_score: row.trust_score ?? 50,
+    rank_title: row.rank_title ?? "Claim Checker",
+    correct_votes: row.correct_votes ?? 0,
+    incorrect_votes: row.incorrect_votes ?? 0,
+    evidence_count: row.evidence_count ?? 0,
+    helpful_evidence_count: row.helpful_evidence_count ?? 0,
+    suspicious_flags: row.suspicious_flags ?? 0,
+    reputation_points: row.reputation_points ?? row.reputation_score ?? 0,
+    badge_list: parseBadgeList(row.badge_list),
+    last_active_at: row.last_active_at ?? null,
+    highest_rank_achieved: row.highest_rank_achieved ?? row.rank_title ?? "Claim Checker",
+    monthly_reputation_points: row.monthly_reputation_points ?? 0,
+    monthly_reset_at: row.monthly_reset_at ?? null,
     created_at: row.created_at ?? "",
     updated_at: row.updated_at ?? "",
   };
@@ -214,8 +257,22 @@ async function insertProfileForUser(
       reputation_score: 0,
       votes_cast: 0,
       accuracy_rate: null,
-      trust_tier: "new_user",
+      // PHASE 5 STEP 1
+      trust_tier: "BASIC",
       trust_weight_override: null,
+      trust_score: 50,
+      rank_title: "Claim Checker",
+      highest_rank_achieved: "Claim Checker",
+      correct_votes: 0,
+      incorrect_votes: 0,
+      evidence_count: 0,
+      helpful_evidence_count: 0,
+      suspicious_flags: 0,
+      reputation_points: 0,
+      badge_list: [],
+      monthly_reputation_points: 0,
+      monthly_reset_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
     })
     .select()
     .single();
@@ -265,8 +322,22 @@ export async function createProfile(
       verified: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? false : true,
       votes_cast: 0,
       accuracy_rate: null,
-      trust_tier: "new_user",
+      // PHASE 5 STEP 1
+      trust_tier: "BASIC",
       trust_weight_override: null,
+      trust_score: 50,
+      rank_title: "Claim Checker",
+      highest_rank_achieved: "Claim Checker",
+      correct_votes: 0,
+      incorrect_votes: 0,
+      evidence_count: 0,
+      helpful_evidence_count: 0,
+      suspicious_flags: 0,
+      reputation_points: 0,
+      badge_list: [],
+      monthly_reputation_points: 0,
+      monthly_reset_at: new Date().toISOString(),
+      last_active_at: new Date().toISOString(),
     })
     .select()
     .single();

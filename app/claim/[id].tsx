@@ -45,6 +45,7 @@ import {
 import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../types/claim";
 import { theme } from "../../constants/theme";
 import { normalizeUrl } from "../../utils/url";
+import { getTopBadges } from "../../utils/reputation";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
@@ -1051,11 +1052,20 @@ export default function ClaimDetailScreen() {
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
               <Text style={styles.authorText}>@{claim.authorUsername}</Text>
+              {/* PHASE 5 STEP 1 */}
+              <View style={styles.contributorMetaRow}>
+                <Text style={styles.rankPill}>{claim.author.rankTitle}</Text>
+                {getTopBadges(claim.author.badgeList, 2).map((badge) => (
+                  <Text key={badge.id} style={styles.smallBadge}>
+                    {badge.name}
+                  </Text>
+                ))}
+              </View>
             </View>
             {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
           </View>
           {/* PHASE 4 STEP 12 */}
-          <Text style={styles.authorText}>Reputation score: {claim.authorReputation}</Text>
+          <Text style={styles.authorText}>Reputation: {claim.author.reputationPoints.toLocaleString()} pts</Text>
 
           {isOwner ? (
             <View style={styles.ownerActionRow}>
@@ -1301,6 +1311,19 @@ export default function ClaimDetailScreen() {
                       </Text>
                       <Text style={styles.evidenceTime}>{new Date(item.createdAt).toLocaleString()}</Text>
                     </View>
+                    {/* PHASE 5 STEP 1 */}
+                    {item.contributorUsername ? (
+                      <View style={styles.evidenceContributorRow}>
+                        <Text style={styles.evidenceContributorText} numberOfLines={1}>
+                          @{item.contributorUsername}    {item.contributorRankTitle ?? "Claim Checker"}
+                        </Text>
+                        {getTopBadges(item.contributorBadges ?? [], 1).map((badge) => (
+                          <Text key={badge.id} style={styles.smallBadge}>
+                            {badge.name}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
                     <TouchableOpacity
                       style={styles.evidenceSourceRow}
                       activeOpacity={0.75}
@@ -1517,6 +1540,45 @@ const styles = StyleSheet.create({
   authorText: {
     fontSize: theme.typography.small.fontSize,
     color: theme.colors.subtext,
+  },
+  // PHASE 5 STEP 1
+  contributorMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  rankPill: {
+    backgroundColor: theme.colors.phaseBg,
+    borderRadius: 999,
+    color: theme.colors.phaseText,
+    fontSize: 11,
+    fontWeight: "700",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  smallBadge: {
+    backgroundColor: theme.colors.sourceBg,
+    borderRadius: 999,
+    color: theme.colors.sourceText,
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  evidenceContributorRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  evidenceContributorText: {
+    color: theme.colors.subtext,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "600",
   },
   authorHeaderRow: {
     alignItems: "flex-start",

@@ -9,6 +9,7 @@ import { ensureProfileForUser } from "./profileService";
 import type { Evidence, EvidenceType } from "../types/claim";
 import { getDebugErrorParts } from "../utils/debugError";
 import { normalizeUrl } from "../utils/url";
+import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
 
 const EVIDENCE_NOTE_MAX_LENGTH = 500;
 const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
@@ -37,6 +38,17 @@ export interface EvidenceRow {
   source_quality_reason: string | null;
   created_at: string;
   updated_at: string;
+  profiles?: EvidenceProfileRow | EvidenceProfileRow[] | null;
+}
+
+interface EvidenceProfileRow {
+  id: string;
+  username: string;
+  display_name: string | null;
+  trust_score?: number | null;
+  rank_title?: string | null;
+  highest_rank_achieved?: string | null;
+  badge_list?: unknown;
 }
 
 interface EvidenceListResult {
@@ -168,10 +180,32 @@ function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string |
   return null;
 }
 
+function getEmbeddedProfile(row: EvidenceRow): EvidenceProfileRow | null {
+  if (Array.isArray(row.profiles)) {
+    return row.profiles[0] ?? null;
+  }
+
+  return row.profiles ?? null;
+}
+
 export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
+  const profile = getEmbeddedProfile(row);
+  const rankTitle = profile
+    ? getDisplayRankTitle({
+        trustScore: profile.trust_score ?? 50,
+        rankTitle: profile.rank_title,
+        highestRankAchieved: profile.highest_rank_achieved,
+      })
+    : null;
+
   return {
     id: row.id,
     userId: row.user_id,
+    // PHASE 5 STEP 1
+    contributorUsername: profile?.username ?? null,
+    contributorDisplayName: profile?.display_name || profile?.username || null,
+    contributorRankTitle: rankTitle,
+    contributorBadges: parseBadgeList(profile?.badge_list),
     url: row.url,
     note: row.note,
     type: row.evidence_type,
@@ -180,6 +214,37 @@ export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
     sourceQualityScore: row.source_quality_score,
     sourceQualityReason: row.source_quality_reason,
   };
+}
+
+// PHASE 5 STEP 1
+async function mergeEvidenceProfiles(rows: EvidenceRow[]): Promise<EvidenceRow[]> {
+  const userIds = Array.from(new Set(rows.map((row) => row.user_id).filter(Boolean)));
+
+  if (userIds.length === 0) {
+    return rows;
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id,username,display_name,trust_score,rank_title,highest_rank_achieved,badge_list")
+    .in("id", userIds);
+
+  if (error) {
+    console.log("[evidence] contributor profiles load failed:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    return rows;
+  }
+
+  const profilesById = new Map(((data ?? []) as EvidenceProfileRow[]).map((profile) => [profile.id, profile]));
+
+  return rows.map((row) => ({
+    ...row,
+    profiles: profilesById.get(row.user_id) ?? null,
+  }));
 }
 
 export async function fetchEvidenceForClaim(claimId: string): Promise<EvidenceListResult> {
@@ -196,8 +261,10 @@ export async function fetchEvidenceForClaim(claimId: string): Promise<EvidenceLi
     };
   }
 
+  const rowsWithProfiles = await mergeEvidenceProfiles((data ?? []) as EvidenceRow[]);
+
   return {
-    evidence: ((data ?? []) as EvidenceRow[]).map(mapEvidenceRowToEvidence),
+    evidence: rowsWithProfiles.map(mapEvidenceRowToEvidence),
   };
 }
 

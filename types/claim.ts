@@ -52,6 +52,11 @@ export interface Evidence {
   createdAt: string;
   // PHASE 3 STEP 5
   userId?: string;
+  // PHASE 5 STEP 1
+  contributorUsername?: string | null;
+  contributorDisplayName?: string | null;
+  contributorRankTitle?: string | null;
+  contributorBadges?: User["badgeList"];
   sourceQualityLabel?: string | null;
   sourceQualityScore?: number | null;
   sourceQualityReason?: string | null;

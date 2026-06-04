@@ -14,6 +14,7 @@ import {
   detectSameIpSession,
 } from "./abuseDetectionService";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
+import { getVoteTrustWeight } from "../utils/reputation";
 import type {
   AiScanOutput,
   VerificationEngineResult,
@@ -182,6 +183,13 @@ export function getUserTrustWeight(
     return profileData.trustWeightOverride;
   }
 
+  // PHASE 5 STEP 1
+  if (vote.trustScore !== null && vote.trustScore !== undefined) {
+    return getVoteTrustWeight({
+      trustScore: vote.trustScore,
+    });
+  }
+
   const role = isVote ? voteData.userRole : profileData.trustTier;
 
   if ((vote.accuracyRate ?? 0) >= 0.85 || role === "expert") {
@@ -281,11 +289,12 @@ export function calculateWeightedCommunityScore(
     (totals, vote) => {
       const baseWeight = getUserTrustWeight(vote, mode);
       const trustWeight = adjustSessionWeights(acceptedVotes, baseWeight, vote);
-      const voteValue = vote.vote === "TRUE" ? 1 : vote.vote === "FAKE" ? 0 : null;
+      // PHASE 5 STEP 1
+      const voteValue = vote.voteValue ?? (vote.vote === "TRUE" ? 1 : vote.vote === "FAKE" ? 0 : 0.5);
 
       return {
-        score: totals.score + (voteValue === null ? 0 : voteValue * trustWeight),
-        weight: totals.weight + (voteValue === null ? 0 : trustWeight),
+        score: totals.score + voteValue * trustWeight,
+        weight: totals.weight + trustWeight,
       };
     },
     { score: 0, weight: 0 },
