@@ -51,10 +51,6 @@ export default function HomeScreen() {
     loadingMore,
     liveUpdatesEnabled,
     error,
-    claimsErrorMessage,
-    claimsErrorCode,
-    claimsErrorDetails,
-    claimsErrorHint,
     aiPrecheckNotice,
     clearAiPrecheckNotice,
     voteOnClaim,
@@ -212,10 +208,6 @@ export default function HomeScreen() {
   const listLoading = filteredFeedActive ? feedLoading : loading;
   const listLoadingMore = filteredFeedActive ? feedLoadingMore : loadingMore;
   const displayError = feedError || error || "";
-  const displayErrorMessage = feedError || claimsErrorMessage || error || "";
-  const displayErrorCode = claimsErrorCode || "none";
-  const displayErrorDetails = claimsErrorDetails || "none";
-  const displayErrorHint = claimsErrorHint || "none";
 
   const listHeader = (
     <View>
@@ -260,10 +252,8 @@ export default function HomeScreen() {
       {displayError ? (
         <View style={styles.errorPanel}>
           <Text style={styles.errorTitle}>Could not load claims.</Text>
-          <Text style={styles.errorText}>Message: {displayErrorMessage}</Text>
-          <Text style={styles.errorText}>Code: {displayErrorCode}</Text>
-          <Text style={styles.errorText}>Details: {displayErrorDetails}</Text>
-          <Text style={styles.errorText}>Hint: {displayErrorHint}</Text>
+          {/* PHASE 4 STEP 24 */}
+          <Text style={styles.errorText}>Pull to retry or tap Retry.</Text>
           <TouchableOpacity style={styles.retryButton} activeOpacity={0.8} onPress={handleRefresh}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>

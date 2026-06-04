@@ -178,10 +178,10 @@ function getSourceReadStatusLabel(status: string | null | undefined): string {
   }
 
   if (status === "failed") {
-    return "Could not read source page";
+    return "Could not read source page.";
   }
 
-  return "Source page not read yet";
+  return "Source not checked yet.";
 }
 
 // PHASE 4 STEP 22
@@ -297,6 +297,8 @@ export default function ClaimDetailScreen() {
   const [voteError, setVoteError] = useState("");
   // PHASE 3 STEP 20
   const [voteSuccess, setVoteSuccess] = useState("");
+  // PHASE 4 STEP 24
+  const [voteSubmitting, setVoteSubmitting] = useState(false);
   // PHASE 4 STEP 2
   const [aiPrecheckLoading, setAiPrecheckLoading] = useState(false);
   // PHASE 4 STEP 10
@@ -356,7 +358,7 @@ export default function ClaimDetailScreen() {
       return loadedClaim;
     } catch {
       if (!mountedRef || mountedRef.current) {
-        setDetailError("We could not load this claim. Please try again.");
+        setDetailError("Could not load claim details.");
       }
 
       return undefined;
@@ -418,7 +420,7 @@ export default function ClaimDetailScreen() {
     const refreshEvidence = () => {
       fetchEvidenceForClaim(claimId).catch((error) => {
         if (mounted) {
-          setEvidenceError(error instanceof Error ? error.message : "We could not load evidence right now.");
+          setEvidenceError(error instanceof Error ? error.message : "Could not load evidence.");
         }
       });
     };
@@ -432,7 +434,7 @@ export default function ClaimDetailScreen() {
 
       fetchReportsForClaim(claimId).catch((error) => {
         if (mounted) {
-          setReportError(error instanceof Error ? error.message : "We could not load reports right now.");
+          setReportError(error instanceof Error ? error.message : "Could not load reports right now.");
         }
       });
     };
@@ -468,7 +470,7 @@ export default function ClaimDetailScreen() {
 
     refreshClaimVerdict(claimId).catch((error) => {
       if (mounted) {
-        setDetailError(error instanceof Error ? error.message : "We could not refresh this verdict.");
+        setDetailError(error instanceof Error ? error.message : "Could not refresh this verdict.");
       }
     });
 
@@ -499,7 +501,7 @@ export default function ClaimDetailScreen() {
     fetchEvidenceForClaim(claim.id)
       .catch((error) => {
         if (mounted) {
-          setEvidenceError(error instanceof Error ? error.message : "We could not load evidence right now.");
+          setEvidenceError(error instanceof Error ? error.message : "Could not load evidence.");
         }
       })
       .finally(() => {
@@ -528,7 +530,7 @@ export default function ClaimDetailScreen() {
     fetchReportsForClaim(claim.id)
       .catch((error) => {
         if (mounted) {
-          setReportError(error instanceof Error ? error.message : "We could not load reports right now.");
+          setReportError(error instanceof Error ? error.message : "Could not load reports right now.");
         }
       })
       .finally(() => {
@@ -589,7 +591,7 @@ export default function ClaimDetailScreen() {
     if (!trimmedUrl) {
       nextErrors.url = "Evidence URL is required.";
     } else if (!isValidEvidenceUrl(trimmedUrl)) {
-      nextErrors.url = "Enter a valid evidence URL.";
+      nextErrors.url = "Please check the source URL.";
     }
 
     if (!trimmedNote) {
@@ -633,7 +635,7 @@ export default function ClaimDetailScreen() {
       setEvidenceErrors({});
       setEvidenceSuccess("Evidence saved.");
     } catch (error) {
-      setEvidenceError(error instanceof Error ? error.message : "We could not save this evidence. Please try again.");
+      setEvidenceError(error instanceof Error ? error.message : "Could not save evidence right now.");
     } finally {
       setEvidenceSubmitLoading(false);
     }
@@ -671,7 +673,7 @@ export default function ClaimDetailScreen() {
       setSelectedReportReason(reasonToSubmit);
       setReportSuccess(true);
     } catch (error) {
-      setReportError(error instanceof Error ? error.message : "We could not save this report. Please try again.");
+      setReportError(error instanceof Error ? error.message : "Could not submit report right now.");
     } finally {
       setReportSubmitting(false);
     }
@@ -679,12 +681,13 @@ export default function ClaimDetailScreen() {
 
   // PHASE 3 STEP 4
   const handleVote = async (vote: VoteOption) => {
-    if (!claim) {
+    if (!claim || voteSubmitting) {
       return;
     }
 
     setVoteError("");
     setVoteSuccess("");
+    setVoteSubmitting(true);
 
     try {
       // PHASE 3 STEP 20D
@@ -694,7 +697,9 @@ export default function ClaimDetailScreen() {
       await waitForClaimRefetch();
       await refreshDetailClaim();
     } catch (error) {
-      setVoteError(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
+      setVoteError(error instanceof Error ? error.message : "Could not save vote right now.");
+    } finally {
+      setVoteSubmitting(false);
     }
   };
 
@@ -774,7 +779,7 @@ export default function ClaimDetailScreen() {
   const voteWindowClosesAt = getVoteAcceptUntil(claim);
   const scoreLockAt = getScoreLockAt(claim);
   // PHASE 3 STEP 22
-  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote);
+  const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote) || voteSubmitting;
   const automaticVerdict = !votingOpen && claim.status !== "VOTING_CLOSED" ? calculateAutomaticVerdict(claim) : undefined;
   // PHASE 3 STEP 10
   const verdictTitle =
@@ -815,7 +820,9 @@ export default function ClaimDetailScreen() {
     claim.aiCheck.sourceNotes ??
     claim.aiSummary ??
     claim.aiCheck.reason ??
-    "AI pre-check is pending. Community voting and evidence are still needed.";
+    (claim.aiCheck.status === "PENDING"
+      ? "No AI result yet. FactLens will check this claim shortly."
+      : "No AI result yet.");
   // PHASE 4 STEP 22
   const sourceReadStatusLabel = getSourceReadStatusLabel(claim.sourceReadStatus);
   const sourceSupportLabel = getSourceSupportLabel(claim.sourceSupportsClaim);
@@ -833,14 +840,16 @@ export default function ClaimDetailScreen() {
     claim.aiCheck.status === "NEEDS_MORE_EVIDENCE" ||
     claim.aiCheck.confidence === null ||
     claim.aiCheck.confidence === undefined;
-  const voteMessage = !votingOpen
+  const voteMessage = voteSubmitting
+    ? "Saving vote..."
+    : !votingOpen
     ? ""
     : !isAuthenticated
       ? "Please log in to vote."
         : !isVerified
           ? "Please verify your email to vote."
         : claim.userVote
-          ? "You already voted on this post."
+          ? "You already voted on this claim."
           : "Choose one option before voting closes.";
   const phaseLabel = claim.phase4Locked
     ? "Phase 4 · Locked"
@@ -867,6 +876,7 @@ export default function ClaimDetailScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* PHASE 3 STEP 12 */}
         {liveUpdatesOn ? <Text style={styles.liveText}>Live updates on</Text> : null}
+        {detailLoading ? <Text style={styles.inlineLoadingText}>Loading claim detail...</Text> : null}
         <View style={styles.cardFlush}>
           <VerdictBanner
             status={claim.status}
@@ -893,6 +903,16 @@ export default function ClaimDetailScreen() {
               <Text style={styles.sourceUrl} selectable>
                 {claim.sourceUrl}
               </Text>
+            </View>
+            {/* PHASE 4 STEP 24 */}
+            <View style={styles.communitySummaryPanel}>
+              <Text style={styles.communitySummaryTitle}>Community vote results</Text>
+              <VoteBreakdownBars
+                votesTrue={claim.votesTrue}
+                votesFake={claim.votesFake}
+                votesUnsure={claim.votesUnsure}
+                totalVotes={totalVotes}
+              />
             </View>
             <View style={styles.aiDetailPanel}>
               <Text style={styles.aiDetailTitle}>AI pre-check</Text>
@@ -936,8 +956,10 @@ export default function ClaimDetailScreen() {
                   <Text style={[styles.sourceSupportText, sourceSupportTextStyle]}>{sourceSupportLabel}</Text>
                 </View>
                 {sourceSupportSummary ? (
-                  <Text style={styles.sourceSupportSummary}>{sourceSupportSummary}</Text>
-                ) : null}
+                  <Text style={styles.sourceSupportSummary} numberOfLines={5}>{sourceSupportSummary}</Text>
+                ) : (
+                  <Text style={styles.sourceSupportSummary}>Source support has not been summarized yet.</Text>
+                )}
                 <Text style={styles.sourceSupportDisclaimer}>
                   This only checks whether the source appears to support the claim. It is not a final truth decision.
                 </Text>
@@ -946,7 +968,7 @@ export default function ClaimDetailScreen() {
               <Text style={styles.aiText}>
                 {evidenceUsedCount > 0
                   ? `AI reviewed ${evidenceUsedCount} evidence links.`
-                  : "No evidence links were used in this AI check."}
+                  : "No evidence used in this AI check yet."}
               </Text>
               <Text style={styles.aiText}>{aiSummary}</Text>
               {claim.redFlags.length > 0 ? (
@@ -1023,24 +1045,6 @@ export default function ClaimDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Description</Text>
-          <Text style={styles.description}>{claim.description}</Text>
-          {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.label}>Main Source</Text>
-          <Text style={styles.sourceUrl} selectable>
-            {claim.sourceUrl}
-          </Text>
-          <View style={styles.sourceQualityPanel}>
-            <SourceQualityBadge quality={mainSourceQuality} />
-            <Text style={styles.sourceQualityReason}>Score: {formatSourceCredibilityScore(displayedSourceScore)}</Text>
-            <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color)]}>{displayedSourceMessage.text}</Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
           <Text style={styles.label}>Share Link</Text>
           <Text style={styles.sourceUrl} selectable>
             {claim.shareUrl}
@@ -1082,7 +1086,7 @@ export default function ClaimDetailScreen() {
                     activeOpacity={0.8}
                     onPress={() => {
                       Linking.openURL(mediaUrl).catch(() => {
-                        Alert.alert("We could not open this link.");
+                        Alert.alert("Could not open this link.");
                       });
                     }}
                   >
@@ -1278,7 +1282,7 @@ export default function ClaimDetailScreen() {
                       <SourceQualityBadge quality={sourceQuality} showScore />
                       <Text style={styles.sourceQualityReason}>{sourceQuality.reason}</Text>
                     </View>
-                    <Text style={styles.evidenceNote}>{item.note}</Text>
+                    <Text style={styles.evidenceNote} numberOfLines={6}>{item.note}</Text>
                     <TouchableOpacity
                       style={styles.openSourceButton}
                       activeOpacity={0.8}
@@ -1292,10 +1296,27 @@ export default function ClaimDetailScreen() {
               })
             ) : null}
             {!evidenceLoading && sortedEvidence.length === 0 ? (
-              <Text style={styles.placeholder}>No evidence links added yet.</Text>
+              <Text style={styles.placeholder}>No evidence yet.</Text>
             ) : null}
           </View>
         </View>
+
+        {votingOpen ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>Cast Your Vote</Text>
+            {claim.userVote ? (
+              <Text style={styles.userVoteText}>You voted: {getVoteOptionLabel(claim.userVote)}</Text>
+            ) : null}
+            <VoteButtons
+              disabled={voteDisabled}
+              selectedVote={claim.userVote}
+              message={voteMessage}
+              onVote={handleVote}
+            />
+            {voteSuccess ? <Text style={styles.voteSuccess}>{voteSuccess}</Text> : null}
+            {voteError ? <Text style={styles.voteError}>{voteError}</Text> : null}
+          </View>
+        ) : null}
 
         <View style={styles.card}>
           <Text style={styles.label}>Test voting window</Text>
@@ -1353,23 +1374,6 @@ export default function ClaimDetailScreen() {
           </View>
         </View>
 
-        {votingOpen ? (
-          <View style={styles.card}>
-            <Text style={styles.label}>Cast Your Vote</Text>
-            {claim.userVote ? (
-              <Text style={styles.userVoteText}>You voted: {getVoteOptionLabel(claim.userVote)}</Text>
-            ) : null}
-            <VoteButtons
-              disabled={voteDisabled}
-              selectedVote={claim.userVote}
-              message={voteMessage}
-              onVote={handleVote}
-            />
-            {voteSuccess ? <Text style={styles.voteSuccess}>{voteSuccess}</Text> : null}
-            {voteError ? <Text style={styles.voteError}>{voteError}</Text> : null}
-          </View>
-        ) : null}
-
         {!votingOpen && verdictTitle ? (
           <View style={styles.card}>
             <Text style={styles.label}>System verdict</Text>
@@ -1382,15 +1386,6 @@ export default function ClaimDetailScreen() {
             </View>
           </View>
         ) : null}
-
-        <View style={styles.card}>
-          <VoteBreakdownBars
-            votesTrue={claim.votesTrue}
-            votesFake={claim.votesFake}
-            votesUnsure={claim.votesUnsure}
-            totalVotes={totalVotes}
-          />
-        </View>
 
         {votingOpen ? (
           <View style={styles.card}>
@@ -1443,6 +1438,13 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  // PHASE 4 STEP 24
+  inlineLoadingText: {
+    alignSelf: "flex-start",
+    color: theme.colors.subtext,
+    fontSize: 12,
+    marginBottom: theme.spacing.sm,
   },
   card: {
     backgroundColor: theme.colors.background,
@@ -1699,6 +1701,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 5,
+  },
+  // PHASE 4 STEP 24
+  communitySummaryPanel: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    overflow: "hidden",
+  },
+  communitySummaryTitle: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontWeight: "600",
+    paddingHorizontal: 14,
+    paddingTop: 12,
   },
   metaWrap: {
     alignItems: "center",

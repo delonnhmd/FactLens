@@ -68,14 +68,14 @@ function getReportErrorMessage(message: string, action: "load" | "save" | "delet
   }
 
   if (action === "load") {
-    return "We could not load reports right now. Please try again.";
+    return "Could not load reports right now.";
   }
 
   if (action === "delete") {
-    return "We could not delete this report. Please try again.";
+    return "Could not delete report right now.";
   }
 
-  return "We could not save this report. Please try again.";
+  return "Could not submit report right now.";
 }
 
 function mapReportRowToReport(row: ReportRow): Report {
@@ -164,7 +164,7 @@ export async function recalculateReportCount(claimId: string): Promise<ClaimRepo
   if (result.error || !result.claim) {
     return {
       claim: null,
-      error: result.error ?? "We could not refresh this claim after reporting.",
+      error: result.error ?? "Could not refresh this claim after reporting.",
     };
   }
 

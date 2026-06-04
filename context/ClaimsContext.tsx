@@ -356,7 +356,8 @@ function getRealtimeClaimId(payload: RealtimeChangePayload): string | null {
 }
 
 // PHASE 3 STEP 20E
-const ALREADY_VOTED_MESSAGE = "You already voted on this post.";
+// PHASE 4 STEP 24
+const ALREADY_VOTED_MESSAGE = "You already voted on this claim.";
 
 function toAppVoteOption(voteType: string | null | undefined): VoteOption | null {
   const normalizedVoteType = String(voteType ?? "")
@@ -428,7 +429,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   const setClaimsErrorFromResult = useCallback((result: Partial<ClaimsResult>) => {
     const message = result.errorMessage ?? result.error ?? "Could not load claims.";
-    setError(result.error ?? message);
+    // PHASE 4 STEP 24
+    setError("Could not load claims.");
     setClaimsErrorMessage(message);
     setClaimsErrorCode(result.errorCode ?? null);
     setClaimsErrorDetails(result.errorDetails ?? null);
@@ -439,7 +441,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const setClaimsErrorFromUnknown = useCallback((loadError: unknown) => {
     const parts = getDebugErrorParts(loadError);
     const message = parts.message || "Could not load claims.";
-    setError(message);
+    // PHASE 4 STEP 24
+    setError("Could not load claims.");
     setClaimsErrorMessage(message);
     setClaimsErrorCode(parts.code || null);
     setClaimsErrorDetails(parts.details || null);
@@ -710,7 +713,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       })
       .catch((finalizeError) => {
         if (mounted) {
-          setError(finalizeError instanceof Error ? finalizeError.message : "We could not finalize expired claims.");
+          setError(finalizeError instanceof Error ? finalizeError.message : "Could not finalize expired claims.");
         }
       })
       .finally(() => {
@@ -937,7 +940,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     }
 
     if (result.error || !result.claim) {
-      throw new Error(result.error ?? "We could not save this claim. Please try again.");
+      throw new Error(result.error ?? "Could not create claim right now.");
     }
 
     const createdClaim = result.claim;
@@ -1143,7 +1146,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.error || !serviceUpdatedClaim) {
-        throw new Error(result.error ?? "We could not save your vote. Please try again.");
+        throw new Error(result.error ?? "Could not save vote right now.");
       }
 
       // PHASE 3 STEP 20D
@@ -1225,7 +1228,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         const addResult = await addRemoteEvidence(claimId, currentUser.id, evidenceInput);
 
         if (addResult.error || !addResult.evidence) {
-          throw new Error(addResult.error ?? "We could not save this evidence. Please try again.");
+          throw new Error(addResult.error ?? "Could not save evidence right now.");
         }
 
         const listResult = await fetchRemoteEvidenceForClaim(claimId);
@@ -1321,7 +1324,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       const result = await reportRemoteClaim(claimId, currentUser.id, reason, note);
 
       if (result.error || !result.claim) {
-        throw new Error(result.error ?? "We could not save this report. Please try again.");
+        throw new Error(result.error ?? "Could not submit report right now.");
       }
 
       const reportsResult = await fetchRemoteReportsForClaim(claimId);

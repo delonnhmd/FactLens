@@ -136,7 +136,7 @@ export default function CreateScreen() {
         setSelectedImage(image);
       }
     } catch (error) {
-      setImageError(error instanceof Error ? error.message : "We could not select this image. Please try again.");
+      setImageError(error instanceof Error ? error.message : "Could not select this image right now.");
     }
   };
 
@@ -177,7 +177,8 @@ export default function CreateScreen() {
       router.replace({ pathname: "/", params: { claimPosted: "1" } });
     } catch (claimError) {
       setErrors({
-        general: claimError instanceof Error ? claimError.message : "We could not save this claim. Please try again.",
+        // PHASE 4 STEP 24
+        general: claimError instanceof Error ? claimError.message : "Could not create claim right now.",
       });
     } finally {
       setIsSubmitting(false);

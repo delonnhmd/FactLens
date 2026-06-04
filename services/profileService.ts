@@ -85,11 +85,11 @@ function getProfileErrorMessage(message: string, code?: string): string {
     return "Username already taken.";
   }
 
-  return "We could not load your profile. Please try again.";
+  return "Could not load your profile right now.";
 }
 
 function getProfileLoadErrorMessage(): string {
-  return "We could not load your profile. Please try again.";
+  return "Could not load your profile right now.";
 }
 
 // PHASE 3 STEP 18C

@@ -227,30 +227,22 @@ function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
 function getClaimLoadError(error: unknown): string {
   logClaimsFetchErrorFull(error);
   logClaimsFetchError(error as SupabaseErrorLike);
-  return [
-    `Could not load claims: ${getDebugErrorParts(error).message}`,
-    `Code: ${getDebugErrorParts(error).code || "none"}`,
-    `Details: ${getDebugErrorParts(error).details || "none"}`,
-    `Hint: ${getDebugErrorParts(error).hint || "none"}`,
-  ].join("\n");
+  // PHASE 4 STEP 24
+  void getDebugErrorParts(error);
+  return "Could not load claim details.";
 }
 
 function getClaimsErrorResult(error: unknown, prefix = "Could not load claims"): ClaimsResult {
   const parts = getDebugErrorParts(error);
   const message = prefix === "Claim mapping failed" ? `${prefix}: ${parts.message}` : parts.message;
-  const displayError = [
-    `${prefix}: ${parts.message}`,
-    `Code: ${parts.code || "none"}`,
-    `Details: ${parts.details || "none"}`,
-    `Hint: ${parts.hint || "none"}`,
-  ].join("\n");
 
   console.log("[CLAIMS FETCH ERROR FULL]", formatErrorForDisplay(error));
 
   return {
     ok: false,
     claims: [],
-    error: displayError,
+    // PHASE 4 STEP 24
+    error: "Could not load claims.",
     errorMessage: message,
     errorCode: parts.code,
     errorDetails: parts.details,
@@ -277,16 +269,9 @@ function removeUndefinedValues<T extends Record<string, unknown>>(payload: T): T
 
 // PHASE 4 STEP 13
 function formatSupabaseMutationError(error: SupabaseErrorLike): string {
-  const parts = getDebugErrorParts(error);
-
-  return [
-    `We could not save this claim: ${parts.message}`,
-    parts.code ? `Code: ${parts.code}` : "",
-    parts.details ? `Details: ${parts.details}` : "",
-    parts.hint ? `Hint: ${parts.hint}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // PHASE 4 STEP 24
+  console.log("[create claim] friendly error from Supabase:", getDebugErrorParts(error));
+  return "Could not create claim right now.";
 }
 
 // PHASE 4 STEP 12
@@ -372,18 +357,19 @@ function getClaimServiceErrorMessage(message: string, action: "load" | "save" | 
   }
 
   if (action === "save") {
-    return "We could not save this claim. Please try again.";
+    return "Could not create claim right now.";
   }
 
   if (action === "delete") {
-    return "We could not delete this claim. Please try again.";
+    return "Could not delete claim right now.";
   }
 
   if (VERIFICATION_MODE === "test" || process.env.NODE_ENV !== "production") {
-    return `Could not load claims: ${message}`;
+    console.log("[claims load friendly error]", message);
+    return "Could not load claims.";
   }
 
-  return "We could not load claims right now. Please try again.";
+  return "Could not load claims.";
 }
 
 function mapStatus(status: string | null): ClaimStatus {

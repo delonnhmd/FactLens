@@ -27,7 +27,7 @@ function getImageUploadErrorMessage(message: string): string {
     return "You are not allowed to upload this image.";
   }
 
-  return "We could not upload this image. Please try again.";
+  return "Could not upload this image right now.";
 }
 
 export async function pickClaimImage(): Promise<PickedClaimImage | null> {

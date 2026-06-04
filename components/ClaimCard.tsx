@@ -116,7 +116,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         const message = await onVote(claim.id, vote);
         Alert.alert(typeof message === "string" ? message : `Vote saved: ${voteLabels[vote]}`);
       } catch (error) {
-        Alert.alert(error instanceof Error ? error.message : "We could not save your vote. Please try again.");
+        Alert.alert(error instanceof Error ? error.message : "Could not save vote right now.");
       }
     },
     [claim.id, onVote],
@@ -127,7 +127,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       await onReport(claim.id, "Spam", "");
       Alert.alert("Report submitted.");
     } catch (error) {
-      Alert.alert(error instanceof Error ? error.message : "We could not save this report. Please try again.");
+      Alert.alert(error instanceof Error ? error.message : "Could not submit report right now.");
     }
   }, [claim.id, onReport]);
 

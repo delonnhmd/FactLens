@@ -65,14 +65,14 @@ function getEvidenceErrorMessage(message: string, action: "load" | "save" | "del
   }
 
   if (action === "load") {
-    return "We could not load evidence right now. Please try again.";
+    return "Could not load evidence.";
   }
 
   if (action === "delete") {
-    return "We could not delete this evidence. Please try again.";
+    return "Could not delete evidence right now.";
   }
 
-  return "We could not save this evidence. Please try again.";
+  return "Could not save evidence right now.";
 }
 
 // PHASE 4 STEP 14
@@ -84,16 +84,9 @@ function removeUndefinedValues<T extends Record<string, unknown>>(payload: T): T
 
 // PHASE 4 STEP 14
 function formatSupabaseEvidenceError(error: { message?: unknown; code?: unknown; details?: unknown; hint?: unknown }): string {
-  const parts = getDebugErrorParts(error);
-
-  return [
-    `We could not save this evidence: ${parts.message}`,
-    parts.code ? `Code: ${parts.code}` : "",
-    parts.details ? `Details: ${parts.details}` : "",
-    parts.hint ? `Hint: ${parts.hint}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // PHASE 4 STEP 24
+  console.log("[evidence] friendly error from Supabase:", getDebugErrorParts(error));
+  return "Could not save evidence right now. Please check the source URL.";
 }
 
 // PHASE 4 STEP 14
@@ -157,7 +150,7 @@ function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string |
   }
 
   if (trimmedUrl && !isValidEvidenceUrl(trimmedUrl)) {
-    return "Enter a valid evidence URL.";
+    return "Please check the source URL.";
   }
 
   if (input.note !== undefined && !trimmedNote) {

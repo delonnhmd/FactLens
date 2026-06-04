@@ -49,7 +49,8 @@ interface ClaimVoteResult {
   countRefreshFailed?: boolean;
 }
 
-const ALREADY_VOTED_MESSAGE = "You already voted on this post.";
+// PHASE 4 STEP 24
+const ALREADY_VOTED_MESSAGE = "You already voted on this claim.";
 const TRIGGER_REFETCH_DELAY_MS = 300;
 
 function waitForClaimTrigger() {
@@ -153,7 +154,7 @@ function getVoteErrorMessage(message: string): string {
   }
 
   // PHASE 3 STEP 22
-  return message || "We could not save your vote. Please try again.";
+  return message || "Could not save vote right now.";
 }
 
 function logVoteSupabaseError({

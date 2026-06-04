@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return result.message ? { message: result.message, profile: nextProfile } : { profile: nextProfile };
     } catch {
-      const message = "We could not load your profile. Please try again.";
+      const message = "Could not load your profile right now.";
       setProfile(null);
       setProfileError(message);
       return { error: message, profile: null };
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (mounted) {
-          setProfileError("We could not load your session. Please try again.");
+          setProfileError("Could not load your session right now.");
         }
       })
       .finally(() => {

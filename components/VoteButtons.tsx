@@ -47,7 +47,8 @@ export function VoteButtons({
 }: VoteButtonsProps) {
   const activeVote = selectedVote ?? userVote ?? null;
   const isLocked = disabled || Boolean(activeVote);
-  const visibleMessage = activeVote ? "You already voted on this post." : message;
+  // PHASE 4 STEP 24
+  const visibleMessage = activeVote ? "You already voted on this claim." : message;
 
   return (
     <View>
