@@ -191,7 +191,8 @@ def home():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-5"}
+    # PHASE 4 STEP 21B
+    return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-21b"}
 
 
 # PHASE 4 STEP 5F-2

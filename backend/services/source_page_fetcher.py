@@ -1,4 +1,5 @@
 # PHASE 4 STEP 21
+# PHASE 4 STEP 21B
 import re
 from urllib.parse import urlparse
 
@@ -7,6 +8,7 @@ from bs4 import BeautifulSoup
 
 
 MAX_SOURCE_EXCERPT_CHARS = 5500
+MAX_SOURCE_HTML_BYTES = 750_000
 SOURCE_FETCH_TIMEOUT_SECONDS = 9
 SOURCE_FETCH_USER_AGENT = (
     "FactLensBot/1.0 (+https://factlens.app; source support precheck; contact: support@factlens.app)"
@@ -61,6 +63,26 @@ def extract_readable_text(soup: BeautifulSoup) -> str:
     return text[:MAX_SOURCE_EXCERPT_CHARS]
 
 
+def read_limited_response_text(response: requests.Response) -> str:
+    chunks: list[bytes] = []
+    total_bytes = 0
+
+    for chunk in response.iter_content(chunk_size=16_384):
+        if not chunk:
+            continue
+
+        chunks.append(chunk)
+        total_bytes += len(chunk)
+
+        if total_bytes >= MAX_SOURCE_HTML_BYTES:
+            break
+
+    raw_html = b"".join(chunks)[:MAX_SOURCE_HTML_BYTES]
+    encoding = response.encoding or "utf-8"
+
+    return raw_html.decode(encoding, errors="replace")
+
+
 def fetch_source_page(url: str | None) -> dict:
     fetch_url = normalize_fetch_url(url)
 
@@ -77,6 +99,7 @@ def fetch_source_page(url: str | None) -> dict:
         response = requests.get(
             fetch_url,
             timeout=SOURCE_FETCH_TIMEOUT_SECONDS,
+            stream=True,
             headers={
                 "User-Agent": SOURCE_FETCH_USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -93,21 +116,33 @@ def fetch_source_page(url: str | None) -> dict:
             "error": str(error)[:300],
         }
 
-    content_type = response.headers.get("content-type", "").lower()
+    try:
+        content_type = response.headers.get("content-type", "").lower()
 
-    if "html" not in content_type and "text/plain" not in content_type:
+        if "html" not in content_type and "text/plain" not in content_type:
+            return {
+                "status": "failed",
+                "title": "",
+                "meta_description": "",
+                "excerpt": "",
+                "error": f"Unsupported content type: {content_type or 'unknown'}",
+            }
+
+        html = read_limited_response_text(response)
+        soup = BeautifulSoup(html, "html.parser")
+        title = collapse_whitespace(soup.title.get_text(" ", strip=True)) if soup.title else ""
+        meta_description = extract_meta_description(soup)
+        excerpt = extract_readable_text(soup)
+    except Exception as error:
         return {
             "status": "failed",
             "title": "",
             "meta_description": "",
             "excerpt": "",
-            "error": f"Unsupported content type: {content_type or 'unknown'}",
+            "error": str(error)[:300],
         }
-
-    soup = BeautifulSoup(response.text, "html.parser")
-    title = collapse_whitespace(soup.title.get_text(" ", strip=True)) if soup.title else ""
-    meta_description = extract_meta_description(soup)
-    excerpt = extract_readable_text(soup)
+    finally:
+        response.close()
 
     if not excerpt:
         return {
