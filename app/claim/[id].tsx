@@ -9,6 +9,7 @@
 // PHASE 4 STEP 15
 // PHASE 4 STEP 18
 // PHASE 4 STEP 18B
+// PHASE 4 STEP 22
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -127,6 +128,71 @@ function formatClaimType(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+// PHASE 4 STEP 22
+function getSourceReadStatusLabel(status: string | null | undefined): string {
+  if (status === "read") {
+    return "Source page read";
+  }
+
+  if (status === "failed") {
+    return "Could not read source page";
+  }
+
+  return "Source page not read yet";
+}
+
+// PHASE 4 STEP 22
+function getSourceSupportLabel(sourceSupportsClaim: boolean | null | undefined): string {
+  if (sourceSupportsClaim === true) {
+    return "Source appears to support this claim";
+  }
+
+  if (sourceSupportsClaim === false) {
+    return "Source may not support this claim";
+  }
+
+  return "Source support unclear";
+}
+
+// PHASE 4 STEP 22
+function getSourceSupportIcon(sourceSupportsClaim: boolean | null | undefined): "checkmark-circle-outline" | "alert-circle-outline" | "help-circle-outline" {
+  if (sourceSupportsClaim === true) {
+    return "checkmark-circle-outline";
+  }
+
+  if (sourceSupportsClaim === false) {
+    return "alert-circle-outline";
+  }
+
+  return "help-circle-outline";
+}
+
+// PHASE 4 STEP 22
+function getSourceSupportColor(sourceSupportsClaim: boolean | null | undefined): string {
+  if (sourceSupportsClaim === true) {
+    return theme.colors.success;
+  }
+
+  if (sourceSupportsClaim === false) {
+    return theme.colors.warning;
+  }
+
+  return theme.colors.subtext;
+}
+
+// PHASE 4 STEP 22
+function getSourceSupportTextStyle(sourceSupportsClaim: boolean | null | undefined) {
+  if (sourceSupportsClaim === true) {
+    return styles.sourceSupportPositive;
+  }
+
+  if (sourceSupportsClaim === false) {
+    return styles.sourceSupportWarning;
+  }
+
+  return styles.sourceSupportNeutral;
 }
 
 function getSourceMessageStyle(color: SourceMessageColor) {
@@ -693,6 +759,14 @@ export default function ClaimDetailScreen() {
     claim.aiSummary ??
     claim.aiCheck.reason ??
     "AI pre-check is pending. Community voting and evidence are still needed.";
+  // PHASE 4 STEP 22
+  const sourceReadStatusLabel = getSourceReadStatusLabel(claim.sourceReadStatus);
+  const sourceSupportLabel = getSourceSupportLabel(claim.sourceSupportsClaim);
+  const sourceSupportIcon = getSourceSupportIcon(claim.sourceSupportsClaim);
+  const sourceSupportColor = getSourceSupportColor(claim.sourceSupportsClaim);
+  const sourceSupportTextStyle = getSourceSupportTextStyle(claim.sourceSupportsClaim);
+  const sourcePageTitle = claim.sourcePageTitle?.trim();
+  const sourceSupportSummary = claim.sourceSupportSummary?.trim();
   // PHASE 4 STEP 7
   const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
   // PHASE 4 STEP 3
@@ -784,6 +858,33 @@ export default function ClaimDetailScreen() {
                 </View>
               </View>
               <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color)]}>{displayedSourceMessage.text}</Text>
+              {/* PHASE 4 STEP 22 */}
+              <View style={styles.sourceSupportPanel}>
+                <Text style={styles.sourceSupportKicker}>Source support signal</Text>
+                <View style={styles.sourceSupportRow}>
+                  <Ionicons
+                    name={claim.sourceReadStatus === "read" ? "document-text-outline" : "warning-outline"}
+                    size={15}
+                    color={claim.sourceReadStatus === "read" ? theme.colors.success : theme.colors.warning}
+                  />
+                  <Text style={styles.sourceSupportText}>{sourceReadStatusLabel}</Text>
+                </View>
+                {sourcePageTitle ? (
+                  <Text style={styles.sourceSupportTitle} numberOfLines={2}>
+                    {sourcePageTitle}
+                  </Text>
+                ) : null}
+                <View style={styles.sourceSupportRow}>
+                  <Ionicons name={sourceSupportIcon} size={15} color={sourceSupportColor} />
+                  <Text style={[styles.sourceSupportText, sourceSupportTextStyle]}>{sourceSupportLabel}</Text>
+                </View>
+                {sourceSupportSummary ? (
+                  <Text style={styles.sourceSupportSummary}>{sourceSupportSummary}</Text>
+                ) : null}
+                <Text style={styles.sourceSupportDisclaimer}>
+                  This only checks whether the source appears to support the claim. It is not a final truth decision.
+                </Text>
+              </View>
               <Text style={styles.aiText}>Evidence used by AI: {evidenceUsedCount}</Text>
               <Text style={styles.aiText}>
                 {evidenceUsedCount > 0
@@ -1556,6 +1657,58 @@ const styles = StyleSheet.create({
   },
   sourceMessageRed: {
     color: theme.colors.danger,
+  },
+  // PHASE 4 STEP 22
+  sourceSupportPanel: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  sourceSupportKicker: {
+    color: theme.colors.ai,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  sourceSupportRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  sourceSupportText: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  sourceSupportPositive: {
+    color: theme.colors.success,
+  },
+  sourceSupportWarning: {
+    color: theme.colors.warning,
+  },
+  sourceSupportNeutral: {
+    color: theme.colors.subtext,
+  },
+  sourceSupportTitle: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
+  sourceSupportSummary: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  sourceSupportDisclaimer: {
+    color: theme.colors.muted,
+    fontSize: 11,
+    lineHeight: 15,
   },
   copyButton: {
     alignItems: "center",

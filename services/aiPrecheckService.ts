@@ -8,6 +8,7 @@
 // PHASE 4 STEP 10B
 // PHASE 4 STEP 15
 // PHASE 4 STEP 20
+// PHASE 4 STEP 22
 import { API_CONFIG } from "../constants/apiConfig";
 import type { Claim } from "../types/claim";
 
@@ -22,6 +23,11 @@ export interface AiPrecheckResponse {
   source_domain?: string | null;
   source_score?: number | null;
   source_reason?: string | null;
+  // PHASE 4 STEP 22
+  source_read_status?: string | null;
+  source_page_title?: string | null;
+  source_supports_claim?: boolean | null;
+  source_support_summary?: string | null;
   evidence_used_count?: number | null;
   red_flags?: string[] | null;
   ai_summary?: string | null;
@@ -143,6 +149,10 @@ async function postAiPrecheck(
       source_domain: json.source_domain ?? null,
       source_score: json.source_score ?? null,
       source_reason: json.source_reason ?? null,
+      source_read_status: json.source_read_status ?? null,
+      source_page_title: json.source_page_title ?? null,
+      source_supports_claim: json.source_supports_claim ?? null,
+      source_support_summary: json.source_support_summary ?? null,
       evidence_used_count: json.evidence_used_count ?? null,
       red_flags: json.red_flags ?? [],
       ai_summary: json.ai_summary ?? null,

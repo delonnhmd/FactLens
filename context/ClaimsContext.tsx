@@ -173,6 +173,7 @@ function mapClaimType(claimType: unknown): Claim["claimType"] {
 }
 
 // PHASE 4 STEP 17
+// PHASE 4 STEP 22
 const ALLOWED_SOURCE_QUALITIES = ["official", "mainstream", "specialized", "social", "blog", "unknown"];
 
 function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
@@ -181,12 +182,49 @@ function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
   return ALLOWED_SOURCE_QUALITIES.includes(normalizedSourceQuality) ? normalizedSourceQuality : "unknown";
 }
 
+// PHASE 4 STEP 22
+function mapSourceReadStatus(sourceReadStatus: unknown): Claim["sourceReadStatus"] {
+  const normalizedStatus = typeof sourceReadStatus === "string" ? sourceReadStatus.trim().toLowerCase() : "";
+
+  if (normalizedStatus === "read" || normalizedStatus === "failed" || normalizedStatus === "not_read") {
+    return normalizedStatus;
+  }
+
+  return "not_read";
+}
+
 function getNumberField(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function getStringField(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+// PHASE 4 STEP 22
+function getNullableStringField(value: unknown, fallback: string | null): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return fallback;
+}
+
+// PHASE 4 STEP 22
+function getNullableBooleanField(value: unknown, fallback: boolean | null): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  return fallback;
 }
 
 function getStringListField(value: unknown): string[] {
@@ -221,6 +259,29 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const sourceDomain = getStringField(updatedClaim.source_domain ?? result.source_domain) ?? claim.sourceDomain;
   const sourceScore = getNumberField(updatedClaim.source_score ?? result.source_score) ?? claim.sourceScore;
   const sourceReason = getStringField(updatedClaim.source_reason ?? result.source_reason) ?? claim.sourceReason;
+  // PHASE 4 STEP 22
+  const sourceReadStatusRaw = Object.prototype.hasOwnProperty.call(updatedClaim, "source_read_status")
+    ? updatedClaim.source_read_status
+    : result.source_read_status;
+  const sourcePageTitleRaw = Object.prototype.hasOwnProperty.call(updatedClaim, "source_page_title")
+    ? updatedClaim.source_page_title
+    : result.source_page_title;
+  const sourceSupportsClaimRaw = Object.prototype.hasOwnProperty.call(updatedClaim, "source_supports_claim")
+    ? updatedClaim.source_supports_claim
+    : result.source_supports_claim;
+  const sourceSupportSummaryRaw = Object.prototype.hasOwnProperty.call(updatedClaim, "source_support_summary")
+    ? updatedClaim.source_support_summary
+    : result.source_support_summary;
+  const sourceReadStatus = mapSourceReadStatus(sourceReadStatusRaw ?? claim.sourceReadStatus);
+  const sourcePageTitle = getNullableStringField(sourcePageTitleRaw, claim.sourcePageTitle);
+  const sourceSupportsClaim = getNullableBooleanField(
+    sourceSupportsClaimRaw,
+    claim.sourceSupportsClaim,
+  );
+  const sourceSupportSummary = getNullableStringField(
+    sourceSupportSummaryRaw,
+    claim.sourceSupportSummary,
+  );
   const evidenceUsedCount = getNumberField(updatedClaim.evidence_used_count ?? result.evidence_used_count) ?? claim.evidenceUsedCount;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
   const aiSummary = getStringField(updatedClaim.ai_summary ?? result.ai_summary) ?? claim.aiSummary;
@@ -235,6 +296,10 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     sourceDomain,
     sourceScore,
     sourceReason,
+    sourceReadStatus,
+    sourcePageTitle,
+    sourceSupportsClaim,
+    sourceSupportSummary,
     evidenceUsedCount,
     redFlags,
     aiSummary,

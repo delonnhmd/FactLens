@@ -4,6 +4,7 @@
 // PHASE 4 STEP 9
 // PHASE 4 STEP 10
 // PHASE 4 STEP 18B
+// PHASE 4 STEP 22
 import type { Claim } from "../types/claim";
 import { generateClaimShareUrl, generateClaimSlug } from "../services/claimLinks";
 import { getExpiresAt } from "../services/claimVoting";
@@ -37,6 +38,11 @@ const verificationFields = (createdAt: string) => ({
   sourceDomain: null,
   sourceScore: null,
   sourceReason: null,
+  // PHASE 4 STEP 22
+  sourceReadStatus: "not_read" as const,
+  sourcePageTitle: null,
+  sourceSupportsClaim: null,
+  sourceSupportSummary: null,
   evidenceUsedCount: 0,
   redFlags: [],
   aiSummary: null,

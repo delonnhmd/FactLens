@@ -14,6 +14,7 @@
 // PHASE 4 STEP 13
 // PHASE 4 STEP 17
 // PHASE 4 STEP 18
+// PHASE 4 STEP 22
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
@@ -124,6 +125,11 @@ export interface ClaimRow {
   source_domain?: string | null;
   source_score?: number | null;
   source_reason?: string | null;
+  // PHASE 4 STEP 22
+  source_read_status?: string | null;
+  source_page_title?: string | null;
+  source_supports_claim?: boolean | null;
+  source_support_summary?: string | null;
   red_flags?: unknown;
   ai_summary?: string | null;
   created_at?: string | null;
@@ -448,6 +454,17 @@ function mapSourceQuality(sourceQuality: string | null | undefined): SourceQuali
     : "unknown";
 }
 
+// PHASE 4 STEP 22
+function mapSourceReadStatus(sourceReadStatus: string | null | undefined): Claim["sourceReadStatus"] {
+  const normalizedStatus = sourceReadStatus?.trim().toLowerCase();
+
+  if (normalizedStatus === "read" || normalizedStatus === "failed" || normalizedStatus === "not_read") {
+    return normalizedStatus;
+  }
+
+  return "not_read";
+}
+
 function isValidDateString(value: string | null | undefined): value is string {
   return Boolean(value && Number.isFinite(new Date(value).getTime()));
 }
@@ -600,6 +617,11 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   const sourceDomain = row.source_domain ?? null;
   const sourceScore = row.source_score ?? null;
   const sourceReason = row.source_reason ?? null;
+  // PHASE 4 STEP 22
+  const sourceReadStatus = mapSourceReadStatus(row.source_read_status);
+  const sourcePageTitle = row.source_page_title ?? null;
+  const sourceSupportsClaim = typeof row.source_supports_claim === "boolean" ? row.source_supports_claim : null;
+  const sourceSupportSummary = row.source_support_summary ?? null;
   // PHASE 4 STEP 10
   const evidenceUsedCount = row.evidence_used_count ?? 0;
   const aiSummary = row.ai_summary ?? row.ai_reason ?? null;
@@ -669,6 +691,10 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     sourceDomain,
     sourceScore,
     sourceReason,
+    sourceReadStatus,
+    sourcePageTitle,
+    sourceSupportsClaim,
+    sourceSupportSummary,
     evidenceUsedCount,
     redFlags: aiFlags,
     aiSummary,
@@ -769,6 +795,11 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     sourceDomain: row.source_domain ?? null,
     sourceScore: row.source_score ?? null,
     sourceReason: row.source_reason ?? null,
+    // PHASE 4 STEP 22
+    sourceReadStatus: mapSourceReadStatus(row.source_read_status),
+    sourcePageTitle: row.source_page_title ?? null,
+    sourceSupportsClaim: typeof row.source_supports_claim === "boolean" ? row.source_supports_claim : null,
+    sourceSupportSummary: row.source_support_summary ?? null,
     evidenceUsedCount: row.evidence_used_count ?? 0,
     redFlags: [],
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
