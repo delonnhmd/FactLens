@@ -9,7 +9,9 @@
 // PHASE 4 STEP 15
 // PHASE 4 STEP 20
 // PHASE 4 STEP 22
+// PHASE 4 STEP 27
 import { API_CONFIG } from "../constants/apiConfig";
+import { supabase } from "../lib/supabase";
 import type { Claim } from "../types/claim";
 
 export interface AiPrecheckResponse {
@@ -36,7 +38,6 @@ export interface AiPrecheckResponse {
   detail?: unknown;
   details?: string | null;
   hint?: string | null;
-  update_payload?: Record<string, unknown> | null;
   updated_claim?: Record<string, unknown> | null;
 }
 
@@ -107,11 +108,15 @@ async function postAiPrecheck(
   const timeoutId = setTimeout(() => controller.abort(), AI_PRECHECK_TIMEOUT_MS);
 
   try {
+    // PHASE 4 STEP 27
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
     const response = await fetch(requestUrl, {
       method: "POST",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify(body),
     });
@@ -160,7 +165,6 @@ async function postAiPrecheck(
       error: responseError || json.error || null,
       details: shouldHideDebugDetails ? null : json.details ?? null,
       hint: shouldHideDebugDetails ? null : json.hint ?? null,
-      update_payload: json.update_payload ?? null,
       updated_claim: json.updated_claim ?? null,
     };
   } catch (error) {

@@ -1,6 +1,9 @@
 # PHASE 4 STEP 21
 # PHASE 4 STEP 21B
+# PHASE 4 STEP 27
+import ipaddress
 import re
+import socket
 from urllib.parse import urlparse
 
 import requests
@@ -13,6 +16,51 @@ SOURCE_FETCH_TIMEOUT_SECONDS = 9
 SOURCE_FETCH_USER_AGENT = (
     "FactLensBot/1.0 (+https://factlens.app; source support precheck; contact: support@factlens.app)"
 )
+BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain"}
+
+
+# PHASE 4 STEP 27
+def is_blocked_ip_address(address: str) -> bool:
+    try:
+        ip_address = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+
+    return (
+        ip_address.is_private
+        or ip_address.is_loopback
+        or ip_address.is_link_local
+        or ip_address.is_multicast
+        or ip_address.is_reserved
+        or ip_address.is_unspecified
+    )
+
+
+# PHASE 4 STEP 27
+def is_blocked_hostname(hostname: str) -> bool:
+    normalized_hostname = hostname.strip(".").lower()
+
+    if not normalized_hostname or normalized_hostname in BLOCKED_HOSTNAMES:
+        return True
+
+    try:
+        return is_blocked_ip_address(normalized_hostname)
+    except Exception:
+        pass
+
+    try:
+        resolved_addresses = {
+            result[4][0]
+            for result in socket.getaddrinfo(normalized_hostname, None)
+            if result and len(result) >= 5
+        }
+    except socket.gaierror:
+        return True
+
+    if not resolved_addresses:
+        return True
+
+    return any(is_blocked_ip_address(address) for address in resolved_addresses)
 
 
 def normalize_fetch_url(url: str | None) -> str:
@@ -27,6 +75,9 @@ def normalize_fetch_url(url: str | None) -> str:
     parsed_url = urlparse(normalized_url)
 
     if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc or re.search(r"\s", parsed_url.netloc):
+        return ""
+
+    if is_blocked_hostname(parsed_url.hostname or ""):
         return ""
 
     return normalized_url
@@ -107,6 +158,15 @@ def fetch_source_page(url: str | None) -> dict:
             allow_redirects=True,
         )
         response.raise_for_status()
+        if not normalize_fetch_url(response.url):
+            response.close()
+            return {
+                "status": "failed",
+                "title": "",
+                "meta_description": "",
+                "excerpt": "",
+                "error": "Source URL redirected to a blocked host.",
+            }
     except requests.RequestException as error:
         return {
             "status": "failed",

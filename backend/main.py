@@ -13,13 +13,15 @@
 # PHASE 4 STEP 10
 # PHASE 4 STEP 17
 # PHASE 4 STEP 18
+# PHASE 4 STEP 27
 import os
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Literal
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import Client, create_client
@@ -27,9 +29,7 @@ from supabase import Client, create_client
 try:
     from services.openai_factcheck import (
         analyze_claim_with_openai,
-        analyze_claim_with_openai_response,
         get_openai_model,
-        test_openai_connection,
     )
     from services.ai_library_loader import load_factlens_ai_library
     from services.source_page_fetcher import fetch_source_page
@@ -37,9 +37,7 @@ try:
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
-        analyze_claim_with_openai_response,
         get_openai_model,
-        test_openai_connection,
     )
     from backend.services.ai_library_loader import load_factlens_ai_library
     from backend.services.source_page_fetcher import fetch_source_page
@@ -47,7 +45,8 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
 
 
 load_dotenv()
-app = FastAPI(title="FactLens backend")
+# PHASE 4 STEP 27
+app = FastAPI(title="FactLens backend", docs_url=None, redoc_url=None, openapi_url=None)
 
 # PHASE 4 STEP 20
 # PHASE 4 STEP 20C
@@ -94,40 +93,52 @@ AiStatus = Literal[
 ]
 
 
-# PHASE 4 STEP 5F-2
-def get_key_role(token: str | None) -> str:
-    try:
-        import base64
-        import json
-
-        if not token:
-            return "missing"
-
-        if token.startswith("sb_secret_"):
-            return "secret_key"
-
-        if token.startswith("sb_publishable_"):
-            return "publishable_key"
-
-        parts = token.split(".")
-        if len(parts) < 2:
-            return "unknown"
-
-        payload = parts[1]
-        payload += "=" * (-len(payload) % 4)
-        decoded = base64.urlsafe_b64decode(payload.encode())
-        data = json.loads(decoded)
-        return data.get("role", "unknown")
-    except Exception:
-        return "decode_error"
+# PHASE 4 STEP 27
+AI_RATE_LIMIT_WINDOW_SECONDS = 60 * 60
+AI_RATE_LIMIT_MAX_REQUESTS = 30
+AI_CLAIM_COOLDOWN_SECONDS = 45
+SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS = 120
+RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
+CLAIM_AI_COOLDOWNS: dict[str, float] = {}
 
 
-# PHASE 4 STEP 5F-2
-print(
-    "[supabase] service role key role:",
-    get_key_role(os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")),
-    flush=True,
-)
+# PHASE 4 STEP 27
+def get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip() or "unknown"
+
+    return request.client.host if request.client else "unknown"
+
+
+# PHASE 4 STEP 27
+def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_seconds: int) -> None:
+    now = monotonic()
+    key = f"{bucket}:{get_client_ip(request)}"
+    recent_requests = [
+        timestamp
+        for timestamp in RATE_LIMIT_BUCKETS.get(key, [])
+        if now - timestamp < window_seconds
+    ]
+
+    if len(recent_requests) >= max_requests:
+        print("[rate-limit] blocked:", bucket, get_client_ip(request), flush=True)
+        raise HTTPException(status_code=429, detail="Too many actions. Please try again later.")
+
+    recent_requests.append(now)
+    RATE_LIMIT_BUCKETS[key] = recent_requests
+
+
+# PHASE 4 STEP 27
+def enforce_claim_ai_cooldown(claim_id: str) -> None:
+    now = monotonic()
+    last_request = CLAIM_AI_COOLDOWNS.get(claim_id)
+
+    if last_request is not None and now - last_request < AI_CLAIM_COOLDOWN_SECONDS:
+        print("[ai cooldown] blocked claim:", claim_id, flush=True)
+        raise HTTPException(status_code=429, detail="AI pre-check was just run. Please try again later.")
+
+    CLAIM_AI_COOLDOWNS[claim_id] = now
 
 
 class AiPrecheckRequest(BaseModel):
@@ -141,14 +152,6 @@ class AiPrecheckRequest(BaseModel):
 # PHASE 4 STEP 3
 class AiPrecheckRetryRequest(BaseModel):
     claim_id: str = ""
-
-
-# PHASE 4 STEP 5
-class AiPrecheckTestRequest(BaseModel):
-    title: str = "Coffee without sugar helps burn fat"
-    description: str = "This is a test claim."
-    source_url: str = "https://www.healthline.com"
-    category: str = "Health"
 
 
 class AiPrecheckResponse(BaseModel):
@@ -166,7 +169,6 @@ class AiPrecheckResponse(BaseModel):
     # PHASE 4 STEP 21
     source_read_status: str | None = None
     source_page_title: str | None = None
-    source_excerpt: str | None = None
     source_supports_claim: bool | None = None
     source_support_summary: str | None = None
     # PHASE 4 STEP 10
@@ -178,8 +180,6 @@ class AiPrecheckResponse(BaseModel):
     # PHASE 4 STEP 5B
     details: str | None = None
     hint: str | None = None
-    ai_result: dict | None = None
-    update_payload: dict | None = None
     supabase_updated: bool | None = None
     updated_claim: dict | None = None
 
@@ -193,20 +193,6 @@ def home():
 def health():
     # PHASE 4 STEP 21B
     return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-21b"}
-
-
-# PHASE 4 STEP 5F-2
-@app.get("/debug/supabase-role")
-def debug_supabase_role():
-    supabase_url = os.environ.get("SUPABASE_URL", "")
-    service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-
-    return {
-        "ok": True,
-        "supabase_url_configured": bool(supabase_url),
-        "service_role_key_configured": bool(service_role_key),
-        "key_role": get_key_role(service_role_key),
-    }
 
 
 # PHASE 4 STEP 8
@@ -300,6 +286,31 @@ def get_supabase_project_ref() -> str:
         return hostname.split(".")[0]
 
     return hostname or "unknown"
+
+
+# PHASE 4 STEP 27
+def get_authenticated_user_id(request: Request) -> str:
+    authorization = request.headers.get("authorization", "")
+
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    access_token = authorization.split(" ", 1)[1].strip()
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    try:
+        auth_response = get_supabase_client().auth.get_user(access_token)
+        auth_user = getattr(auth_response, "user", None)
+        user_id = getattr(auth_user, "id", None)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    return str(user_id)
 
 
 # PHASE 4 STEP 5B
@@ -426,8 +437,17 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
     print("[AI UPDATE FINAL SOURCE QUALITY]", update_payload["source_quality"], flush=True)
     print("[ai] normalized source_quality:", update_payload["source_quality"], flush=True)
     print("[ai] claim_type:", update_payload.get("claim_type"), flush=True)
-    print(f"[{endpoint_label}] AI result:", ai_result, flush=True)
-    print(f"[{endpoint_label}] update_payload:", update_payload, flush=True)
+    # PHASE 4 STEP 27
+    print(
+        f"[{endpoint_label}] AI result summary:",
+        {
+            "ai_status": ai_result.get("ai_status"),
+            "ai_confidence": ai_result.get("ai_confidence"),
+            "source_read_status": ai_result.get("source_read_status"),
+            "source_supports_claim": ai_result.get("source_supports_claim"),
+        },
+        flush=True,
+    )
 
     try:
         supabase = get_supabase_client()
@@ -437,7 +457,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
             .eq("id", claim_id)
             .execute()
         )
-        print(f"[{endpoint_label}] update_result.data:", update_result.data, flush=True)
+        print(f"[{endpoint_label}] update_result rows:", len(update_result.data or []), flush=True)
 
         update_error = getattr(update_result, "error", None)
         if update_error:
@@ -451,7 +471,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, source_read_status, source_page_title, source_excerpt, source_supports_claim, source_support_summary, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, source_read_status, source_page_title, source_supports_claim, source_support_summary, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -478,7 +498,15 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
     if isinstance(updated_claim, list):
         updated_claim = updated_claim[0] if updated_claim else None
 
-    print(f"[{endpoint_label}] fetched updated claim:", updated_claim, flush=True)
+    print(
+        f"[{endpoint_label}] fetched updated claim summary:",
+        {
+            "id": updated_claim.get("id") if updated_claim else None,
+            "ai_status": updated_claim.get("ai_status") if updated_claim else None,
+            "source_read_status": updated_claim.get("source_read_status") if updated_claim else None,
+        },
+        flush=True,
+    )
 
     if not updated_claim:
         return {
@@ -547,12 +575,30 @@ def mark_claim_ai_error(claim_id: str) -> str | None:
 def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
     updated_claim = update_result["updated_claim"]
     red_flags = normalize_red_flags(updated_claim.get("red_flags"))
+    # PHASE 4 STEP 27
+    safe_updated_claim = {
+        "id": updated_claim.get("id"),
+        "claim_type": updated_claim.get("claim_type"),
+        "ai_status": updated_claim.get("ai_status"),
+        "ai_confidence": updated_claim.get("ai_confidence"),
+        "source_quality": updated_claim.get("source_quality"),
+        "source_domain": updated_claim.get("source_domain"),
+        "source_score": updated_claim.get("source_score"),
+        "source_reason": updated_claim.get("source_reason"),
+        "source_read_status": updated_claim.get("source_read_status"),
+        "source_page_title": updated_claim.get("source_page_title"),
+        "source_supports_claim": updated_claim.get("source_supports_claim"),
+        "source_support_summary": updated_claim.get("source_support_summary"),
+        "evidence_used_count": updated_claim.get("evidence_used_count"),
+        "red_flags": red_flags,
+        "ai_summary": updated_claim.get("ai_summary"),
+        "source_count": updated_claim.get("source_count"),
+        "updated_at": updated_claim.get("updated_at"),
+    }
 
     return {
         "ok": True,
         "claim_id": claim_id,
-        "ai_result": update_result.get("ai_result"),
-        "update_payload": update_result.get("update_payload"),
         # PHASE 4 STEP 7
         "claim_type": updated_claim.get("claim_type"),
         "ai_confidence": updated_claim.get("ai_confidence"),
@@ -565,7 +611,6 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         # PHASE 4 STEP 21
         "source_read_status": updated_claim.get("source_read_status"),
         "source_page_title": updated_claim.get("source_page_title"),
-        "source_excerpt": updated_claim.get("source_excerpt"),
         "source_supports_claim": updated_claim.get("source_supports_claim"),
         "source_support_summary": updated_claim.get("source_support_summary"),
         # PHASE 4 STEP 10
@@ -577,10 +622,7 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "details": None,
         "hint": None,
         "supabase_updated": True,
-        "updated_claim": {
-            **updated_claim,
-            "red_flags": red_flags,
-        },
+        "updated_claim": safe_updated_claim,
     }
 
 
@@ -610,83 +652,34 @@ def build_precheck_payload_from_claim(claim: dict) -> AiPrecheckRequest:
     )
 
 
-# PHASE 4 STEP 5
-@app.get("/ai/test")
-def ai_test():
-    print("[ai/test] endpoint called", flush=True)
-    print(f"[ai/test] OPENAI_MODEL={get_openai_model()}", flush=True)
-    result = test_openai_connection()
-
-    if result.get("ok"):
-        print("[ai/test] OpenAI success", flush=True)
-    else:
-        print(f"[ai/test] OpenAI failure: {result.get('error')}", flush=True)
-
-    return result
-
-
 # PHASE 4 STEP 9
 @app.get("/ai/source-score")
-def ai_source_score(url: str = ""):
+def ai_source_score(request: Request, url: str = ""):
+    # PHASE 4 STEP 27
+    enforce_rate_limit(request, "ai_source_score", SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
     source_metadata = score_source_url(url)
     log_source_score("ai/source-score", source_metadata)
     return source_metadata
 
 
-# PHASE 4 STEP 10
-@app.get("/ai/evidence-preview/{claim_id}")
-def ai_evidence_preview(claim_id: str):
-    normalized_claim_id = claim_id.strip()
-
-    if not normalized_claim_id:
-        raise HTTPException(status_code=400, detail="claim_id is required")
-
-    evidence_rows = fetch_evidence_rows(normalized_claim_id)
-    return {
-        "ok": True,
-        "claim_id": normalized_claim_id,
-        "evidence_count": len(evidence_rows),
-        "evidence": evidence_rows,
-    }
-
-
-# PHASE 4 STEP 5
-@app.post("/ai/precheck/test")
-def ai_precheck_test(payload: AiPrecheckTestRequest):
-    print("[ai/precheck/test] endpoint called", flush=True)
-    print(f"[ai/precheck/test] OPENAI_MODEL={get_openai_model()}", flush=True)
-    # PHASE 4 STEP 9
-    source_metadata = score_source_url(payload.source_url)
-    log_source_score("ai/precheck/test", source_metadata)
-    # PHASE 4 STEP 21
-    source_page = fetch_source_page(payload.source_url)
-    log_source_page("ai/precheck/test", source_page)
-    result = analyze_claim_with_openai_response(
-        title=payload.title,
-        description=payload.description,
-        source_url=payload.source_url,
-        category=payload.category,
-        source_metadata=source_metadata,
-        source_page=source_page,
-    )
-
-    if result.get("ok"):
-        print(f"[ai/precheck/test] ai_status={result.get('ai_status')}", flush=True)
-        print(f"[ai/precheck/test] ai_confidence={result.get('ai_confidence')}", flush=True)
-    else:
-        print(f"[ai/precheck/test] error={result.get('error')}", flush=True)
-
-    return result
-
-
-@app.post("/ai/precheck", response_model=AiPrecheckResponse)
-def ai_precheck(payload: AiPrecheckRequest):
+@app.post("/ai/precheck", response_model=AiPrecheckResponse, response_model_exclude_none=True)
+def ai_precheck(payload: AiPrecheckRequest, request: Request):
     claim_id = payload.claim_id.strip()
 
     if not claim_id:
         raise HTTPException(status_code=400, detail="claim_id is required")
 
-    payload.claim_id = claim_id
+    # PHASE 4 STEP 27
+    enforce_rate_limit(request, "ai_precheck", AI_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    authenticated_user_id = get_authenticated_user_id(request)
+    enforce_claim_ai_cooldown(claim_id)
+    claim = fetch_claim_row(claim_id)
+
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    payload = build_precheck_payload_from_claim(claim)
+    print("[ai/precheck] authenticated user:", authenticated_user_id, flush=True)
     # PHASE 4 STEP 9
     source_metadata = score_source_url(payload.source_url)
     log_source_score("ai/precheck", source_metadata)
@@ -714,16 +707,13 @@ def ai_precheck(payload: AiPrecheckRequest):
     update_result = update_claim_ai_fields(payload.claim_id, ai_result, "ai/precheck")
 
     if not update_result.get("ok"):
-        print(f"[ai/precheck] Supabase update failure: {update_result}", flush=True)
+        print(f"[ai/precheck] Supabase update failure: {update_result.get('error')}", flush=True)
         return {
             "ok": False,
             "claim_id": payload.claim_id,
             "error": update_result.get("error"),
             "details": update_result.get("details"),
             "hint": update_result.get("hint"),
-            "ai_result": update_result.get("ai_result"),
-            "update_payload": update_result.get("update_payload"),
-            "updated_claim": update_result.get("updated_claim"),
         }
 
     print("[ai/precheck] Supabase update success", flush=True)
@@ -731,16 +721,21 @@ def ai_precheck(payload: AiPrecheckRequest):
 
 
 # PHASE 4 STEP 3
-@app.post("/ai/precheck/retry", response_model=AiPrecheckResponse)
-def retry_ai_precheck(payload: AiPrecheckRetryRequest):
+@app.post("/ai/precheck/retry", response_model=AiPrecheckResponse, response_model_exclude_none=True)
+def retry_ai_precheck(payload: AiPrecheckRetryRequest, request: Request):
     claim_id = payload.claim_id.strip()
 
     if not claim_id:
         raise HTTPException(status_code=400, detail="claim_id is required")
 
+    # PHASE 4 STEP 27
+    enforce_rate_limit(request, "ai_precheck_retry", AI_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    authenticated_user_id = get_authenticated_user_id(request)
+    enforce_claim_ai_cooldown(claim_id)
     print("[ai/precheck/retry] called", flush=True)
     print(f"[ai/precheck/retry] OPENAI_MODEL={get_openai_model()}", flush=True)
     print(f"[ai/precheck/retry] claim_id={claim_id}", flush=True)
+    print("[ai/precheck/retry] authenticated user:", authenticated_user_id, flush=True)
 
     try:
         claim = fetch_claim_row(claim_id)
@@ -778,16 +773,13 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest):
         update_result = update_claim_ai_fields(claim_id, ai_result, "ai/precheck/retry")
 
         if not update_result.get("ok"):
-            print(f"[ai/precheck/retry] Supabase update failure: {update_result}", flush=True)
+            print(f"[ai/precheck/retry] Supabase update failure: {update_result.get('error')}", flush=True)
             return {
                 "ok": False,
                 "claim_id": claim_id,
                 "error": update_result.get("error"),
                 "details": update_result.get("details"),
                 "hint": update_result.get("hint"),
-                "ai_result": update_result.get("ai_result"),
-                "update_payload": update_result.get("update_payload"),
-                "updated_claim": update_result.get("updated_claim"),
             }
 
         print("[ai/precheck/retry] Supabase update success", flush=True)

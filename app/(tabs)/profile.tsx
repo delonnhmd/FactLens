@@ -1,6 +1,7 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 27
 // PHASE 3 STEP 28
+// PHASE 4 STEP 27
 import { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
@@ -145,10 +146,6 @@ export default function ProfileScreen() {
               <Text style={styles.detailLabel}>Account created</Text>
               <Text style={styles.detailValue}>{createdAt ? new Date(createdAt).toLocaleDateString() : "Unknown"}</Text>
             </View>
-
-            <TouchableOpacity style={styles.debugButton} activeOpacity={0.8} onPress={() => router.push("/debug-claims")}>
-              <Text style={styles.debugButtonText}>Open claims debug</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity style={styles.signOutButton} activeOpacity={0.8} onPress={handleSignOut}>
               <Text style={styles.signOutButtonText}>Sign out</Text>
@@ -314,19 +311,6 @@ const styles = StyleSheet.create({
   },
   signOutButtonText: {
     color: theme.colors.danger,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "500",
-  },
-  debugButton: {
-    alignItems: "center",
-    borderColor: theme.colors.primary,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    marginTop: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-  },
-  debugButtonText: {
-    color: theme.colors.primary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
