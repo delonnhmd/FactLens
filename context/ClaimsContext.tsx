@@ -174,6 +174,7 @@ function mapClaimType(claimType: unknown): Claim["claimType"] {
 
 // PHASE 4 STEP 17
 // PHASE 4 STEP 22
+// PHASE 4 STEP 23
 const ALLOWED_SOURCE_QUALITIES = ["official", "mainstream", "specialized", "social", "blog", "unknown"];
 
 function mapSourceQuality(sourceQuality: unknown): Claim["sourceQuality"] {
@@ -1189,6 +1190,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 5
   // PHASE 4 STEP 14
   // PHASE 4 STEP 14B
+  // PHASE 4 STEP 23
   const addEvidence = useCallback(
     async (claimId: string, evidenceInput: EvidenceInput) => {
       // PHASE 4 STEP 15
@@ -1227,9 +1229,18 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         }
 
         const listResult = await fetchRemoteEvidenceForClaim(claimId);
+        const existingClaim = claimsRef.current.find((claim) => claim.id === claimId);
+        const fallbackEvidence = [
+          addResult.evidence,
+          ...(existingClaim?.evidence ?? []).filter((evidence) => evidence.id !== addResult.evidence?.id),
+        ].sort(
+          (firstEvidence, secondEvidence) =>
+            new Date(secondEvidence.createdAt).getTime() - new Date(firstEvidence.createdAt).getTime(),
+        );
+        const nextEvidenceList = listResult.error ? fallbackEvidence : listResult.evidence;
 
         if (listResult.error) {
-          throw new Error(listResult.error);
+          console.log("[evidence] list refresh warning:", listResult.error);
         }
 
         setClaims((currentClaimsState) =>
@@ -1237,14 +1248,14 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
             claim.id === claimId
               ? {
                   ...claim,
-                  evidence: listResult.evidence,
-                  evidenceCount: addResult.evidenceCount ?? listResult.evidence.length,
+                  evidence: nextEvidenceList,
+                  evidenceCount: addResult.evidenceCount ?? nextEvidenceList.length,
                 }
               : claim,
           ),
         );
 
-        return listResult.evidence;
+        return nextEvidenceList;
       } finally {
         evidenceAddInFlightClaimIdsRef.current.delete(claimId);
       }

@@ -10,6 +10,7 @@
 // PHASE 4 STEP 18
 // PHASE 4 STEP 18B
 // PHASE 4 STEP 22
+// PHASE 4 STEP 23
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -43,11 +44,13 @@ import {
 } from "../../services/realtimeService";
 import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../types/claim";
 import { theme } from "../../constants/theme";
-import { isValidSourceUrl, normalizeUrl } from "../../utils/url";
+import { normalizeUrl } from "../../utils/url";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
 type EvidenceErrors = Partial<Record<EvidenceFieldName, string>>;
+const EVIDENCE_NOTE_MAX_LENGTH = 500;
+const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
 
 const evidenceTypeOptions: EvidenceType[] = ["SUPPORTS_TRUE", "SUPPORTS_FAKE", "ADDS_CONTEXT", "UNCLEAR"];
 
@@ -109,6 +112,44 @@ function getEvidenceSourceQuality(evidence: Evidence): SourceQuality {
     reason: evidence.sourceQualityReason ?? fallbackQuality.reason,
     messageColor: fallbackQuality.messageColor,
   };
+}
+
+// PHASE 4 STEP 23
+function sanitizeEvidenceNoteInput(value: string): string {
+  return value.replace(/[<>]/g, "").slice(0, EVIDENCE_NOTE_MAX_LENGTH);
+}
+
+// PHASE 4 STEP 23
+function isValidEvidenceUrl(input: string): boolean {
+  const normalizedUrl = normalizeUrl(input);
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+    const hostname = parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+
+    return (
+      (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+      !parsedUrl.username &&
+      !parsedUrl.password &&
+      Boolean(hostname) &&
+      EVIDENCE_DOMAIN_PATTERN.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// PHASE 4 STEP 23
+function getEvidenceSourceDomain(url: string): string {
+  try {
+    return new URL(normalizeUrl(url)).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return "Unknown source";
+  }
 }
 
 // PHASE 3 STEP 17
@@ -527,7 +568,7 @@ export default function ClaimDetailScreen() {
     }
 
     if (field === "note") {
-      setEvidenceNote(value);
+      setEvidenceNote(sanitizeEvidenceNoteInput(value));
     }
 
     if (evidenceErrors[field]) {
@@ -547,7 +588,7 @@ export default function ClaimDetailScreen() {
 
     if (!trimmedUrl) {
       nextErrors.url = "Evidence URL is required.";
-    } else if (!isValidSourceUrl(trimmedUrl)) {
+    } else if (!isValidEvidenceUrl(trimmedUrl)) {
       nextErrors.url = "Enter a valid evidence URL.";
     }
 
@@ -556,6 +597,8 @@ export default function ClaimDetailScreen() {
       nextErrors.note = "Evidence note is required.";
     } else if (trimmedNote.length < 10) {
       nextErrors.note = "Short note must be at least 10 characters.";
+    } else if (trimmedNote.length > EVIDENCE_NOTE_MAX_LENGTH) {
+      nextErrors.note = `Evidence note must be ${EVIDENCE_NOTE_MAX_LENGTH} characters or fewer.`;
     }
 
     return nextErrors;
@@ -581,7 +624,7 @@ export default function ClaimDetailScreen() {
     try {
       await addEvidence(claim.id, {
         url: normalizeUrl(evidenceUrl),
-        note: evidenceNote,
+        note: evidenceNote.replace(/\s+/g, " ").trim(),
         type: evidenceType,
       });
       setEvidenceUrl("");
@@ -593,6 +636,15 @@ export default function ClaimDetailScreen() {
       setEvidenceError(error instanceof Error ? error.message : "We could not save this evidence. Please try again.");
     } finally {
       setEvidenceSubmitLoading(false);
+    }
+  };
+
+  // PHASE 4 STEP 23
+  const handleOpenEvidenceSource = async (url: string) => {
+    try {
+      await Linking.openURL(normalizeUrl(url));
+    } catch {
+      Alert.alert("Could not open source.", "Check the evidence URL and try again.");
     }
   };
 
@@ -740,6 +792,11 @@ export default function ClaimDetailScreen() {
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   // PHASE 4 STEP 10
   const evidenceUsedCount = claim.evidenceUsedCount ?? 0;
+  // PHASE 4 STEP 23
+  const sortedEvidence = [...claim.evidence].sort(
+    (firstEvidence, secondEvidence) =>
+      new Date(secondEvidence.createdAt).getTime() - new Date(firstEvidence.createdAt).getTime(),
+  );
   const hasEvidenceLinks = evidenceCount > 0 || claim.evidence.length > 0;
   // PHASE 3 STEP 1
   const isOwner = currentUser?.id === claim.authorId;
@@ -1115,7 +1172,7 @@ export default function ClaimDetailScreen() {
             <TextInput
               value={evidenceUrl}
               onChangeText={(value) => updateEvidenceField("url", value)}
-              placeholder="https://example.com/source"
+              placeholder="example.com/source"
               style={[styles.input, evidenceErrors.url && styles.inputError]}
               placeholderTextColor={theme.colors.muted}
               keyboardType="url"
@@ -1134,7 +1191,11 @@ export default function ClaimDetailScreen() {
               style={[styles.input, styles.textArea, evidenceErrors.note && styles.inputError]}
               placeholderTextColor={theme.colors.muted}
               multiline
+              maxLength={EVIDENCE_NOTE_MAX_LENGTH}
             />
+            <Text style={styles.fieldHint}>
+              {evidenceNote.length}/{EVIDENCE_NOTE_MAX_LENGTH}
+            </Text>
             {evidenceErrors.note ? <Text style={styles.errorText}>{evidenceErrors.note}</Text> : null}
           </View>
 
@@ -1175,44 +1236,62 @@ export default function ClaimDetailScreen() {
             disabled={evidenceSubmitLoading}
           >
             <Text style={styles.addEvidenceButtonText}>
-              {evidenceSubmitLoading ? "Adding..." : "Add Evidence"}
+              {evidenceSubmitLoading ? "Saving..." : "Add Evidence"}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.evidenceList}>
             {evidenceLoading ? <Text style={styles.placeholder}>Loading evidence...</Text> : null}
-            {!evidenceLoading && claim.evidence.length > 0 ? (
-              claim.evidence.map((item) => {
+            {!evidenceLoading && sortedEvidence.length > 0 ? (
+              sortedEvidence.map((item) => {
                 const config = evidenceTypeConfig[item.type];
                 const sourceQuality = getEvidenceSourceQuality(item);
+                const sourceDomain = getEvidenceSourceDomain(item.url);
 
                 return (
                   <View key={item.id} style={styles.evidenceItem}>
-                    <Text
-                      style={[
-                        styles.evidenceBadge,
-                        {
-                          backgroundColor: config.backgroundColor,
-                          color: config.color,
-                        },
-                      ]}
+                    <View style={styles.evidenceHeaderRow}>
+                      <Text
+                        style={[
+                          styles.evidenceBadge,
+                          {
+                            backgroundColor: config.backgroundColor,
+                            color: config.color,
+                          },
+                        ]}
+                      >
+                        {config.label}
+                      </Text>
+                      <Text style={styles.evidenceTime}>{new Date(item.createdAt).toLocaleString()}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.evidenceSourceRow}
+                      activeOpacity={0.75}
+                      onPress={() => handleOpenEvidenceSource(item.url)}
                     >
-                      {config.label}
-                    </Text>
-                    <Text style={styles.evidenceUrl} selectable>
-                      {item.url}
-                    </Text>
+                      <Ionicons name="link-outline" size={14} color={theme.colors.link} />
+                      <Text style={styles.evidenceDomain} numberOfLines={1}>
+                        {sourceDomain}
+                      </Text>
+                    </TouchableOpacity>
                     <View style={styles.evidenceQuality}>
                       <SourceQualityBadge quality={sourceQuality} showScore />
                       <Text style={styles.sourceQualityReason}>{sourceQuality.reason}</Text>
                     </View>
                     <Text style={styles.evidenceNote}>{item.note}</Text>
-                    <Text style={styles.evidenceTime}>{new Date(item.createdAt).toLocaleString()}</Text>
+                    <TouchableOpacity
+                      style={styles.openSourceButton}
+                      activeOpacity={0.8}
+                      onPress={() => handleOpenEvidenceSource(item.url)}
+                    >
+                      <Text style={styles.openSourceButtonText}>Open Source</Text>
+                      <Ionicons name="open-outline" size={13} color={theme.colors.link} />
+                    </TouchableOpacity>
                   </View>
                 );
               })
             ) : null}
-            {!evidenceLoading && claim.evidence.length === 0 ? (
+            {!evidenceLoading && sortedEvidence.length === 0 ? (
               <Text style={styles.placeholder}>No evidence links added yet.</Text>
             ) : null}
           </View>
@@ -1834,6 +1913,13 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: theme.spacing.sm,
   },
+  // PHASE 4 STEP 23
+  fieldHint: {
+    color: theme.colors.muted,
+    fontSize: 11,
+    marginTop: theme.spacing.xs,
+    textAlign: "right",
+  },
   input: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.border,
@@ -1985,19 +2071,33 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingVertical: theme.spacing.md,
   },
+  // PHASE 4 STEP 23
+  evidenceHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.sm,
+  },
   evidenceBadge: {
     alignSelf: "flex-start",
     borderRadius: theme.radius.sm,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
-    marginBottom: theme.spacing.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
-  evidenceUrl: {
-    color: theme.colors.primary,
-    fontSize: theme.typography.small.fontSize,
+  evidenceSourceRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
     marginBottom: theme.spacing.sm,
+  },
+  evidenceDomain: {
+    color: theme.colors.primary,
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "600",
   },
   evidenceQuality: {
     gap: theme.spacing.sm,
@@ -2012,6 +2112,22 @@ const styles = StyleSheet.create({
   evidenceTime: {
     color: theme.colors.subtext,
     fontSize: theme.typography.small.fontSize,
+  },
+  openSourceButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  openSourceButtonText: {
+    color: theme.colors.link,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "600",
   },
   date: {
     fontSize: theme.typography.body.fontSize,

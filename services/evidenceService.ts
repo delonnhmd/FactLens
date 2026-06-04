@@ -2,12 +2,16 @@
 // PHASE 3 STEP 28
 // PHASE 4 STEP 14
 // PHASE 4 STEP 14B
+// PHASE 4 STEP 23
 import { supabase } from "../lib/supabase";
 import { getSourceQuality } from "./sourceQuality";
 import { ensureProfileForUser } from "./profileService";
 import type { Evidence, EvidenceType } from "../types/claim";
 import { getDebugErrorParts } from "../utils/debugError";
-import { isValidSourceUrl, normalizeUrl } from "../utils/url";
+import { normalizeUrl } from "../utils/url";
+
+const EVIDENCE_NOTE_MAX_LENGTH = 500;
+const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
 
 export interface EvidenceInput {
   url: string;
@@ -111,15 +115,48 @@ function normalizeEvidenceType(type?: EvidenceType | string): EvidenceType {
   return "UNCLEAR";
 }
 
+// PHASE 4 STEP 23
+function sanitizeEvidenceNote(note: string): string {
+  return note
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, EVIDENCE_NOTE_MAX_LENGTH);
+}
+
+// PHASE 4 STEP 23
+function isValidEvidenceUrl(input: string): boolean {
+  const normalizedUrl = normalizeUrl(input);
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedUrl);
+    const hostname = parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+
+    return (
+      (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+      !parsedUrl.username &&
+      !parsedUrl.password &&
+      Boolean(hostname) &&
+      EVIDENCE_DOMAIN_PATTERN.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string | null {
   const trimmedUrl = input.url?.trim();
-  const trimmedNote = input.note?.trim();
+  const trimmedNote = input.note?.replace(/\s+/g, " ").trim();
 
   if (input.url !== undefined && !trimmedUrl) {
     return "Evidence URL is required.";
   }
 
-  if (trimmedUrl && !isValidSourceUrl(trimmedUrl)) {
+  if (trimmedUrl && !isValidEvidenceUrl(trimmedUrl)) {
     return "Enter a valid evidence URL.";
   }
 
@@ -129,6 +166,10 @@ function validateEvidenceInput(input: EvidenceInput | EvidenceUpdates): string |
 
   if (trimmedNote && trimmedNote.length < 10) {
     return "Short note must be at least 10 characters.";
+  }
+
+  if (trimmedNote && trimmedNote.length > EVIDENCE_NOTE_MAX_LENGTH) {
+    return `Evidence note must be ${EVIDENCE_NOTE_MAX_LENGTH} characters or fewer.`;
   }
 
   return null;
@@ -249,12 +290,13 @@ export async function addEvidence(
   const normalizedUrl = normalizeUrl(input.url);
   const normalizedEvidenceType = normalizeEvidenceType(input.type);
   const sourceQuality = getSourceQuality(normalizedUrl);
+  const sanitizedNote = sanitizeEvidenceNote(input.note);
   const payload = removeUndefinedValues({
     claim_id: claimId,
     user_id: user.id,
     evidence_type: normalizedEvidenceType,
     url: normalizedUrl,
-    note: input.note.trim(),
+    note: sanitizedNote,
     source_quality_label: sourceQuality.label || null,
     source_quality_score: sourceQuality.score ?? null,
     source_quality_reason: sourceQuality.reason ?? null,
@@ -310,10 +352,11 @@ export async function updateEvidence(
 
   const normalizedUrl = updates.url ? normalizeUrl(updates.url) : null;
   const sourceQuality = normalizedUrl ? getSourceQuality(normalizedUrl) : null;
+  const sanitizedNote = updates.note !== undefined ? sanitizeEvidenceNote(updates.note) : null;
   const updateRow = {
     ...(updates.url !== undefined ? { url: normalizedUrl } : {}),
-    ...(updates.note !== undefined ? { note: updates.note.trim() } : {}),
-    ...(updates.type !== undefined ? { evidence_type: updates.type } : {}),
+    ...(updates.note !== undefined ? { note: sanitizedNote } : {}),
+    ...(updates.type !== undefined ? { evidence_type: normalizeEvidenceType(updates.type) } : {}),
     ...(sourceQuality
       ? {
           source_quality_label: sourceQuality.label,
