@@ -52,6 +52,10 @@ const verificationFields = (createdAt: string) => ({
   aiStatus: "PENDING" as const,
   aiConfidence: null,
   claimType: "UNCLEAR" as const,
+  // PHASE 5 STEP 3
+  hidden: false,
+  hiddenReason: null,
+  hiddenAt: null,
 });
 
 const userTrustFields = {

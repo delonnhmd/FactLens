@@ -928,6 +928,28 @@ export default function ClaimDetailScreen() {
     Alert.alert("Share link copied.", claim.shareUrl);
   };
 
+  // PHASE 5 STEP 3
+  if (claim.hidden) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
+            <Ionicons name="arrow-back" size={24} color="rgba(255, 255, 255, 0.7)" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Claim details</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.hiddenDetailCard}>
+          <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.subtext} />
+          <Text style={styles.hiddenDetailTitle}>Content removed</Text>
+          <Text style={styles.hiddenDetailText}>
+            This content was removed for violating community guidelines.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -1332,6 +1354,19 @@ export default function ClaimDetailScreen() {
                 const config = evidenceTypeConfig[item.type];
                 const sourceQuality = getEvidenceSourceQuality(item);
                 const sourceDomain = getEvidenceSourceDomain(item.url);
+
+                if (item.hidden) {
+                  return (
+                    <View key={item.id} style={styles.evidenceItem}>
+                      <View style={styles.hiddenEvidenceBox}>
+                        <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.subtext} />
+                        <Text style={styles.hiddenEvidenceText}>
+                          This content was removed for violating community guidelines.
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                }
 
                 return (
                   <View key={item.id} style={styles.evidenceItem}>
@@ -2307,6 +2342,40 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "700",
+  },
+  // PHASE 5 STEP 3
+  hiddenDetailCard: {
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    gap: 8,
+    margin: 14,
+    padding: 20,
+  },
+  hiddenDetailTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  hiddenDetailText: {
+    color: theme.colors.subtext,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+  },
+  hiddenEvidenceBox: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  hiddenEvidenceText: {
+    color: theme.colors.subtext,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   date: {
     fontSize: theme.typography.body.fontSize,

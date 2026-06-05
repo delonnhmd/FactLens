@@ -50,6 +50,10 @@ export interface Evidence {
   note: string;
   type: EvidenceType;
   createdAt: string;
+  // PHASE 5 STEP 3
+  hidden?: boolean;
+  hiddenReason?: string | null;
+  hiddenAt?: string | null;
   // PHASE 3 STEP 5
   userId?: string;
   // PHASE 5 STEP 1
@@ -186,6 +190,10 @@ export interface Claim {
   redFlags: string[];
   aiSummary: string | null;
   status: ClaimStatus;
+  // PHASE 5 STEP 3
+  hidden: boolean;
+  hiddenReason: string | null;
+  hiddenAt: string | null;
   createdAt: string;
   expiresAt: string;
   userVote: VoteOption | null;

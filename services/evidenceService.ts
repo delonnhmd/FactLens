@@ -37,6 +37,10 @@ export interface EvidenceRow {
   source_quality_label: string | null;
   source_quality_score: number | null;
   source_quality_reason: string | null;
+  // PHASE 5 STEP 3
+  hidden?: boolean | null;
+  hidden_reason?: string | null;
+  hidden_at?: string | null;
   created_at: string;
   updated_at: string;
   profiles?: EvidenceProfileRow | EvidenceProfileRow[] | null;
@@ -220,6 +224,10 @@ export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
     note: row.note,
     type: row.evidence_type,
     createdAt: row.created_at,
+    // PHASE 5 STEP 3
+    hidden: Boolean(row.hidden),
+    hiddenReason: row.hidden_reason ?? null,
+    hiddenAt: row.hidden_at ?? null,
     sourceQualityLabel: row.source_quality_label,
     sourceQualityScore: row.source_quality_score,
     sourceQualityReason: row.source_quality_reason,

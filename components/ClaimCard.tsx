@@ -161,6 +161,21 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     ]);
   }, [claim.shareUrl, handleReport]);
 
+  // PHASE 5 STEP 3
+  if (claim.hidden) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.hiddenContentBox}>
+          <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.subtext} />
+          <Text style={styles.hiddenContentTitle}>Content removed</Text>
+          <Text style={styles.hiddenContentText}>
+            This content was removed for violating community guidelines.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.card}>
       <TouchableOpacity onPress={onPress} activeOpacity={0.9} disabled={!onPress}>
@@ -453,5 +468,22 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: 12,
     fontWeight: "400",
+  },
+  // PHASE 5 STEP 3
+  hiddenContentBox: {
+    alignItems: "center",
+    gap: 6,
+    padding: 16,
+  },
+  hiddenContentTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  hiddenContentText: {
+    color: theme.colors.subtext,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
   },
 });

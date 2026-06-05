@@ -218,6 +218,13 @@ class AdminReportActionRequest(BaseModel):
     hide_target: bool = False
 
 
+# PHASE 5 STEP 3
+class AdminContentVisibilityRequest(BaseModel):
+    target_type: str = "CLAIM"
+    target_id: str = ""
+    reason: str = ""
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -386,7 +393,25 @@ def admin_list_reports(request: Request, status: str = "OPEN", limit: int = 50):
         query = query.eq("status", report_status)
 
     result = query.execute()
-    return {"ok": True, "reports": result.data or []}
+    reports = result.data or []
+    supabase = get_supabase_client()
+
+    for report in reports:
+        target_type = report.get("target_type") or "CLAIM"
+        target = None
+        if target_type == "CLAIM" and report.get("claim_id"):
+            target_result = supabase.table("claims").select("id,title,hidden,hidden_reason,created_at").eq("id", report["claim_id"]).execute()
+            target = (target_result.data or [None])[0]
+        elif target_type == "EVIDENCE" and report.get("evidence_id"):
+            target_result = supabase.table("evidence").select("id,note,url,hidden,hidden_reason,created_at").eq("id", report["evidence_id"]).execute()
+            target = (target_result.data or [None])[0]
+        elif target_type == "PROFILE" and report.get("profile_id"):
+            target_result = supabase.table("profiles").select("id,username,display_name,profile_visibility,created_at").eq("id", report["profile_id"]).execute()
+            target = (target_result.data or [None])[0]
+
+        report["target"] = target
+
+    return {"ok": True, "reports": reports}
 
 
 # PHASE 5 STEP 2
@@ -410,12 +435,20 @@ def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, requ
         target_type = report_row.get("target_type") or "CLAIM"
         if target_type == "CLAIM" and report_row.get("claim_id"):
             supabase.table("claims").update({
-                "is_flagged": True,
-                "status": "NEEDS_MORE_EVIDENCE",
+                "hidden": True,
+                "hidden_reason": payload.admin_note.strip() or "Removed for violating community guidelines.",
+                "hidden_at": datetime.now(timezone.utc).isoformat(),
+                "hidden_by": admin_user_id,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", report_row["claim_id"]).execute()
         elif target_type == "EVIDENCE" and report_row.get("evidence_id"):
-            supabase.table("evidence").delete().eq("id", report_row["evidence_id"]).execute()
+            supabase.table("evidence").update({
+                "hidden": True,
+                "hidden_reason": payload.admin_note.strip() or "Removed for violating community guidelines.",
+                "hidden_at": datetime.now(timezone.utc).isoformat(),
+                "hidden_by": admin_user_id,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", report_row["evidence_id"]).execute()
         elif target_type == "PROFILE" and report_row.get("profile_id"):
             supabase.table("profiles").update({
                 "profile_visibility": "private",
@@ -436,6 +469,65 @@ def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, requ
     )
 
     return {"ok": True, "report": (update_result.data or [None])[0]}
+
+
+# PHASE 5 STEP 3
+@app.post("/admin/content/hide")
+def admin_hide_content(payload: AdminContentVisibilityRequest, request: Request):
+    require_admin_key(request)
+    admin_user_id = get_authenticated_user_id(request)
+    target_type = payload.target_type.strip().upper()
+    target_id = payload.target_id.strip()
+    reason = payload.reason.strip() or "Removed for violating community guidelines."
+    supabase = get_supabase_client()
+
+    if target_type not in {"CLAIM", "EVIDENCE"} or not target_id:
+        raise HTTPException(status_code=400, detail="Unsupported content target.")
+
+    table_name = "claims" if target_type == "CLAIM" else "evidence"
+    result = (
+        supabase.table(table_name)
+        .update({
+            "hidden": True,
+            "hidden_reason": reason,
+            "hidden_at": datetime.now(timezone.utc).isoformat(),
+            "hidden_by": admin_user_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", target_id)
+        .execute()
+    )
+
+    return {"ok": True, "target_type": target_type, "target_id": target_id, "updated": len(result.data or [])}
+
+
+# PHASE 5 STEP 3
+@app.post("/admin/content/restore")
+def admin_restore_content(payload: AdminContentVisibilityRequest, request: Request):
+    require_admin_key(request)
+    get_authenticated_user_id(request)
+    target_type = payload.target_type.strip().upper()
+    target_id = payload.target_id.strip()
+    supabase = get_supabase_client()
+
+    if target_type not in {"CLAIM", "EVIDENCE"} or not target_id:
+        raise HTTPException(status_code=400, detail="Unsupported content target.")
+
+    table_name = "claims" if target_type == "CLAIM" else "evidence"
+    result = (
+        supabase.table(table_name)
+        .update({
+            "hidden": False,
+            "hidden_reason": None,
+            "hidden_at": None,
+            "hidden_by": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", target_id)
+        .execute()
+    )
+
+    return {"ok": True, "target_type": target_type, "target_id": target_id, "updated": len(result.data or [])}
 
 
 # PHASE 5 STEP 1C

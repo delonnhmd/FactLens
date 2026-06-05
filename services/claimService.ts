@@ -163,6 +163,10 @@ export interface ClaimRow {
   source_page_title?: string | null;
   source_supports_claim?: boolean | null;
   source_support_summary?: string | null;
+  // PHASE 5 STEP 3
+  hidden?: boolean | null;
+  hidden_reason?: string | null;
+  hidden_at?: string | null;
   red_flags?: unknown;
   ai_summary?: string | null;
   created_at?: string | null;
@@ -830,6 +834,10 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     redFlags: aiFlags,
     aiSummary,
     status: mapStatus(row.status),
+    // PHASE 5 STEP 3
+    hidden: Boolean(row.hidden),
+    hiddenReason: row.hidden_reason ?? null,
+    hiddenAt: row.hidden_at ?? null,
     createdAt,
     // PHASE 3 STEP 22
     // PHASE 3 STEP 25
@@ -953,6 +961,10 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     redFlags: [],
     aiSummary: row.ai_summary ?? row.ai_reason ?? null,
     status: mapStatus(row.status ?? "OPEN"),
+    // PHASE 5 STEP 3
+    hidden: Boolean(row.hidden),
+    hiddenReason: row.hidden_reason ?? null,
+    hiddenAt: row.hidden_at ?? null,
     createdAt,
     expiresAt: row.expires_at ?? scoreLockAt,
     userVote: null,

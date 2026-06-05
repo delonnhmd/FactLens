@@ -49,6 +49,8 @@ interface ClaimReportResult {
   error?: string;
 }
 
+const MAX_REPORTS_PER_DAY = 20;
+
 const appToDbReason: Record<ReportReason, ReportDbReason> = {
   Spam: "SPAM",
   "Fake source": "FAKE_SOURCE",
@@ -109,6 +111,26 @@ function mapReportRowToReport(row: ReportRow): Report {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+// PHASE 5 STEP 3
+async function checkReportRateLimit(userId: string): Promise<string | null> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from("reports")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", since);
+
+  if (error) {
+    return getReportErrorMessage(error.message, "save");
+  }
+
+  if ((count ?? 0) >= MAX_REPORTS_PER_DAY) {
+    return "Too many reports today. Please try again later.";
+  }
+
+  return null;
 }
 
 async function fetchReportRowForClaim(
@@ -239,6 +261,13 @@ export async function reportClaim(
     };
   }
 
+  if (!existingReport.report) {
+    const rateLimitError = await checkReportRateLimit(userId);
+    if (rateLimitError) {
+      return { claim: null, report: null, error: rateLimitError };
+    }
+  }
+
   const reportRow = {
     target_type: "CLAIM",
     claim_id: claimId,
@@ -305,6 +334,13 @@ export async function reportEvidence(
     return { report: null, error: existingReport.error };
   }
 
+  if (!existingReport.report) {
+    const rateLimitError = await checkReportRateLimit(userId);
+    if (rateLimitError) {
+      return { report: null, error: rateLimitError };
+    }
+  }
+
   const reportRow = {
     target_type: "EVIDENCE",
     claim_id: null,
@@ -339,6 +375,13 @@ export async function reportProfile(
 
   if (existingReport.error) {
     return { report: null, error: existingReport.error };
+  }
+
+  if (!existingReport.report) {
+    const rateLimitError = await checkReportRateLimit(userId);
+    if (rateLimitError) {
+      return { report: null, error: rateLimitError };
+    }
   }
 
   const reportRow = {
