@@ -9,12 +9,23 @@ import { supabase } from "../lib/supabase";
 import { generateFallbackUsername, normalizeUsername } from "../utils/username";
 import type { VerificationUserRole } from "../types/verification";
 import { parseBadgeList, type ReputationBadge } from "../utils/reputation";
+import {
+  generateProfileSlug,
+  isValidAvatarUrl,
+  normalizeProfileVisibility,
+  sanitizeBio,
+  type ProfileVisibility,
+} from "../utils/publicProfile";
 
 export interface Profile {
   id: string;
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  // PHASE 5 STEP 1E
+  bio: string | null;
+  public_profile_slug: string | null;
+  profile_visibility: ProfileVisibility;
   verified: boolean;
   reputation_score: number;
   // PHASE 3 STEP 17
@@ -45,6 +56,10 @@ type ProfileRow = {
   username: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  // PHASE 5 STEP 1E
+  bio?: string | null;
+  public_profile_slug?: string | null;
+  profile_visibility?: string | null;
   verified?: boolean | null;
   reputation_score?: number | null;
   votes_cast?: number | null;
@@ -69,7 +84,7 @@ type ProfileRow = {
   updated_at?: string | null;
 };
 
-export type ProfileUpdates = Partial<Pick<Profile, "username" | "display_name" | "avatar_url">>;
+export type ProfileUpdates = Partial<Pick<Profile, "username" | "display_name" | "avatar_url" | "bio" | "profile_visibility">>;
 
 export interface ProfileResult {
   profile: Profile | null;
@@ -128,6 +143,10 @@ function mapProfileRowToProfile(row: ProfileRow): Profile {
     username: row.username,
     display_name: row.display_name ?? null,
     avatar_url: row.avatar_url ?? null,
+    // PHASE 5 STEP 1E
+    bio: row.bio ?? null,
+    public_profile_slug: row.public_profile_slug ?? generateProfileSlug(row.username, row.id),
+    profile_visibility: normalizeProfileVisibility(row.profile_visibility),
     verified: Boolean(row.verified),
     reputation_score: row.reputation_score ?? 0,
     votes_cast: row.votes_cast ?? 0,
@@ -184,7 +203,7 @@ function withUserIdSuffix(username: string, userId: string): string {
 }
 
 async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise<ProfileResult> {
-  const updates: Partial<Pick<Profile, "username" | "verified">> & { updated_at?: string } = {};
+  const updates: Partial<Pick<Profile, "username" | "verified" | "public_profile_slug">> & { updated_at?: string } = {};
   const normalizedUsername = normalizeUsername(profile.username) || getPreferredUsername(user);
   let message: string | undefined;
 
@@ -211,6 +230,11 @@ async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise
   // PHASE 3 STEP 28
   if (getUserVerifiedForProfile(user) && !profile.verified) {
     updates.verified = true;
+  }
+
+  // PHASE 5 STEP 1E
+  if (!profile.public_profile_slug) {
+    updates.public_profile_slug = generateProfileSlug(normalizedUsername, user.id);
   }
 
   if (Object.keys(updates).length === 0) {
@@ -251,6 +275,9 @@ async function insertProfileForUser(
       id: user.id,
       username: finalUsername,
       display_name: displayName.trim() || finalUsername,
+      // PHASE 5 STEP 1E
+      public_profile_slug: generateProfileSlug(finalUsername, user.id),
+      profile_visibility: "public",
       // PHASE 3 STEP 22
       // PHASE 3 STEP 28
       verified: getUserVerifiedForProfile(user),
@@ -299,6 +326,9 @@ export async function createProfile(
       id: userId,
       username: normalizedUsername,
       display_name: displayName?.trim() || normalizedUsername,
+      // PHASE 5 STEP 1E
+      public_profile_slug: generateProfileSlug(normalizedUsername, userId),
+      profile_visibility: "public",
       // PHASE 3 STEP 28
       verified: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? false : true,
     })
@@ -425,9 +455,26 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
 }
 
 export async function updateProfile(userId: string, updates: ProfileUpdates): Promise<ProfileResult> {
+  const normalizedUsername = updates.username !== undefined ? normalizeUsername(updates.username) : undefined;
+
+  if (updates.avatar_url !== undefined && updates.avatar_url && !isValidAvatarUrl(updates.avatar_url)) {
+    return { profile: null, error: "Avatar URL must be a valid URL." };
+  }
+
+  if (typeof updates.bio === "string" && updates.bio.length > 160) {
+    return { profile: null, error: "Bio must be 160 characters or fewer." };
+  }
+
   const normalizedUpdates = {
     ...updates,
-    ...(updates.username !== undefined ? { username: normalizeUsername(updates.username) } : {}),
+    ...(updates.username !== undefined ? { username: normalizedUsername } : {}),
+    ...(updates.username !== undefined && normalizedUsername
+      ? { public_profile_slug: generateProfileSlug(normalizedUsername, userId) }
+      : {}),
+    ...(updates.bio !== undefined ? { bio: sanitizeBio(updates.bio ?? "") } : {}),
+    ...(updates.profile_visibility !== undefined
+      ? { profile_visibility: normalizeProfileVisibility(updates.profile_visibility) }
+      : {}),
     updated_at: new Date().toISOString(),
   };
 

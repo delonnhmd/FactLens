@@ -10,6 +10,7 @@ import type { Evidence, EvidenceType } from "../types/claim";
 import { getDebugErrorParts } from "../utils/debugError";
 import { normalizeUrl } from "../utils/url";
 import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
+import { normalizeProfileVisibility } from "../utils/publicProfile";
 
 const EVIDENCE_NOTE_MAX_LENGTH = 500;
 const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
@@ -45,10 +46,14 @@ interface EvidenceProfileRow {
   id: string;
   username: string;
   display_name: string | null;
+  avatar_url?: string | null;
+  public_profile_slug?: string | null;
+  profile_visibility?: string | null;
   trust_score?: number | null;
   rank_title?: string | null;
   highest_rank_achieved?: string | null;
   badge_list?: unknown;
+  evidence_count?: number | null;
 }
 
 interface EvidenceListResult {
@@ -206,6 +211,11 @@ export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
     contributorDisplayName: profile?.display_name || profile?.username || null,
     contributorRankTitle: rankTitle,
     contributorBadges: parseBadgeList(profile?.badge_list),
+    // PHASE 5 STEP 1E
+    contributorAvatarUrl: profile?.avatar_url ?? null,
+    contributorProfileSlug: profile?.public_profile_slug ?? profile?.username ?? null,
+    contributorProfileVisibility: normalizeProfileVisibility(profile?.profile_visibility),
+    contributorEvidenceCount: profile?.profile_visibility === "private" ? null : profile?.evidence_count ?? 0,
     url: row.url,
     note: row.note,
     type: row.evidence_type,
@@ -226,7 +236,7 @@ async function mergeEvidenceProfiles(rows: EvidenceRow[]): Promise<EvidenceRow[]
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id,username,display_name,trust_score,rank_title,highest_rank_achieved,badge_list")
+    .select("id,username,display_name,avatar_url,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,badge_list,evidence_count")
     .in("id", userIds);
 
   if (error) {

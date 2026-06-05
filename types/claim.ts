@@ -57,6 +57,11 @@ export interface Evidence {
   contributorDisplayName?: string | null;
   contributorRankTitle?: string | null;
   contributorBadges?: User["badgeList"];
+  // PHASE 5 STEP 1E
+  contributorAvatarUrl?: string | null;
+  contributorProfileSlug?: string | null;
+  contributorProfileVisibility?: "public" | "private";
+  contributorEvidenceCount?: number | null;
   sourceQualityLabel?: string | null;
   sourceQualityScore?: number | null;
   sourceQualityReason?: string | null;

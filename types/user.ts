@@ -8,6 +8,10 @@ export interface User {
   username: string;
   displayName: string;
   avatar: string | null;
+  // PHASE 5 STEP 1E
+  bio?: string | null;
+  publicProfileSlug?: string | null;
+  profileVisibility?: "public" | "private";
   verified: boolean;
   reputationScore: number;
   joinedAt: string;

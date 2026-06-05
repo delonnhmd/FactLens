@@ -170,7 +170,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
               <Text style={styles.avatarText}>{avatarInitial}</Text>
             </View>
             <Text style={styles.authorMeta} numberOfLines={1}>
-              @{claim.authorUsername} {"\u00B7"} {getRelativeTime(claim.createdAt)}
+              @{claim.authorUsername} {"\u00B7"} {claim.author.rankTitle} {"\u00B7"} {getRelativeTime(claim.createdAt)}
             </Text>
           </View>
 

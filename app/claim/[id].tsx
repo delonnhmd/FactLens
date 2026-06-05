@@ -829,6 +829,14 @@ export default function ClaimDetailScreen() {
       new Date(secondEvidence.createdAt).getTime() - new Date(firstEvidence.createdAt).getTime(),
   );
   const hasEvidenceLinks = evidenceCount > 0 || claim.evidence.length > 0;
+  // PHASE 5 STEP 1E
+  const openContributorProfile = (slugOrUsername?: string | null) => {
+    if (!slugOrUsername) {
+      return;
+    }
+
+    router.push(`/profile/${slugOrUsername}`);
+  };
   // PHASE 3 STEP 1
   const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
@@ -1048,7 +1056,11 @@ export default function ClaimDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Author</Text>
-          <View style={styles.authorHeaderRow}>
+          <TouchableOpacity
+            style={styles.authorHeaderRow}
+            activeOpacity={0.85}
+            onPress={() => openContributorProfile(claim.author.publicProfileSlug || claim.authorUsername)}
+          >
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
               <Text style={styles.authorText}>@{claim.authorUsername}</Text>
@@ -1063,7 +1075,7 @@ export default function ClaimDetailScreen() {
               </View>
             </View>
             {claim.authorVerified ? <Text style={styles.verifiedBadge}>Verified</Text> : null}
-          </View>
+          </TouchableOpacity>
           {/* PHASE 4 STEP 12 */}
           <Text style={styles.authorText}>Reputation: {claim.author.reputationPoints.toLocaleString()} pts</Text>
 
@@ -1313,7 +1325,11 @@ export default function ClaimDetailScreen() {
                     </View>
                     {/* PHASE 5 STEP 1 */}
                     {item.contributorUsername ? (
-                      <View style={styles.evidenceContributorRow}>
+                      <TouchableOpacity
+                        style={styles.evidenceContributorRow}
+                        activeOpacity={0.85}
+                        onPress={() => openContributorProfile(item.contributorProfileSlug || item.contributorUsername)}
+                      >
                         <Text style={styles.evidenceContributorText} numberOfLines={1}>
                           @{item.contributorUsername}    {item.contributorRankTitle ?? "Claim Checker"}
                         </Text>
@@ -1322,7 +1338,12 @@ export default function ClaimDetailScreen() {
                             {badge.name}
                           </Text>
                         ))}
-                      </View>
+                        {item.contributorEvidenceCount !== null && item.contributorEvidenceCount !== undefined ? (
+                          <Text style={styles.evidenceContributorSubtext}>
+                            Evidence count: {item.contributorEvidenceCount}
+                          </Text>
+                        ) : null}
+                      </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity
                       style={styles.evidenceSourceRow}
@@ -1579,6 +1600,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 12,
     fontWeight: "600",
+  },
+  // PHASE 5 STEP 1E
+  evidenceContributorSubtext: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    width: "100%",
   },
   authorHeaderRow: {
     alignItems: "flex-start",

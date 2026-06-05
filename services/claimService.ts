@@ -41,6 +41,7 @@ import type { SourceQuality, VerificationMode, VerificationVote } from "../types
 import type { User as AppUser } from "../types/user";
 import { ensureProfileForUser, type Profile } from "./profileService";
 import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
+import { normalizeProfileVisibility } from "../utils/publicProfile";
 
 type ClaimAiStatus = AiCheck["status"];
 
@@ -81,6 +82,10 @@ interface ClaimProfileRow {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  // PHASE 5 STEP 1E
+  bio?: string | null;
+  public_profile_slug?: string | null;
+  profile_visibility?: string | null;
   verified: boolean;
   reputation_score: number;
   votes_cast?: number | null;
@@ -221,7 +226,7 @@ const DEFAULT_CLAIM_LIMIT = 50;
 // PHASE 3 STEP 11
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 const CLAIM_PROFILE_SELECT =
-  "id,username,display_name,verified,reputation_score,avatar_url,votes_cast,accuracy_rate,trust_tier,trust_weight_override,trust_score,rank_title,correct_votes,incorrect_votes,evidence_count,helpful_evidence_count,suspicious_flags,reputation_points,badge_list,last_active_at,highest_rank_achieved,monthly_reputation_points,monthly_reset_at,created_at";
+  "id,username,display_name,verified,reputation_score,avatar_url,bio,public_profile_slug,profile_visibility,votes_cast,accuracy_rate,trust_tier,trust_weight_override,trust_score,rank_title,correct_votes,incorrect_votes,evidence_count,helpful_evidence_count,suspicious_flags,reputation_points,badge_list,last_active_at,highest_rank_achieved,monthly_reputation_points,monthly_reset_at,created_at";
 
 interface SupabaseErrorLike {
   code?: string;
@@ -338,6 +343,10 @@ function mapProfileToClaimProfile(profile: Profile): ClaimProfileRow {
     username: profile.username,
     display_name: profile.display_name,
     avatar_url: profile.avatar_url,
+    // PHASE 5 STEP 1E
+    bio: profile.bio,
+    public_profile_slug: profile.public_profile_slug,
+    profile_visibility: profile.profile_visibility,
     verified: profile.verified,
     reputation_score: profile.reputation_score,
     votes_cast: profile.votes_cast,
@@ -670,6 +679,10 @@ function mapAuthor(row: ClaimRow): AppUser {
     username,
     displayName,
     avatar: profile?.avatar_url ?? null,
+    // PHASE 5 STEP 1E
+    bio: profile?.bio ?? null,
+    publicProfileSlug: profile?.public_profile_slug ?? username,
+    profileVisibility: normalizeProfileVisibility(profile?.profile_visibility),
     verified: profile?.verified ?? false,
     reputationScore: profile?.reputation_points ?? profile?.reputation_score ?? 0,
     joinedAt: profile?.created_at ?? createdAt,

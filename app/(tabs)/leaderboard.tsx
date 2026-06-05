@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
 import {
@@ -17,6 +18,8 @@ const tabs: Array<{ label: string; value: LeaderboardScope }> = [
 ];
 
 export default function LeaderboardScreen() {
+  // PHASE 5 STEP 1E
+  const router = useRouter();
   const [scope, setScope] = useState<LeaderboardScope>("monthly");
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +113,12 @@ export default function LeaderboardScreen() {
             const topBadges = getTopBadges(user.badges, 1);
 
             return (
-              <View key={user.id} style={styles.row}>
+              <TouchableOpacity
+                key={user.id}
+                style={styles.row}
+                activeOpacity={0.85}
+                onPress={() => router.push(`/profile/${user.username}`)}
+              >
                 <View style={styles.position}>
                   <Text style={styles.positionText}>{index + 1}</Text>
                 </View>
@@ -133,7 +141,7 @@ export default function LeaderboardScreen() {
                   <Ionicons name="sparkles-outline" size={14} color={theme.colors.ai} />
                   <Text style={styles.points}>{formatPoints(user.points)}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
