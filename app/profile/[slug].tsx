@@ -1,15 +1,18 @@
 // PHASE 5 STEP 1E
 import { useEffect, useState } from "react";
-import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
+import { useAuth } from "../../context/AuthContext";
 import { fetchPublicProfileBySlug, type PublicProfileCard } from "../../services/publicProfileService";
+import { reportProfile } from "../../services/reportService";
 import { formatPoints, getTopBadges } from "../../utils/reputation";
 
 export default function PublicProfileScreen() {
   const router = useRouter();
+  const { currentUser, isVerified } = useAuth();
   const params = useLocalSearchParams<{ slug?: string }>();
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
   const [profile, setProfile] = useState<PublicProfileCard | null>(null);
@@ -45,6 +48,28 @@ export default function PublicProfileScreen() {
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
   const isPrivate = profile?.profileVisibility === "private";
   const topBadges = getTopBadges(profile?.badgeList ?? [], 8);
+  const canReportProfile = Boolean(profile && currentUser && currentUser.id !== profile.id);
+
+  // PHASE 5 STEP 2
+  const handleReportProfile = async () => {
+    if (!profile || !currentUser) {
+      return;
+    }
+
+    if (!isVerified) {
+      Alert.alert("Verify your email to report profiles.");
+      return;
+    }
+
+    const result = await reportProfile(profile.id, currentUser.id, "Harassment or abuse");
+
+    if (result.error) {
+      Alert.alert(result.error);
+      return;
+    }
+
+    Alert.alert("Report submitted.");
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -135,6 +160,13 @@ export default function PublicProfileScreen() {
                 <Text style={styles.detailValue}>No badges yet.</Text>
               )}
             </View>
+
+            {canReportProfile ? (
+              <TouchableOpacity style={styles.reportButton} activeOpacity={0.8} onPress={handleReportProfile}>
+                <Ionicons name="flag-outline" size={14} color={theme.colors.danger} />
+                <Text style={styles.reportButtonText}>Report Profile</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
       </ScrollView>
@@ -292,5 +324,18 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: 14,
     fontWeight: "600",
+  },
+  reportButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: theme.spacing.md,
+    paddingVertical: 6,
+  },
+  reportButtonText: {
+    color: theme.colors.danger,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

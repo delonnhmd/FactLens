@@ -211,6 +211,13 @@ class AdminOverrideRequest(BaseModel):
     reason: str = ""
 
 
+# PHASE 5 STEP 2
+class AdminReportActionRequest(BaseModel):
+    status: str = "RESOLVED"
+    admin_note: str = ""
+    hide_target: bool = False
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -343,6 +350,92 @@ def profile_reputation_events(request: Request, limit: int = 50):
         "limit": safe_limit,
         "events": result.data or [],
     }
+
+
+# PHASE 5 STEP 2
+@app.delete("/account")
+def delete_account(request: Request):
+    authenticated_user_id = get_authenticated_user_id(request)
+    supabase = get_supabase_client()
+
+    try:
+        supabase.table("profiles").delete().eq("id", authenticated_user_id).execute()
+        supabase.auth.admin.delete_user(authenticated_user_id)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not delete account right now.")
+
+    return {"ok": True}
+
+
+# PHASE 5 STEP 2
+@app.get("/admin/reports")
+def admin_list_reports(request: Request, status: str = "OPEN", limit: int = 50):
+    require_admin_key(request)
+    safe_limit = max(1, min(100, int(limit or 50)))
+    report_status = status.strip().upper() if status else "OPEN"
+    supabase = get_supabase_client()
+
+    query = (
+        supabase.table("reports")
+        .select("id,target_type,claim_id,evidence_id,profile_id,user_id,reason,note,status,created_at,updated_at,resolved_at,admin_note")
+        .order("created_at", desc=True)
+        .limit(safe_limit)
+    )
+
+    if report_status != "ALL":
+        query = query.eq("status", report_status)
+
+    result = query.execute()
+    return {"ok": True, "reports": result.data or []}
+
+
+# PHASE 5 STEP 2
+@app.post("/admin/reports/{report_id}/resolve")
+def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, request: Request):
+    require_admin_key(request)
+    admin_user_id = get_authenticated_user_id(request)
+    supabase = get_supabase_client()
+    next_status = payload.status.strip().upper() if payload.status else "RESOLVED"
+
+    if next_status not in {"OPEN", "REVIEWING", "RESOLVED", "DISMISSED"}:
+        raise HTTPException(status_code=400, detail="Unsupported report status.")
+
+    report_result = supabase.table("reports").select("*").eq("id", report_id).execute()
+    report_row = (report_result.data or [None])[0]
+
+    if not report_row:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    if payload.hide_target:
+        target_type = report_row.get("target_type") or "CLAIM"
+        if target_type == "CLAIM" and report_row.get("claim_id"):
+            supabase.table("claims").update({
+                "is_flagged": True,
+                "status": "NEEDS_MORE_EVIDENCE",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", report_row["claim_id"]).execute()
+        elif target_type == "EVIDENCE" and report_row.get("evidence_id"):
+            supabase.table("evidence").delete().eq("id", report_row["evidence_id"]).execute()
+        elif target_type == "PROFILE" and report_row.get("profile_id"):
+            supabase.table("profiles").update({
+                "profile_visibility": "private",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", report_row["profile_id"]).execute()
+
+    update_result = (
+        supabase.table("reports")
+        .update({
+            "status": next_status,
+            "resolved_at": datetime.now(timezone.utc).isoformat() if next_status in {"RESOLVED", "DISMISSED"} else None,
+            "resolved_by": admin_user_id if next_status in {"RESOLVED", "DISMISSED"} else None,
+            "admin_note": payload.admin_note.strip() or None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", report_id)
+        .execute()
+    )
+
+    return {"ok": True, "report": (update_result.data or [None])[0]}
 
 
 # PHASE 5 STEP 1C

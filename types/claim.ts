@@ -75,15 +75,24 @@ export type ReportReason =
   | "Harmful content"
   | "Misleading title"
   | "Harassment or abuse"
+  // PHASE 5 STEP 2
+  | "Misinformation abuse"
+  | "Explicit content"
+  | "Malicious evidence"
   | "Other";
 
 export interface Report {
   id: string;
-  claimId: string;
+  claimId?: string | null;
+  // PHASE 5 STEP 2
+  targetType?: "CLAIM" | "EVIDENCE" | "PROFILE";
+  evidenceId?: string | null;
+  profileId?: string | null;
   // PHASE 3 STEP 6
   userId?: string;
   reason: ReportReason;
   note: string;
+  status?: "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED";
   createdAt: string;
   updatedAt?: string;
 }

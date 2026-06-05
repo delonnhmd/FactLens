@@ -8,6 +8,9 @@ export const reportReasons: ReportReason[] = [
   "Harmful content",
   "Misleading title",
   "Harassment or abuse",
+  // PHASE 5 STEP 2
+  "Misinformation abuse",
+  "Explicit content",
+  "Malicious evidence",
   "Other",
 ];
-

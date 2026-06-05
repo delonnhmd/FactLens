@@ -3,13 +3,15 @@
 // PHASE 3 STEP 28
 // PHASE 4 STEP 27
 import { useEffect, useRef, useState } from "react";
-import { Alert, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
+import { Alert, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthProfile } from "../../services/authProfile";
+import { deleteCurrentAccount } from "../../services/accountService";
 import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
+import { updateProfile } from "../../services/profileService";
 import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
 
 export default function ProfileScreen() {
@@ -24,6 +26,7 @@ export default function ProfileScreen() {
     loading,
     signOut,
     ensureProfile,
+    refreshProfile,
   } = useAuth();
   const fallbackProfile = getAuthProfile(currentUser);
   const [actionMessage, setActionMessage] = useState("");
@@ -31,6 +34,9 @@ export default function ProfileScreen() {
   const [reputationEvents, setReputationEvents] = useState<ReputationEvent[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityError, setActivityError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState("");
+  const [usernameSaving, setUsernameSaving] = useState(false);
   const profileAutoFixAttempted = useRef(false);
 
   const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
@@ -58,6 +64,33 @@ export default function ProfileScreen() {
     router.replace("/");
   };
 
+  // PHASE 5 STEP 2
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account?",
+      "This permanently removes your FactLens account and public profile. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleteLoading(true);
+            const result = await deleteCurrentAccount();
+            setDeleteLoading(false);
+
+            if (!result.ok) {
+              Alert.alert(result.error ?? "Could not delete account right now.");
+              return;
+            }
+
+            router.replace("/");
+          },
+        },
+      ],
+    );
+  };
+
   const handleCreateMissingProfile = async () => {
     if (!currentUser) {
       return;
@@ -73,6 +106,28 @@ export default function ProfileScreen() {
     }
 
     setActionMessage(result.message ?? "Profile ready.");
+  };
+
+  // PHASE 5 STEP 2
+  const handleSaveUsername = async () => {
+    if (!currentUser || !usernameDraft.trim()) {
+      return;
+    }
+
+    setActionError("");
+    setActionMessage("");
+    setUsernameSaving(true);
+    const result = await updateProfile(currentUser.id, { username: usernameDraft });
+    setUsernameSaving(false);
+
+    if (result.error) {
+      setActionError(result.error);
+      return;
+    }
+
+    setUsernameDraft("");
+    setActionMessage("Username updated.");
+    await refreshProfile();
   };
 
   // PHASE 3 STEP 28
@@ -240,6 +295,29 @@ export default function ProfileScreen() {
               <Text style={styles.detailValue}>@{username}</Text>
             </View>
 
+            {profile ? (
+              <View style={styles.usernameEditPanel}>
+                <Text style={styles.detailLabel}>Change username</Text>
+                <TextInput
+                  value={usernameDraft}
+                  onChangeText={setUsernameDraft}
+                  placeholder="New username"
+                  placeholderTextColor={theme.colors.muted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.usernameInput}
+                />
+                <TouchableOpacity
+                  style={[styles.smallButton, usernameSaving && styles.disabledButton]}
+                  activeOpacity={0.8}
+                  onPress={handleSaveUsername}
+                  disabled={usernameSaving || !usernameDraft.trim()}
+                >
+                  <Text style={styles.smallButtonText}>{usernameSaving ? "Saving..." : "Save username"}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Email verification</Text>
               <Text style={[styles.detailValue, isVerified ? styles.successText : styles.warningText]}>
@@ -336,8 +414,40 @@ export default function ProfileScreen() {
               <Text style={styles.detailValue}>{createdAt ? new Date(createdAt).toLocaleDateString() : "Unknown"}</Text>
             </View>
 
+            {/* PHASE 5 STEP 2 */}
+            <View style={styles.legalSection}>
+              <Text style={styles.detailLabel}>Launch safety</Text>
+              <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={() => router.push("/legal/terms")}>
+                <Text style={styles.legalLinkText}>Terms of Service</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.legalLink}
+                activeOpacity={0.8}
+                onPress={() => router.push("/legal/ai-disclaimer")}
+              >
+                <Text style={styles.legalLinkText}>AI Disclaimer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.legalLink}
+                activeOpacity={0.8}
+                onPress={() => router.push("/legal/community-guidelines")}
+              >
+                <Text style={styles.legalLinkText}>Community Guidelines</Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity style={styles.signOutButton} activeOpacity={0.8} onPress={handleSignOut}>
               <Text style={styles.signOutButtonText}>Sign out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.deleteAccountButton, deleteLoading && styles.disabledButton]}
+              activeOpacity={0.8}
+              onPress={handleDeleteAccount}
+              disabled={deleteLoading}
+            >
+              <Text style={styles.deleteAccountButtonText}>
+                {deleteLoading ? "Deleting..." : "Delete account"}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -448,6 +558,36 @@ const styles = StyleSheet.create({
   detailValue: {
     color: theme.colors.text,
     fontSize: 14,
+  },
+  // PHASE 5 STEP 2
+  usernameEditPanel: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+  },
+  usernameInput: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontSize: 14,
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  smallButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  smallButtonText: {
+    color: theme.colors.background,
+    fontSize: 13,
+    fontWeight: "700",
   },
   reputationBadge: {
     alignSelf: "flex-start",
@@ -668,5 +808,34 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
+  },
+  // PHASE 5 STEP 2
+  legalSection: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+  },
+  legalLink: {
+    paddingVertical: 8,
+  },
+  legalLinkText: {
+    color: theme.colors.link,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  deleteAccountButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.dangerBg,
+    borderRadius: theme.radius.sm,
+    marginTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  deleteAccountButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "700",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

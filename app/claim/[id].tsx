@@ -46,6 +46,7 @@ import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../typ
 import { theme } from "../../constants/theme";
 import { normalizeUrl } from "../../utils/url";
 import { getTopBadges } from "../../utils/reputation";
+import { reportEvidence } from "../../services/reportService";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
@@ -101,6 +102,9 @@ const compactReportReasons: Array<{ label: string; value: ReportReason }> = [
   { label: "Misleading", value: "Misleading title" },
   { label: "Duplicate", value: "Duplicate claim" },
   { label: "Abuse", value: "Harassment or abuse" },
+  // PHASE 5 STEP 2
+  { label: "Misinformation", value: "Misinformation abuse" },
+  { label: "Explicit", value: "Explicit content" },
 ];
 
 const CLAIM_REFETCH_DELAY_MS = 300;
@@ -659,6 +663,28 @@ export default function ClaimDetailScreen() {
     } catch {
       Alert.alert("Could not open source.", "Check the evidence URL and try again.");
     }
+  };
+
+  // PHASE 5 STEP 2
+  const handleReportEvidence = async (evidenceId: string) => {
+    if (!currentUser) {
+      Alert.alert("Log in to report evidence.");
+      return;
+    }
+
+    if (!isVerified) {
+      Alert.alert("Verify your email to report evidence.");
+      return;
+    }
+
+    const result = await reportEvidence(evidenceId, currentUser.id, "Malicious evidence");
+
+    if (result.error) {
+      Alert.alert(result.error);
+      return;
+    }
+
+    Alert.alert("Report submitted.");
   };
 
   // PHASE 3 STEP 6
@@ -1367,6 +1393,14 @@ export default function ClaimDetailScreen() {
                     >
                       <Text style={styles.openSourceButtonText}>Open Source</Text>
                       <Ionicons name="open-outline" size={13} color={theme.colors.link} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.reportEvidenceButton}
+                      activeOpacity={0.8}
+                      onPress={() => handleReportEvidence(item.id)}
+                    >
+                      <Ionicons name="flag-outline" size={13} color={theme.colors.danger} />
+                      <Text style={styles.reportEvidenceButtonText}>Report Evidence</Text>
                     </TouchableOpacity>
                   </View>
                 );
@@ -2259,6 +2293,20 @@ const styles = StyleSheet.create({
     color: theme.colors.link,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "600",
+  },
+  // PHASE 5 STEP 2
+  reportEvidenceButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 5,
+    marginTop: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  reportEvidenceButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "700",
   },
   date: {
     fontSize: theme.typography.body.fontSize,
