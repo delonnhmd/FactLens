@@ -1,10 +1,14 @@
 // PHASE 5 STEP 1
+// PHASE 5 STEP 5 PRE-LAUNCH
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
+import { EmptyState } from "../../components/EmptyState";
+import { LeaderboardSkeleton } from "../../components/Skeleton";
 import { theme } from "../../constants/theme";
+import { useAuth } from "../../context/AuthContext";
 import {
   fetchLeaderboard,
   type LeaderboardScope,
@@ -20,6 +24,7 @@ const tabs: Array<{ label: string; value: LeaderboardScope }> = [
 export default function LeaderboardScreen() {
   // PHASE 5 STEP 1E
   const router = useRouter();
+  const { currentUser } = useAuth();
   const [scope, setScope] = useState<LeaderboardScope>("monthly");
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +62,7 @@ export default function LeaderboardScreen() {
         const result = await fetchLeaderboard(scope, 50);
 
         if (result.error) {
-          setError(result.error);
+          setError("Could not connect. Check your connection and try again.");
         }
 
         setUsers(result.users);
@@ -103,10 +108,14 @@ export default function LeaderboardScreen() {
         ) : null}
 
         <View style={styles.card}>
-          {loading ? <Text style={styles.placeholder}>Loading leaderboard...</Text> : null}
+          {loading ? <LeaderboardSkeleton count={6} /> : null}
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {!loading && users.length === 0 ? (
-            <Text style={styles.placeholder}>No leaderboard activity yet.</Text>
+            <EmptyState
+              icon="trophy-outline"
+              title="No leaderboard activity yet"
+              message="Earn reputation points by voting and adding evidence."
+            />
           ) : null}
 
           {users.map((user, index) => {
@@ -115,12 +124,30 @@ export default function LeaderboardScreen() {
             return (
               <TouchableOpacity
                 key={user.id}
-                style={styles.row}
+                style={[
+                  styles.row,
+                  index === 0 && styles.rowGold,
+                  index === 1 && styles.rowSilver,
+                  index === 2 && styles.rowBronze,
+                  currentUser?.id === user.id && styles.currentUserRow,
+                ]}
                 activeOpacity={0.85}
                 onPress={() => router.push(`/profile/${user.username}`)}
               >
                 <View style={styles.position}>
-                  <Text style={styles.positionText}>{index + 1}</Text>
+                  <Text
+                    style={[
+                      styles.positionText,
+                      index === 0 && styles.positionGold,
+                      index === 1 && styles.positionSilver,
+                      index === 2 && styles.positionBronze,
+                    ]}
+                  >
+                    {index + 1}
+                  </Text>
+                </View>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{user.username.slice(0, 1).toUpperCase()}</Text>
                 </View>
                 <View style={styles.userInfo}>
                   <Text style={styles.username} numberOfLines={1}>
@@ -181,7 +208,7 @@ const styles = StyleSheet.create({
   tabText: {
     color: theme.colors.subtext,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   tabTextSelected: {
     color: theme.colors.background,
@@ -196,7 +223,7 @@ const styles = StyleSheet.create({
   resetText: {
     color: theme.colors.subtext,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     marginBottom: 10,
     paddingHorizontal: 4,
   },
@@ -209,6 +236,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+  currentUserRow: {
+    borderLeftColor: theme.colors.navy,
+    borderLeftWidth: 3,
+  },
+  rowGold: {
+    backgroundColor: "#FFF8E8",
+  },
+  rowSilver: {
+    backgroundColor: "#F7F8FA",
+  },
+  rowBronze: {
+    backgroundColor: "#FFF2E8",
+  },
   position: {
     alignItems: "center",
     backgroundColor: theme.colors.phaseBg,
@@ -220,7 +260,29 @@ const styles = StyleSheet.create({
   positionText: {
     color: theme.colors.ai,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
+  },
+  positionGold: {
+    color: "#9A6400",
+  },
+  positionSilver: {
+    color: "#5E6673",
+  },
+  positionBronze: {
+    color: "#9A4F17",
+  },
+  avatar: {
+    alignItems: "center",
+    backgroundColor: theme.colors.tagBg,
+    borderRadius: 15,
+    height: 30,
+    justifyContent: "center",
+    width: 30,
+  },
+  avatarText: {
+    color: theme.colors.tagText,
+    fontSize: 12,
+    fontWeight: "500",
   },
   userInfo: {
     flex: 1,
@@ -228,7 +290,7 @@ const styles = StyleSheet.create({
   username: {
     color: theme.colors.text,
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   metaRow: {
     alignItems: "center",
@@ -240,14 +302,14 @@ const styles = StyleSheet.create({
   rankTitle: {
     color: theme.colors.subtext,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "400",
   },
   badge: {
     backgroundColor: theme.colors.sourceBg,
     borderRadius: 999,
     color: theme.colors.sourceText,
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
@@ -257,8 +319,8 @@ const styles = StyleSheet.create({
   },
   points: {
     color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "500",
   },
   placeholder: {
     color: theme.colors.subtext,
@@ -268,7 +330,7 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     padding: theme.spacing.md,
   },
 });

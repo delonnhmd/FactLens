@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 // FactLens UI redesign
-import { View, Text, StyleSheet } from "react-native";
+import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
@@ -15,19 +15,18 @@ interface HeaderProps {
 export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderProps) {
   return (
     <View style={styles.container}>
+      <View style={styles.actionSlot} />
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
       {rightIcon ? (
-        <Ionicons 
-          name={rightIcon} 
-          size={24} 
-          color="rgba(255, 255, 255, 0.7)" 
-          onPress={onRightIconPress}
-          style={styles.icon}
-        />
-      ) : null}
+        <TouchableOpacity style={styles.actionSlot} activeOpacity={0.75} onPress={onRightIconPress}>
+          <Ionicons name={rightIcon} size={22} color="rgba(255, 255, 255, 0.7)" />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.actionSlot} />
+      )}
     </View>
   );
 }
@@ -44,19 +43,23 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    alignItems: "center",
   },
   title: {
     fontSize: 16,
     fontWeight: "500",
     color: theme.colors.background,
+    textAlign: "center",
   },
   subtitle: {
     marginTop: theme.spacing.xs,
     fontSize: 11,
     color: "rgba(255, 255, 255, 0.7)",
   },
-  icon: {
-    marginLeft: theme.spacing.md,
+  actionSlot: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    minWidth: 32,
   },
 });
 

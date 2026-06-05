@@ -359,8 +359,8 @@ export default function ProfileScreen() {
                     <Text style={styles.statValue}>{profile.evidence_count}</Text>
                   </View>
                   <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Helpful Evidence</Text>
-                    <Text style={styles.statValue}>{profile.helpful_evidence_count}</Text>
+                    <Text style={styles.statLabel}>Badges Earned</Text>
+                    <Text style={styles.statValue}>{profile.badge_list.length}</Text>
                   </View>
                 </View>
 
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
   smallButtonText: {
     color: theme.colors.background,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   reputationBadge: {
     alignSelf: "flex-start",
@@ -651,7 +651,7 @@ const styles = StyleSheet.create({
   rankIconText: {
     color: theme.colors.background,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   rankTextBlock: {
     flex: 1,
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
   rankTitle: {
     color: theme.colors.text,
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   rankSubtitle: {
     color: theme.colors.subtext,
@@ -700,13 +700,13 @@ const styles = StyleSheet.create({
   statLabel: {
     color: theme.colors.subtext,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
     marginBottom: theme.spacing.xs,
   },
   statValue: {
     color: theme.colors.text,
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   statHint: {
     color: theme.colors.subtext,
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
   },
   activityDeltaText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   activityDeltaPositive: {
     color: theme.colors.success,
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
   activityTitle: {
     color: theme.colors.text,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   activityReason: {
     color: theme.colors.subtext,
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
   contributorBadgeText: {
     color: theme.colors.sourceText,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   successText: {
     color: theme.colors.success,
@@ -859,7 +859,7 @@ const styles = StyleSheet.create({
   legalLinkText: {
     color: theme.colors.link,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   deleteAccountButton: {
     alignItems: "center",
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
   deleteAccountButtonText: {
     color: theme.colors.danger,
     fontSize: theme.typography.body.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   disabledButton: {
     opacity: 0.6,

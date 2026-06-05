@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   backText: {
     color: theme.colors.link,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   card: {
     backgroundColor: theme.colors.background,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   avatarText: {
     color: theme.colors.primary,
     fontSize: 24,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   identity: {
     flex: 1,
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.text,
     fontSize: 22,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   username: {
     color: theme.colors.subtext,
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     color: theme.colors.ai,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "500",
     marginTop: 8,
     paddingHorizontal: 9,
     paddingVertical: 4,
@@ -286,13 +286,13 @@ const styles = StyleSheet.create({
   statLabel: {
     color: theme.colors.subtext,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
     marginBottom: 4,
   },
   statValue: {
     color: theme.colors.text,
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   detailRow: {
     borderTopColor: theme.colors.lightBorder,
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   detailLabel: {
     color: theme.colors.subtext,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     marginBottom: 5,
   },
   detailValue: {
@@ -324,14 +324,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     color: theme.colors.sourceText,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
   errorText: {
     color: theme.colors.danger,
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   reportButton: {
     alignItems: "center",
@@ -344,6 +344,6 @@ const styles = StyleSheet.create({
   reportButtonText: {
     color: theme.colors.danger,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
   },
 });

@@ -3,7 +3,7 @@ import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
-import { getSourceMessage, getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
+import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
 
 // PHASE 4 STEP 18
 // Source trust label update
@@ -91,6 +91,26 @@ function getAiSummary(claim: Claim): string {
   );
 }
 
+function getSourcePillStyle(score: number, label: string) {
+  if (label === "Not verified") {
+    return styles.sourcePillNeutral;
+  }
+
+  if (score >= 90) {
+    return styles.sourcePillGreen;
+  }
+
+  if (score >= 75) {
+    return styles.sourcePillBlue;
+  }
+
+  if (score >= 40) {
+    return styles.sourcePillAmber;
+  }
+
+  return styles.sourcePillRed;
+}
+
 function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
   const sourceQuality = useMemo(() => getSourceQuality(claim.sourceUrl), [claim.sourceUrl]);
   const sourceDomain = getSourceDomain(claim.sourceUrl);
@@ -100,10 +120,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const sourceQualityLabel = useLocalSourceFallback
     ? sourceQuality.label
     : getSourceTrustLabel(sourceScore, claim.sourceQuality || sourceQuality.label);
-  const sourceMessage = useMemo(
-    () => getSourceMessage(sourceScore, sourceQuality.label),
-    [sourceQuality.label, sourceScore],
-  );
   const verdictLabel =
     claim.status === "FINALIZED_TRUE" ||
     claim.status === "FINALIZED_FAKE" ||
@@ -122,7 +138,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         const message = await onVote(claim.id, vote);
         Alert.alert(typeof message === "string" ? message : `Vote saved: ${voteLabels[vote]}`);
       } catch (error) {
-        Alert.alert(error instanceof Error ? error.message : "Could not save vote right now.");
+        Alert.alert("Could not record your vote. Please try again.");
       }
     },
     [claim.id, onVote],
@@ -133,7 +149,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       await onReport(claim.id, "Spam", "");
       Alert.alert("Report submitted.");
     } catch (error) {
-      Alert.alert(error instanceof Error ? error.message : "Could not submit report right now.");
+      Alert.alert("Could not submit report right now.");
     }
   }, [claim.id, onReport]);
 
@@ -222,23 +238,10 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             <Text style={styles.sourceDomain} numberOfLines={1}>
               {sourceDomain}
             </Text>
-            <Text style={styles.sourcePill}>
+            <Text style={[styles.sourcePill, getSourcePillStyle(sourceScore, sourceQualityLabel)]}>
               {sourceQualityLabel} {"\u00B7"} {sourceScore}/100
             </Text>
           </View>
-
-          <Text
-            style={[
-              styles.sourceMessage,
-              sourceMessage.color === "green" && styles.sourceMessageGreen,
-              sourceMessage.color === "blue" && styles.sourceMessageBlue,
-              sourceMessage.color === "amber" && styles.sourceMessageAmber,
-              sourceMessage.color === "red" && styles.sourceMessageRed,
-            ]}
-            numberOfLines={1}
-          >
-            {sourceMessage.text}
-          </Text>
 
           {claim.evidenceCount > 0 ? (
             <Text style={styles.evidenceText}>
@@ -307,14 +310,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#EAF3DE",
     borderRadius: 12,
-    height: 24,
+    height: 28,
     justifyContent: "center",
-    width: 24,
+    width: 28,
   },
   avatarText: {
     color: "#27500A",
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   authorMeta: {
     color: theme.colors.subtext,
@@ -389,30 +392,32 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   sourcePill: {
-    backgroundColor: "#E6F1FB",
     borderRadius: 999,
-    color: "#0C447C",
     fontSize: 11,
     fontWeight: "500",
     overflow: "hidden",
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  sourceMessage: {
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  sourceMessageGreen: {
+  sourcePillGreen: {
+    backgroundColor: theme.colors.successBg,
     color: theme.colors.success,
   },
-  sourceMessageBlue: {
+  sourcePillBlue: {
+    backgroundColor: theme.colors.sourceBg,
     color: theme.colors.sourceText,
   },
-  sourceMessageAmber: {
+  sourcePillAmber: {
+    backgroundColor: theme.colors.warningBg,
     color: theme.colors.warning,
   },
-  sourceMessageRed: {
+  sourcePillRed: {
+    backgroundColor: theme.colors.dangerBg,
     color: theme.colors.danger,
+  },
+  sourcePillNeutral: {
+    backgroundColor: theme.colors.secondarySurface,
+    color: theme.colors.subtext,
   },
   evidenceText: {
     color: theme.colors.subtext,
@@ -478,7 +483,7 @@ const styles = StyleSheet.create({
   hiddenContentTitle: {
     color: theme.colors.text,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   hiddenContentText: {
     color: theme.colors.subtext,

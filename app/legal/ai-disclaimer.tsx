@@ -34,6 +34,6 @@ export default function AiDisclaimerScreen() {
 const styles = StyleSheet.create({
   container: { backgroundColor: theme.colors.card, flex: 1 },
   content: { gap: 12, padding: 14 },
-  link: { color: theme.colors.link, fontSize: 14, fontWeight: "700", marginBottom: 4 },
+  link: { color: theme.colors.link, fontSize: 14, fontWeight: "500", marginBottom: 4 },
   body: { color: theme.colors.subtext, fontSize: 14, lineHeight: 21 },
 });

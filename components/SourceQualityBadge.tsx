@@ -24,7 +24,7 @@ function getQualityColors(label: SourceQualityLabel) {
     };
   }
 
-  if (label === "Use Caution" || label === "Not in FactLens library") {
+  if (label === "Moderate" || label === "Use Caution") {
     return {
       backgroundColor: theme.colors.warningBg,
       color: theme.colors.warning,

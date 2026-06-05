@@ -1,7 +1,7 @@
 // PHASE 1 STEP 4
+// PHASE 5 STEP 5 PRE-LAUNCH
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { EmptyState } from "../../components/EmptyState";
+import { ClaimListSkeleton } from "../../components/Skeleton";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
 import { useClaims } from "../../context/ClaimsContext";
@@ -84,7 +85,7 @@ export default function TrendingScreen() {
       setTrendingSourceClaims(nextClaims);
     } catch {
       setTrendingSourceClaims([]);
-      setError("Could not load claims. Pull to retry.");
+      setError("Could not connect. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -170,12 +171,7 @@ export default function TrendingScreen() {
         </View>
       ) : null}
 
-      {loading ? (
-        <View style={styles.statePanel}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-          <Text style={styles.stateText}>Loading trending claims...</Text>
-        </View>
-      ) : null}
+      {loading ? <ClaimListSkeleton count={3} /> : null}
     </View>
   );
 
@@ -190,7 +186,17 @@ export default function TrendingScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={listHeader}
-        ListEmptyComponent={!loading && !error ? <EmptyState message="No trending claims yet." /> : null}
+        ListEmptyComponent={
+          !loading && !error ? (
+            <EmptyState
+              icon="flame-outline"
+              title="No trending claims yet"
+              message="Trending claims will appear here after the community starts voting."
+              actionLabel="Create claim"
+              onActionPress={() => router.push("/create")}
+            />
+          ) : null
+        }
       />
     </SafeAreaView>
   );

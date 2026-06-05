@@ -1,9 +1,9 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 27
 // PHASE 4 STEP 15
+// PHASE 5 STEP 5 PRE-LAUNCH
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -18,6 +18,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
 import { EmptyState } from "../../components/EmptyState";
+import { ClaimListSkeleton } from "../../components/Skeleton";
 import { claimCategories } from "../../constants/claimCategories";
 import { theme } from "../../constants/theme";
 import { useClaims } from "../../context/ClaimsContext";
@@ -126,7 +127,7 @@ export default function HomeScreen() {
           setFeedOffset(0);
         }
 
-        setFeedError(loadError instanceof Error ? loadError.message : "Could not load claims. Pull to retry.");
+        setFeedError("Could not connect. Check your connection and try again.");
       } finally {
         setFeedLoading(false);
         setFeedLoadingMore(false);
@@ -162,7 +163,7 @@ export default function HomeScreen() {
         await refreshClaims();
       }
     } catch (loadError) {
-      setFeedError(loadError instanceof Error ? loadError.message : "Could not load claims. Pull to retry.");
+      setFeedError("Could not connect. Check your connection and try again.");
     } finally {
       setRefreshing(false);
     }
@@ -253,17 +254,14 @@ export default function HomeScreen() {
         <View style={styles.errorPanel}>
           <Text style={styles.errorTitle}>Could not load claims.</Text>
           {/* PHASE 4 STEP 24 */}
-          <Text style={styles.errorText}>Pull to retry or tap Retry.</Text>
+          <Text style={styles.errorText}>Check your connection and try again.</Text>
           <TouchableOpacity style={styles.retryButton} activeOpacity={0.8} onPress={handleRefresh}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : null}
       {listLoading ? (
-        <View style={styles.statePanel}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-          <Text style={styles.stateText}>Loading claims...</Text>
-        </View>
+        <ClaimListSkeleton count={3} />
       ) : null}
     </View>
   );
@@ -285,18 +283,22 @@ export default function HomeScreen() {
         ListEmptyComponent={
           !listLoading && !displayError ? (
             <EmptyState
+              icon="document-text-outline"
+              title={filteredFeedActive ? "No matching claims" : "No claims yet"}
               message={
                 filteredFeedActive
-                  ? "No matching claims."
-                  : "No claims yet. Be the first to post a news claim."
+                  ? "Try a different search or category."
+                  : "Be the first to submit a claim for verification."
               }
+              actionLabel={filteredFeedActive ? undefined : "Create claim"}
+              onActionPress={filteredFeedActive ? undefined : () => router.push("/create")}
             />
           ) : null
         }
         ListFooterComponent={
           listLoadingMore ? (
             <View style={styles.footerLoader}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <ClaimListSkeleton count={1} />
             </View>
           ) : null
         }

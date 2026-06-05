@@ -11,6 +11,7 @@
 // PHASE 4 STEP 18B
 // PHASE 4 STEP 22
 // PHASE 4 STEP 23
+// PHASE 5 STEP 5 PRE-LAUNCH
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -163,7 +164,7 @@ function getEvidenceSourceDomain(url: string): string {
   try {
     return new URL(normalizeUrl(url)).hostname.replace(/^www\./i, "").toLowerCase();
   } catch {
-    return "Unknown source";
+    return "Not verified";
   }
 }
 
@@ -435,7 +436,7 @@ export default function ClaimDetailScreen() {
     const refreshEvidence = () => {
       fetchEvidenceForClaim(claimId).catch((error) => {
         if (mounted) {
-          setEvidenceError(error instanceof Error ? error.message : "Could not load evidence.");
+        setEvidenceError("Could not load evidence.");
         }
       });
     };
@@ -449,7 +450,7 @@ export default function ClaimDetailScreen() {
 
       fetchReportsForClaim(claimId).catch((error) => {
         if (mounted) {
-          setReportError(error instanceof Error ? error.message : "Could not load reports right now.");
+          setReportError("Could not load reports right now.");
         }
       });
     };
@@ -485,7 +486,7 @@ export default function ClaimDetailScreen() {
 
     refreshClaimVerdict(claimId).catch((error) => {
       if (mounted) {
-        setDetailError(error instanceof Error ? error.message : "Could not refresh this verdict.");
+        setDetailError("Could not load claim details.");
       }
     });
 
@@ -516,7 +517,7 @@ export default function ClaimDetailScreen() {
     fetchEvidenceForClaim(claim.id)
       .catch((error) => {
         if (mounted) {
-          setEvidenceError(error instanceof Error ? error.message : "Could not load evidence.");
+          setEvidenceError("Could not load evidence.");
         }
       })
       .finally(() => {
@@ -545,7 +546,7 @@ export default function ClaimDetailScreen() {
     fetchReportsForClaim(claim.id)
       .catch((error) => {
         if (mounted) {
-          setReportError(error instanceof Error ? error.message : "Could not load reports right now.");
+          setReportError("Could not load reports right now.");
         }
       })
       .finally(() => {
@@ -650,7 +651,7 @@ export default function ClaimDetailScreen() {
       setEvidenceErrors({});
       setEvidenceSuccess("Evidence saved.");
     } catch (error) {
-      setEvidenceError(error instanceof Error ? error.message : "Could not save evidence right now.");
+      setEvidenceError("Could not add evidence. Check the URL and try again.");
     } finally {
       setEvidenceSubmitLoading(false);
     }
@@ -710,7 +711,7 @@ export default function ClaimDetailScreen() {
       setSelectedReportReason(reasonToSubmit);
       setReportSuccess(true);
     } catch (error) {
-      setReportError(error instanceof Error ? error.message : "Could not submit report right now.");
+      setReportError("Could not submit report right now.");
     } finally {
       setReportSubmitting(false);
     }
@@ -734,7 +735,7 @@ export default function ClaimDetailScreen() {
       await waitForClaimRefetch();
       await refreshDetailClaim();
     } catch (error) {
-      setVoteError(error instanceof Error ? error.message : "Could not save vote right now.");
+      setVoteError("Could not record your vote. Please try again.");
     } finally {
       setVoteSubmitting(false);
     }
@@ -762,8 +763,7 @@ export default function ClaimDetailScreen() {
       await refreshDetailClaim();
       setAiPrecheckMessage("AI pre-check updated.");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "AI pre-check unavailable.";
-      setAiPrecheckError(`AI pre-check failed: ${message}`);
+      setAiPrecheckError("AI check is in progress. Results will appear shortly.");
     } finally {
       setAiPrecheckLoading(false);
     }
@@ -787,8 +787,7 @@ export default function ClaimDetailScreen() {
       setAiPrecheckMessage("AI re-check updated.");
     } catch (error) {
       // PHASE 4 STEP 16
-      const message = error instanceof Error ? error.message : "AI re-check unavailable.";
-      setAiPrecheckError(`AI re-check failed: ${message}`);
+      setAiPrecheckError("AI check is in progress. Results will appear shortly.");
     } finally {
       setAiEvidenceRecheckLoading(false);
     }
@@ -873,6 +872,7 @@ export default function ClaimDetailScreen() {
     ? getSourceTrustLabel(claim.sourceScore, claim.sourceQuality)
     : mainSourceQuality.label;
   const displayedSourceMessage = getSourceMessage(displayedSourceScore, mainSourceQuality.label);
+  const claimSourceDomain = getEvidenceSourceDomain(claim.sourceUrl);
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
   const mediaPlatform = claim.media.videoPlatform ?? (claim.media.youtubeUrl ? "YouTube" : mediaUrl ? "Video Link" : null);
@@ -883,6 +883,9 @@ export default function ClaimDetailScreen() {
     (claim.aiCheck.status === "PENDING"
       ? "No AI result yet. FactLens will check this claim shortly."
       : "No AI result yet.");
+  const aiRiskSummary = claim.redFlags.length > 0
+    ? "AI found source or evidence concerns. Review the source support summary."
+    : aiSummary;
   // PHASE 4 STEP 22
   const sourceReadStatusLabel = getSourceReadStatusLabel(claim.sourceReadStatus);
   const sourceSupportLabel = getSourceSupportLabel(claim.sourceSupportsClaim);
@@ -990,8 +993,8 @@ export default function ClaimDetailScreen() {
             </View>
             <View style={styles.sourceLinkRow}>
               <Ionicons name="link-outline" size={13} color={theme.colors.link} />
-              <Text style={styles.sourceUrl} selectable>
-                {claim.sourceUrl}
+              <Text style={styles.sourceUrl} selectable numberOfLines={1}>
+                {claimSourceDomain}
               </Text>
             </View>
             {/* PHASE 4 STEP 24 */}
@@ -1054,16 +1057,7 @@ export default function ClaimDetailScreen() {
                   This only checks whether the source appears to support the claim. It is not a final truth decision.
                 </Text>
               </View>
-              <Text style={styles.aiText}>Evidence used by AI: {evidenceUsedCount}</Text>
-              <Text style={styles.aiText}>
-                {evidenceUsedCount > 0
-                  ? `AI reviewed ${evidenceUsedCount} evidence links.`
-                  : "No evidence used in this AI check yet."}
-              </Text>
-              <Text style={styles.aiText}>{aiSummary}</Text>
-              {claim.redFlags.length > 0 ? (
-                <Text style={styles.aiRedFlags}>Red flags: {claim.redFlags.join(", ")}</Text>
-              ) : null}
+              <Text style={styles.aiText} numberOfLines={2}>{aiRiskSummary}</Text>
               {isNotFactCheckable ? (
                 <Text style={styles.notFactCheckableWarning}>
                   This appears to be an opinion or non-factual post. FactLens cannot verify it as True or Fake.
@@ -1442,7 +1436,11 @@ export default function ClaimDetailScreen() {
               })
             ) : null}
             {!evidenceLoading && sortedEvidence.length === 0 ? (
-              <Text style={styles.placeholder}>No evidence yet.</Text>
+              <EmptyState
+                icon="link-outline"
+                title="No evidence yet"
+                message="Add a source to help the community verify this claim."
+              />
             ) : null}
           </View>
         </View>
@@ -1644,7 +1642,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     color: theme.colors.phaseText,
     fontSize: 11,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
@@ -1653,7 +1651,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     color: theme.colors.sourceText,
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "500",
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
@@ -1668,7 +1666,7 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     flexShrink: 1,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   // PHASE 5 STEP 1E
   evidenceContributorSubtext: {
@@ -1819,13 +1817,13 @@ const styles = StyleSheet.create({
   notFactCheckableWarning: {
     color: theme.colors.warning,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 17,
   },
   sourceWarning: {
     color: theme.colors.warning,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 17,
   },
   flaggedBadge: {
@@ -1896,7 +1894,7 @@ const styles = StyleSheet.create({
   communitySummaryTitle: {
     color: theme.colors.subtext,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     paddingHorizontal: 14,
     paddingTop: 12,
   },
@@ -1922,7 +1920,7 @@ const styles = StyleSheet.create({
   },
   sourceMessage: {
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: theme.typography.small.lineHeight,
   },
   sourceMessageGreen: {
@@ -1950,7 +1948,7 @@ const styles = StyleSheet.create({
   sourceSupportKicker: {
     color: theme.colors.ai,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   sourceSupportRow: {
     alignItems: "center",
@@ -1961,7 +1959,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     flex: 1,
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 16,
   },
   sourceSupportPositive: {
@@ -1976,7 +1974,7 @@ const styles = StyleSheet.create({
   sourceSupportTitle: {
     color: theme.colors.text,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 18,
   },
   sourceSupportSummary: {
@@ -2297,7 +2295,7 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     flex: 1,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   evidenceQuality: {
     gap: theme.spacing.sm,
@@ -2327,7 +2325,7 @@ const styles = StyleSheet.create({
   openSourceButtonText: {
     color: theme.colors.link,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   // PHASE 5 STEP 2
   reportEvidenceButton: {
@@ -2341,7 +2339,7 @@ const styles = StyleSheet.create({
   reportEvidenceButtonText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   // PHASE 5 STEP 3
   hiddenDetailCard: {
@@ -2357,7 +2355,7 @@ const styles = StyleSheet.create({
   hiddenDetailTitle: {
     color: theme.colors.text,
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "500",
   },
   hiddenDetailText: {
     color: theme.colors.subtext,

@@ -7,6 +7,7 @@
 export type SourceQualityLabel =
   | "Highly Trusted"
   | "Trusted"
+  | "Moderate"
   | "Use Caution"
   | "Low Trust"
   | "Government source"
@@ -22,7 +23,7 @@ export type SourceQualityLabel =
   | "French domain"
   | "Japanese domain"
   | "UK domain"
-  | "Not in FactLens library"
+  | "Not verified"
   | "Invalid URL";
 
 export type SourceMessageColor = "green" | "blue" | "amber" | "red";
@@ -194,7 +195,7 @@ export function getSourceScore(url: string): DomainCredibility {
     return { score: 58, quality: "UK domain" };
   }
 
-  return { score: 45, quality: "Not in FactLens library" };
+  return { score: 45, quality: "Not verified" };
 }
 
 export function getSourceTrustLabel(score: number | null | undefined, quality?: string | null): SourceQualityLabel {
@@ -202,8 +203,12 @@ export function getSourceTrustLabel(score: number | null | undefined, quality?: 
     return "Invalid URL";
   }
 
+  if (quality === "Not verified") {
+    return "Not verified";
+  }
+
   if (typeof score !== "number" || !Number.isFinite(score)) {
-    return "Not in FactLens library";
+    return "Not verified";
   }
 
   if (score >= 90) {
@@ -212,6 +217,10 @@ export function getSourceTrustLabel(score: number | null | undefined, quality?: 
 
   if (score >= 75) {
     return "Trusted";
+  }
+
+  if (score >= 60) {
+    return "Moderate";
   }
 
   if (score >= 40) {
@@ -240,7 +249,8 @@ export function getSourceCredibilityLabel(value: string | null | undefined): Sou
     value === "French domain" ||
     value === "Japanese domain" ||
     value === "UK domain" ||
-    value === "Not in FactLens library" ||
+    value === "Moderate" ||
+    value === "Not verified" ||
     value === "Invalid URL"
   ) {
     return value;
@@ -258,7 +268,7 @@ export function getSourceCredibilityLabel(value: string | null | undefined): Sou
     return "Use Caution";
   }
 
-  return "Not in FactLens library";
+  return "Not verified";
 }
 
 export function formatSourceCredibilityScore(value: number | null | undefined): string {
@@ -266,11 +276,11 @@ export function formatSourceCredibilityScore(value: number | null | undefined): 
 }
 
 export function getSourceMessage(score: number | null | undefined, quality: string | null | undefined): SourceMessage {
-  const safeQuality = quality?.trim() || "Not in FactLens library";
+  const safeQuality = quality?.trim() || "Not verified";
 
   if (typeof score !== "number" || !Number.isFinite(score)) {
     return {
-      text: `${safeQuality}. Community verification is important for this source.`,
+      text: "Not verified. Community verification is important for this source.",
       color: "amber",
     };
   }
@@ -291,14 +301,14 @@ export function getSourceMessage(score: number | null | undefined, quality: stri
 
   if (score >= 60) {
     return {
-      text: `Moderate credibility - ${safeQuality}. Verify with additional sources.`,
+      text: `Moderate credibility. Verify with additional sources.`,
       color: "amber",
     };
   }
 
   if (score >= 40) {
     return {
-      text: `${safeQuality}. Community verification is important for this source.`,
+      text: "Use caution. Community verification is important for this source.",
       color: "amber",
     };
   }

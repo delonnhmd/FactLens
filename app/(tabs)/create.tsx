@@ -1,7 +1,8 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
+// PHASE 5 STEP 5 PRE-LAUNCH
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
+import { ActivityIndicator, Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
@@ -14,6 +15,7 @@ import { analyzeClaimDraft } from "../../utils/claimQuality";
 import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
+import { getSourceQuality, getSourceTrustLabel } from "../../services/sourceQuality";
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
@@ -57,6 +59,25 @@ export default function CreateScreen() {
   const videoPlatform = trimmedVideoUrl ? detectVideoPlatform(normalizedVideoUrl) : null;
   const youtubeThumbnailUrl = trimmedVideoUrl ? getYouTubeThumbnailUrl(normalizedVideoUrl) : null;
   const videoUrlInvalid = trimmedVideoUrl.length > 0 && !isSupportedVideoUrl(normalizedVideoUrl);
+  const normalizedSourceUrl = sourceUrl.trim() ? normalizeUrl(sourceUrl) : "";
+  const sourcePreviewDomain = useMemo(() => {
+    if (!normalizedSourceUrl) {
+      return "";
+    }
+
+    try {
+      return new URL(normalizedSourceUrl).hostname.replace(/^www\./i, "").toLowerCase();
+    } catch {
+      return "";
+    }
+  }, [normalizedSourceUrl]);
+  const sourcePreviewQuality = useMemo(
+    () => (normalizedSourceUrl ? getSourceQuality(normalizedSourceUrl) : null),
+    [normalizedSourceUrl],
+  );
+  const sourcePreviewLabel = sourcePreviewQuality
+    ? getSourceTrustLabel(sourcePreviewQuality.score, sourcePreviewQuality.label)
+    : null;
   const submitDisabled = titleOverLimit || descriptionOverLimit || videoUrlInvalid || !claimQuality.canSubmit || isSubmitting;
 
   const titleCounterStyle = useMemo(
@@ -135,8 +156,8 @@ export default function CreateScreen() {
       if (image) {
         setSelectedImage(image);
       }
-    } catch (error) {
-      setImageError(error instanceof Error ? error.message : "Could not select this image right now.");
+    } catch {
+      setImageError("Could not select this image right now.");
     }
   };
 
@@ -154,10 +175,9 @@ export default function CreateScreen() {
         imageUrl = await uploadClaimImage(currentUser.id, selectedImage.uri, selectedImage.mimeType);
       }
 
-      const normalizedSourceUrl = normalizeUrl(sourceUrl);
       console.log("[url] normalized source url:", normalizedSourceUrl);
 
-      await createClaim({
+      const createdClaim = await createClaim({
         title,
         description,
         sourceUrl: normalizedSourceUrl,
@@ -174,11 +194,11 @@ export default function CreateScreen() {
       setSelectedImage(null);
       setImageError("");
       setErrors({});
-      router.replace({ pathname: "/", params: { claimPosted: "1" } });
-    } catch (claimError) {
+      router.replace(`/claim/${createdClaim.id}`);
+    } catch {
       setErrors({
         // PHASE 4 STEP 24
-        general: claimError instanceof Error ? claimError.message : "Could not create claim right now.",
+        general: "Could not submit claim right now. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -343,6 +363,7 @@ export default function CreateScreen() {
               placeholder="What claim should the community verify?"
               style={[styles.titleInput, (errors.title || titleOverLimit) && styles.inputError]}
               placeholderTextColor={theme.colors.muted}
+              editable={!isSubmitting}
               multiline
             />
             <View style={styles.fieldFooter}>
@@ -364,6 +385,7 @@ export default function CreateScreen() {
               placeholder="Add context, what was said, and why it matters."
               style={[styles.input, styles.textArea, (errors.description || descriptionOverLimit) && styles.inputError]}
               placeholderTextColor={theme.colors.muted}
+              editable={!isSubmitting}
               multiline
             />
             <View style={styles.fieldFooter}>
@@ -396,8 +418,17 @@ export default function CreateScreen() {
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!isSubmitting}
             />
             {errors.sourceUrl ? <Text style={styles.errorText}>{errors.sourceUrl}</Text> : null}
+            {sourcePreviewDomain && sourcePreviewQuality && sourcePreviewLabel ? (
+              <View style={styles.sourcePreviewRow}>
+                <Text style={styles.sourcePreviewDomain}>{sourcePreviewDomain}</Text>
+                <Text style={styles.sourcePreviewPill}>
+                  {sourcePreviewLabel} {"\u00B7"} {sourcePreviewQuality.score}/100
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.fieldGroup}>
@@ -411,6 +442,7 @@ export default function CreateScreen() {
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!isSubmitting}
             />
             {errors.videoUrl || videoUrlInvalid ? (
               <Text style={styles.errorText}>
@@ -431,7 +463,7 @@ export default function CreateScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Category</Text>
-            <View style={styles.categoryGrid}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryGrid}>
               {claimCategories.map((option) => {
                 const selected = category === option;
 
@@ -453,7 +485,7 @@ export default function CreateScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
             {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
           </View>
 
@@ -474,7 +506,12 @@ export default function CreateScreen() {
                 </TouchableOpacity>
               </View>
             ) : null}
-            <TouchableOpacity style={styles.imageButton} activeOpacity={0.8} onPress={handlePickImage}>
+            <TouchableOpacity
+              style={[styles.imageButton, isSubmitting && styles.buttonDisabled]}
+              activeOpacity={0.8}
+              onPress={handlePickImage}
+              disabled={isSubmitting}
+            >
               <Text style={styles.imageButtonText}>Add Image / Screenshot</Text>
             </TouchableOpacity>
             {imageError ? <Text style={styles.errorText}>{imageError}</Text> : null}
@@ -491,6 +528,7 @@ export default function CreateScreen() {
             disabled={submitDisabled}
           >
             <Text style={styles.buttonText}>{isSubmitting ? "Posting..." : "Post Claim"}</Text>
+            {isSubmitting ? <ActivityIndicator size="small" color={theme.colors.background} /> : null}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -672,8 +710,30 @@ const styles = StyleSheet.create({
   },
   categoryGrid: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: theme.spacing.sm,
+    paddingRight: theme.spacing.lg,
+  },
+  sourcePreviewRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  sourcePreviewDomain: {
+    color: theme.colors.link,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  sourcePreviewPill: {
+    backgroundColor: theme.colors.sourceBg,
+    borderRadius: 999,
+    color: theme.colors.sourceText,
+    fontSize: 11,
+    fontWeight: "500",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   categoryButton: {
     borderColor: theme.colors.border,
@@ -765,7 +825,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
     marginTop: theme.spacing.sm,
+    minHeight: 50,
     paddingVertical: theme.spacing.lg,
   },
   buttonDisabled: {

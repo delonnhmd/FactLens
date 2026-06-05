@@ -37,7 +37,7 @@ export default function TermsScreen() {
 const styles = StyleSheet.create({
   container: { backgroundColor: theme.colors.card, flex: 1 },
   content: { padding: 14 },
-  link: { color: theme.colors.link, fontSize: 14, fontWeight: "700", marginBottom: 14 },
-  heading: { color: theme.colors.text, fontSize: 16, fontWeight: "700", marginBottom: 8, marginTop: 10 },
+  link: { color: theme.colors.link, fontSize: 14, fontWeight: "500", marginBottom: 14 },
+  heading: { color: theme.colors.text, fontSize: 16, fontWeight: "500", marginBottom: 8, marginTop: 10 },
   body: { color: theme.colors.subtext, fontSize: 14, lineHeight: 21 },
 });

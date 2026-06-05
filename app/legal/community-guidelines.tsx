@@ -35,7 +35,7 @@ export default function CommunityGuidelinesScreen() {
 const styles = StyleSheet.create({
   container: { backgroundColor: theme.colors.card, flex: 1 },
   content: { gap: 10, padding: 14 },
-  link: { color: theme.colors.link, fontSize: 14, fontWeight: "700", marginBottom: 4 },
+  link: { color: theme.colors.link, fontSize: 14, fontWeight: "500", marginBottom: 4 },
   rule: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
