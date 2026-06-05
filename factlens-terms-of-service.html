@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - FactLens</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #2c3e50;
+            background-color: #f5f7fa;
+        }
+
+        /* Header */
+        header {
+            background-color: #0D1B3E;
+            color: white;
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-logo {
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: -0.5px;
+        }
+
+        .header-title {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+
+        /* Accent banner */
+        .accent-banner {
+            background-color: #0D1B3E;
+            color: #e0f0ff;
+            padding: 12px 0;
+            border-top: 3px solid #4a90e2;
+            font-size: 14px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .accent-banner-content {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Main container */
+        .container {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background-color: white;
+        }
+
+        /* Table of Contents */
+        .toc-section {
+            background-color: #f0f4f9;
+            border-left: 4px solid #4a90e2;
+            padding: 24px;
+            margin-bottom: 40px;
+            border-radius: 4px;
+        }
+
+        .toc-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0D1B3E;
+            margin-bottom: 16px;
+        }
+
+        .toc-list {
+            list-style: none;
+            columns: 2;
+            column-gap: 24px;
+        }
+
+        .toc-item {
+            margin-bottom: 10px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .toc-item a {
+            color: #4a90e2;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .toc-item a:hover {
+            color: #0D1B3E;
+            text-decoration: underline;
+        }
+
+        /* Section styling */
+        section {
+            margin-bottom: 40px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .section-number {
+            background-color: #0D1B3E;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0D1B3E;
+        }
+
+        .section-content {
+            margin-left: 0;
+        }
+
+        .section-content p {
+            margin-bottom: 16px;
+            line-height: 1.8;
+        }
+
+        .section-content h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #0D1B3E;
+            margin-top: 20px;
+            margin-bottom: 12px;
+        }
+
+        .section-content h4 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+
+        .section-content ul {
+            margin-left: 20px;
+            margin-bottom: 16px;
+        }
+
+        .section-content li {
+            margin-bottom: 8px;
+        }
+
+        /* Callout boxes */
+        .callout {
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-left: 4px solid;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .callout-blue {
+            background-color: #e8f4ff;
+            border-color: #4a90e2;
+            color: #1a3a52;
+        }
+
+        .callout-green {
+            background-color: #e8f5e9;
+            border-color: #4caf50;
+            color: #1b5e20;
+        }
+
+        .callout-amber {
+            background-color: #fff3e0;
+            border-color: #ff9800;
+            color: #e65100;
+        }
+
+        .callout-navy {
+            background-color: #e3f2fd;
+            border-color: #0D1B3E;
+            color: #0D1B3E;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        table th {
+            background-color: #0D1B3E;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        table tbody tr:nth-child(odd) {
+            background-color: #f9fafb;
+        }
+
+        table tbody tr:nth-child(even) {
+            background-color: #f0f4f9;
+        }
+
+        table tbody tr:hover {
+            background-color: #e8eef7;
+        }
+
+        /* Contact card */
+        .contact-card {
+            background-color: #e8f4ff;
+            border: 2px solid #4a90e2;
+            border-radius: 8px;
+            padding: 24px;
+            margin: 40px 0;
+            text-align: center;
+        }
+
+        .contact-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0D1B3E;
+            margin-bottom: 12px;
+        }
+
+        .contact-card p {
+            margin-bottom: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .contact-card a {
+            color: #4a90e2;
+            text-decoration: none;
+        }
+
+        .contact-card a:hover {
+            text-decoration: underline;
+        }
+
+        /* Footer */
+        footer {
+            background-color: #0D1B3E;
+            color: white;
+            padding: 32px 20px;
+            text-align: center;
+            font-size: 13px;
+            margin-top: 60px;
+        }
+
+        .footer-content {
+            max-width: 780px;
+            margin: 0 auto;
+        }
+
+        .footer-links {
+            margin-bottom: 12px;
+        }
+
+        .footer-links a {
+            color: #e0f0ff;
+            text-decoration: none;
+            margin: 0 12px;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-meta {
+            opacity: 0.8;
+            margin-top: 12px;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .header-content {
+                flex-direction: column;
+                gap: 8px;
+                padding: 16px;
+            }
+
+            .header-logo {
+                font-size: 24px;
+            }
+
+            .header-title {
+                font-size: 18px;
+            }
+
+            .section-header {
+                gap: 12px;
+            }
+
+            .section-title {
+                font-size: 20px;
+            }
+
+            .section-number {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+
+            .toc-list {
+                columns: 1;
+            }
+
+            .container {
+                padding: 24px 16px;
+            }
+
+            table {
+                font-size: 13px;
+            }
+
+            table th,
+            table td {
+                padding: 8px;
+            }
+
+            .toc-section {
+                padding: 16px;
+            }
+
+            .contact-card {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="header-logo">FactLens</div>
+            <div class="header-title">Terms of Service</div>
+        </div>
+    </header>
+
+    <!-- Accent Banner -->
+    <div class="accent-banner">
+        <div class="accent-banner-content">
+            Community-driven fact-checking platform. Effective June 4, 2026.
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Table of Contents -->
+        <div class="toc-section">
+            <div class="toc-title">Table of Contents</div>
+            <ul class="toc-list">
+                <li class="toc-item"><a href="#section-1">1. Acceptance of Terms</a></li>
+                <li class="toc-item"><a href="#section-2">2. Who Can Use FactLens</a></li>
+                <li class="toc-item"><a href="#section-3">3. Your Account</a></li>
+                <li class="toc-item"><a href="#section-4">4. Community Rules</a></li>
+                <li class="toc-item"><a href="#section-5">5. Content You Post</a></li>
+                <li class="toc-item"><a href="#section-6">6. Voting System</a></li>
+                <li class="toc-item"><a href="#section-7">7. AI Disclaimer</a></li>
+                <li class="toc-item"><a href="#section-8">8. Identity Verification</a></li>
+                <li class="toc-item"><a href="#section-9">9. Reputation & Badges</a></li>
+                <li class="toc-item"><a href="#section-10">10. Intellectual Property</a></li>
+                <li class="toc-item"><a href="#section-11">11. Prohibited Conduct</a></li>
+                <li class="toc-item"><a href="#section-12">12. Termination</a></li>
+                <li class="toc-item"><a href="#section-13">13. Disclaimers</a></li>
+                <li class="toc-item"><a href="#section-14">14. Indemnification</a></li>
+                <li class="toc-item"><a href="#section-15">15. Changes to Terms</a></li>
+                <li class="toc-item"><a href="#section-16">16. Contact & Law</a></li>
+            </ul>
+        </div>
+
+        <!-- Section 1 -->
+        <section id="section-1">
+            <div class="section-header">
+                <div class="section-number">1</div>
+                <h2 class="section-title">Acceptance of Terms</h2>
+            </div>
+            <div class="section-content">
+                <p>By downloading, installing, or using the FactLens mobile application or website, you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree, do not use FactLens.</p>
+                <p>These Terms constitute a legally binding agreement between you and MD Media LLC. The word "you" refers to any individual or entity using the Service. The word "Service" refers to the FactLens application, website, and all related features.</p>
+                <div class="callout callout-blue">
+                    These Terms apply to all users including visitors, registered users, verified contributors, and anyone who accesses any part of the FactLens Service.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2 -->
+        <section id="section-2">
+            <div class="section-header">
+                <div class="section-number">2</div>
+                <h2 class="section-title">Who Can Use FactLens</h2>
+            </div>
+            <div class="section-content">
+                <p>You must be at least 18 years old to create a FactLens account. By using the Service, you represent that you are at least 18 years of age.</p>
+                <p>You must not be prohibited from using the Service under any applicable law. You must not have a previously terminated FactLens account unless you have received written permission from MD Media LLC to create a new one.</p>
+                <div class="callout callout-amber">
+                    FactLens is not available to users under 18. We enforce age verification through our Identity Verification Program. Accounts found to belong to minors will be immediately suspended and deleted.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3 -->
+        <section id="section-3">
+            <div class="section-header">
+                <div class="section-number">3</div>
+                <h2 class="section-title">Your Account</h2>
+            </div>
+            <div class="section-content">
+                <h3>3.1 Registration</h3>
+                <p>You must provide accurate and complete information when creating your account. You are responsible for maintaining the confidentiality of your login credentials. You agree to notify us immediately at <a href="mailto:legal@factlens.app">legal@factlens.app</a> if you suspect unauthorized access to your account.</p>
+
+                <h3>3.2 Account Responsibility</h3>
+                <p>You are solely responsible for all activity that occurs under your account. MD Media LLC is not liable for any loss or damage resulting from unauthorized use of your account. You may not share your account with others or allow others to access your account.</p>
+
+                <h3>3.3 One Account Per Person</h3>
+                <p>Each person may maintain only one FactLens account. Creating multiple accounts to circumvent suspensions, manipulate voting, inflate reputation scores, or game any platform system is strictly prohibited and will result in permanent termination of all associated accounts.</p>
+            </div>
+        </section>
+
+        <!-- Section 4 -->
+        <section id="section-4">
+            <div class="section-header">
+                <div class="section-number">4</div>
+                <h2 class="section-title">Community Rules and Acceptable Use</h2>
+            </div>
+            <div class="section-content">
+                <p>FactLens exists to help people verify information through honest community participation. To keep the platform trustworthy and fair, all users must follow these rules:</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rule</th>
+                            <th>What It Means</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Be honest</td>
+                            <td>Submit claims and votes in good faith. Do not post claims you know to be fabricated.</td>
+                        </tr>
+                        <tr>
+                            <td>Be accurate</td>
+                            <td>Only submit evidence you believe to be legitimate and relevant.</td>
+                        </tr>
+                        <tr>
+                            <td>Respect others</td>
+                            <td>Do not harass, threaten, or abuse other users.</td>
+                        </tr>
+                        <tr>
+                            <td>No coordinated manipulation</td>
+                            <td>Do not organize groups to vote together to control verdicts.</td>
+                        </tr>
+                        <tr>
+                            <td>No impersonation</td>
+                            <td>Do not impersonate real people, organizations, or other FactLens users.</td>
+                        </tr>
+                        <tr>
+                            <td>No spam</td>
+                            <td>Do not flood the platform with duplicate, low-quality, or promotional claims.</td>
+                        </tr>
+                        <tr>
+                            <td>No self-promotion</td>
+                            <td>Do not use FactLens primarily to promote your own content, brand, or website.</td>
+                        </tr>
+                        <tr>
+                            <td>Report responsibly</td>
+                            <td>Only report content you genuinely believe violates these rules.</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="callout callout-green">
+                    FactLens is a platform for truth — not a political battleground. We apply these rules equally regardless of the political, ideological, or cultural viewpoint of the content being evaluated.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5 -->
+        <section id="section-5">
+            <div class="section-header">
+                <div class="section-number">5</div>
+                <h2 class="section-title">Content You Post</h2>
+            </div>
+            <div class="section-content">
+                <h3>5.1 Your Responsibility</h3>
+                <p>You are solely responsible for the content you post on FactLens, including claims, descriptions, evidence links, and notes. You represent that you have the right to share any content you post and that it does not violate any law or third-party rights.</p>
+
+                <h3>5.2 License to FactLens</h3>
+                <p>By posting content on FactLens, you grant MD Media LLC a non-exclusive, royalty-free, worldwide license to use, display, store, reproduce, and distribute your content as part of operating the Service. This license ends when your content is deleted, except where copies have already been made as part of normal platform operations.</p>
+
+                <h3>5.3 Content We May Remove</h3>
+                <p>FactLens may remove any content that violates these Terms, our Community Rules, or applicable law. We are not obligated to monitor all content but reserve the right to act on reported or discovered violations.</p>
+
+                <h3>5.4 Content You Must Not Post</h3>
+                <ul>
+                    <li>False claims submitted with intent to deceive</li>
+                    <li>Content that defames, harasses, or threatens individuals</li>
+                    <li>Content that violates copyright or intellectual property rights</li>
+                    <li>Personal or private information about others without their consent</li>
+                    <li>Content that incites violence, hatred, or discrimination</li>
+                    <li>Spam, advertising, or promotional material not permitted by FactLens</li>
+                </ul>
+
+                <div class="callout callout-amber">
+                    FactLens is not a publisher of user content. We are a platform for community fact-checking. We do not endorse, verify, or take responsibility for the accuracy of user-submitted claims or evidence.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 6 -->
+        <section id="section-6">
+            <div class="section-header">
+                <div class="section-number">6</div>
+                <h2 class="section-title">The Voting and Verification System</h2>
+            </div>
+            <div class="section-content">
+                <h3>6.1 How Verdicts Work</h3>
+                <p>FactLens uses a combination of community voting and AI analysis to produce verdicts on claims. The final verdict is determined by a weighted algorithm that combines AI confidence scores and community vote totals. No single vote, including that of verified users, administrators, or high-reputation contributors, determines a final verdict alone.</p>
+
+                <h3>6.2 Verdict Accuracy</h3>
+                <p>FactLens verdicts represent the collective judgment of the community at a point in time. They are not legal determinations of truth or falsity. Verdicts may change if new evidence is submitted or if claims are re-evaluated. FactLens makes no guarantee that any verdict is accurate, complete, or final.</p>
+
+                <h3>6.3 One Vote Per User</h3>
+                <p>Each registered user may cast one vote per claim. Attempting to cast multiple votes on the same claim through any method — including multiple accounts, automation, or exploiting platform bugs — is prohibited.</p>
+
+                <h3>6.4 Vote Manipulation</h3>
+                <p>Organizing, incentivizing, or coordinating votes to influence a verdict in a predetermined direction is a serious violation of these Terms and will result in account termination and potential legal action.</p>
+
+                <div class="callout callout-navy">
+                    FactLens reserves the right to exclude votes detected as fraudulent, coordinated, or bot-generated from verdict calculations, with or without notice to the voter.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 7 -->
+        <section id="section-7">
+            <div class="section-header">
+                <div class="section-number">7</div>
+                <h2 class="section-title">AI Disclaimer</h2>
+            </div>
+            <div class="section-content">
+                <p>FactLens uses artificial intelligence provided by third-party services including OpenAI to assist with claim pre-screening, source quality evaluation, and content classification.</p>
+
+                <h4>Key disclaimers:</h4>
+                <ul>
+                    <li>AI analysis is a risk signal only and does not constitute a final verdict</li>
+                    <li>AI may make errors, misclassify content, or reach incorrect conclusions</li>
+                    <li>Community voting always takes precedence over AI output in the final verdict</li>
+                    <li>FactLens is not responsible for decisions made based on AI analysis results</li>
+                    <li>AI analysis is not a substitute for professional legal, medical, financial, or journalistic judgment</li>
+                </ul>
+
+                <div class="callout callout-blue">
+                    AI models may have knowledge cutoffs, biases, or limitations that affect their analysis. FactLens continuously refines its AI integration but cannot guarantee AI accuracy on any specific claim.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 8 -->
+        <section id="section-8">
+            <div class="section-header">
+                <div class="section-number">8</div>
+                <h2 class="section-title">Identity Verification</h2>
+            </div>
+            <div class="section-content">
+                <p>Participation in the FactLens Identity Verification Program is voluntary. By submitting to identity verification, you:</p>
+                <ul>
+                    <li>Consent to providing a government-issued ID and photograph for verification purposes</li>
+                    <li>Confirm that all documents submitted are genuine and belong to you</li>
+                    <li>Understand that verification data is processed by a trusted third-party provider</li>
+                    <li>Understand that submitting false, altered, or fraudulent identity documents is a serious violation of these Terms and may violate applicable law</li>
+                </ul>
+                <p>Verified status may be revoked if FactLens determines that verification was obtained fraudulently or that the account is in serious violation of these Terms.</p>
+
+                <div class="callout callout-amber">
+                    Submitting fraudulent identity documents may constitute identity fraud under applicable state and federal law. FactLens will cooperate with law enforcement investigations involving fraudulent verification attempts.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 9 -->
+        <section id="section-9">
+            <div class="section-header">
+                <div class="section-number">9</div>
+                <h2 class="section-title">Reputation, Ranks, and Badges</h2>
+            </div>
+            <div class="section-content">
+                <h3>9.1 How the Reputation System Works</h3>
+                <p>FactLens awards reputation points, trust scores, rank titles, and badges based on your participation and accuracy over time. These are measures of platform standing only and have no monetary value.</p>
+
+                <h3>9.2 No Cash Value</h3>
+                <p>Reputation points, badges, ranks, and any other platform rewards are not currency, property, or assets. They cannot be transferred, sold, traded, withdrawn, or exchanged for money or anything of value. FactLens may adjust, reset, or remove reputation data at any time.</p>
+
+                <h3>9.3 Reputation Manipulation</h3>
+                <p>Attempting to artificially inflate your reputation score, badge count, or rank through any method including vote farming, coordinated activity, exploiting bugs, or creating multiple accounts is prohibited and will result in account termination.</p>
+
+                <div class="callout callout-green">
+                    The reputation system is designed to reward genuine, accurate participation. Users who consistently contribute high-quality votes and evidence naturally build stronger standing in the community over time.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 10 -->
+        <section id="section-10">
+            <div class="section-header">
+                <div class="section-number">10</div>
+                <h2 class="section-title">Intellectual Property</h2>
+            </div>
+            <div class="section-content">
+                <h3>10.1 FactLens Property</h3>
+                <p>The FactLens name, logo, design, software, algorithms, and platform infrastructure are the property of MD Media LLC and are protected by intellectual property law. You may not copy, reproduce, modify, or distribute any part of the FactLens platform without written permission.</p>
+
+                <h3>10.2 Your Content</h3>
+                <p>You retain ownership of the content you create and post on FactLens, subject to the license granted in Section 5.2.</p>
+
+                <h3>10.3 Third-Party Content</h3>
+                <p>FactLens may display links to third-party sources and websites. We do not claim ownership of third-party content and are not responsible for its accuracy, availability, or legality.</p>
+
+                <h3>10.4 Copyright Complaints</h3>
+                <p>If you believe your copyrighted work has been posted on FactLens without authorization, please contact us at <a href="mailto:legal@factlens.app">legal@factlens.app</a> with a description of the work, the location on FactLens, and your contact information. We will investigate and respond promptly.</p>
+            </div>
+        </section>
+
+        <!-- Section 11 -->
+        <section id="section-11">
+            <div class="section-header">
+                <div class="section-number">11</div>
+                <h2 class="section-title">Prohibited Conduct</h2>
+            </div>
+            <div class="section-content">
+                <p>The following conduct is strictly prohibited on FactLens. Violations may result in immediate account termination and, where applicable, legal action.</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Prohibited Action</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Creating fake or bot accounts</td>
+                            <td>Account fraud</td>
+                        </tr>
+                        <tr>
+                            <td>Coordinating votes with others to manipulate verdicts</td>
+                            <td>Vote manipulation</td>
+                        </tr>
+                        <tr>
+                            <td>Submitting fabricated or misleading evidence</td>
+                            <td>Evidence fraud</td>
+                        </tr>
+                        <tr>
+                            <td>Using automated tools, scripts, or bots to interact with the platform</td>
+                            <td>Automation abuse</td>
+                        </tr>
+                        <tr>
+                            <td>Attempting to access other users accounts or private data</td>
+                            <td>Unauthorized access</td>
+                        </tr>
+                        <tr>
+                            <td>Reverse engineering or scraping the FactLens platform</td>
+                            <td>Platform abuse</td>
+                        </tr>
+                        <tr>
+                            <td>Harassing, threatening, or doxxing other users</td>
+                            <td>User harm</td>
+                        </tr>
+                        <tr>
+                            <td>Submitting fraudulent identity documents</td>
+                            <td>Identity fraud</td>
+                        </tr>
+                        <tr>
+                            <td>Creating multiple accounts after suspension or termination</td>
+                            <td>Ban evasion</td>
+                        </tr>
+                        <tr>
+                            <td>Introducing malware, viruses, or harmful code</td>
+                            <td>Security attack</td>
+                        </tr>
+                        <tr>
+                            <td>Using FactLens to spread deliberate misinformation campaigns</td>
+                            <td>Disinformation</td>
+                        </tr>
+                        <tr>
+                            <td>Impersonating FactLens staff or administrators</td>
+                            <td>Impersonation</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Section 12 -->
+        <section id="section-12">
+            <div class="section-header">
+                <div class="section-number">12</div>
+                <h2 class="section-title">Termination and Suspension</h2>
+            </div>
+            <div class="section-content">
+                <h3>12.1 By FactLens</h3>
+                <p>MD Media LLC reserves the right to suspend or permanently terminate your account at any time, with or without notice, for any violation of these Terms or for any conduct we determine to be harmful to the platform, other users, or the public. We are not required to provide a reason for termination.</p>
+
+                <h3>12.2 By You</h3>
+                <p>You may delete your account at any time through the app settings or by contacting <a href="mailto:legal@factlens.app">legal@factlens.app</a>. Account deletion is subject to our data retention practices described in the Privacy Policy.</p>
+
+                <h3>12.3 Effect of Termination</h3>
+                <p>Upon termination, your right to use the Service ends immediately. Content you posted may remain on the platform in anonymized form to preserve the integrity of historical verdicts. Reputation points, badges, and rank titles are forfeited upon termination.</p>
+
+                <div class="callout callout-amber">
+                    If you believe your account was suspended or terminated in error, you may appeal by contacting <a href="mailto:legal@factlens.app">legal@factlens.app</a> within 30 days of termination. We review all appeals but are not obligated to reinstate accounts.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 13 -->
+        <section id="section-13">
+            <div class="section-header">
+                <div class="section-number">13</div>
+                <h2 class="section-title">Disclaimers and Limitation of Liability</h2>
+            </div>
+            <div class="section-content">
+                <h3>13.1 Service Provided As-Is</h3>
+                <p>FactLens is provided on an "as is" and "as available" basis without warranties of any kind, either express or implied. MD Media LLC does not warrant that the Service will be uninterrupted, error-free, or free of harmful components.</p>
+
+                <h3>13.2 No Warranty on Verdicts</h3>
+                <p>FactLens verdicts are community judgments and are not guaranteed to be accurate, complete, or current. FactLens makes no warranty that any verdict represents objective truth. You should not rely on FactLens verdicts as a substitute for independent research or professional advice.</p>
+
+                <h3>13.3 Limitation of Liability</h3>
+                <p>To the fullest extent permitted by applicable law, MD Media LLC and its officers, directors, employees, and agents shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service — including but not limited to damages for loss of profits, data, goodwill, or other intangible losses — even if we have been advised of the possibility of such damages.</p>
+                <p>Our total liability to you for any claim arising from these Terms or your use of the Service shall not exceed the greater of $100 USD or the amount you paid to FactLens in the 12 months preceding the claim.</p>
+
+                <div class="callout callout-navy">
+                    Some jurisdictions do not allow the exclusion of certain warranties or limitation of liability. In such jurisdictions, our liability is limited to the maximum extent permitted by law.
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 14 -->
+        <section id="section-14">
+            <div class="section-header">
+                <div class="section-number">14</div>
+                <h2 class="section-title">Indemnification</h2>
+            </div>
+            <div class="section-content">
+                <p>You agree to indemnify, defend, and hold harmless MD Media LLC, its officers, directors, employees, contractors, and agents from and against any claims, liabilities, damages, losses, and expenses — including reasonable legal fees — arising out of or in connection with:</p>
+                <ul>
+                    <li>Your use of the Service</li>
+                    <li>Your violation of these Terms</li>
+                    <li>Content you post on FactLens</li>
+                    <li>Your violation of any rights of a third party</li>
+                    <li>Your violation of any applicable law</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Section 15 -->
+        <section id="section-15">
+            <div class="section-header">
+                <div class="section-number">15</div>
+                <h2 class="section-title">Changes to These Terms</h2>
+            </div>
+            <div class="section-content">
+                <p>MD Media LLC reserves the right to modify these Terms at any time. When we make material changes we will:</p>
+                <ul>
+                    <li>Update the Effective Date at the top of this page</li>
+                    <li>Notify you via email or in-app notification at least 14 days before changes take effect</li>
+                    <li>Require re-acceptance of updated Terms if changes materially affect your rights or obligations</li>
+                </ul>
+                <p>Your continued use of FactLens after the effective date of any changes constitutes your acceptance of the updated Terms. If you do not agree to the updated Terms, you must stop using the Service.</p>
+            </div>
+        </section>
+
+        <!-- Section 16 -->
+        <section id="section-16">
+            <div class="section-header">
+                <div class="section-number">16</div>
+                <h2 class="section-title">Contact and Governing Law</h2>
+            </div>
+            <div class="section-content">
+                <p>These Terms are governed by the laws of the State of Texas, United States, without regard to conflict of law principles. Any disputes arising from these Terms or your use of the Service shall be resolved in the courts of Houston, Texas.</p>
+
+                <div class="contact-card">
+                    <h3>FactLens Legal Team</h3>
+                    <p><strong>Operated by MD Media LLC</strong></p>
+                    <p>Houston, Texas, United States</p>
+                    <p>Email: <a href="mailto:legal@factlens.app">legal@factlens.app</a></p>
+                    <p>Privacy: <a href="mailto:privacy@factlens.app">privacy@factlens.app</a></p>
+                    <p>Website: <a href="https://factlens.app">factlens.app</a></p>
+                    <p style="margin-top: 16px; font-size: 13px; opacity: 0.9;">All legal inquiries will receive a response within 30 calendar days.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-links">
+                <span>© 2026 MD Media LLC · FactLens</span>
+                <a href="#section-1">Terms of Service</a>
+                <span>·</span>
+                <a href="https://factlens.app/privacy">Privacy Policy</a>
+            </div>
+            <div class="footer-meta">
+                Effective date: June 4, 2026
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
