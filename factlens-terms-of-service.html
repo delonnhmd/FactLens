@@ -284,6 +284,30 @@
             text-decoration: underline;
         }
 
+        /* Neutrality card */
+        .neutrality-card {
+            background-color: #0D1B3E;
+            border-radius: 8px;
+            padding: 28px;
+            margin: 28px 0;
+            color: white;
+            line-height: 1.8;
+        }
+
+        .neutrality-card h3 {
+            color: #20C997;
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .neutrality-card p {
+            margin-bottom: 14px;
+            text-align: center;
+            font-size: 14px;
+        }
+
         /* Footer */
         footer {
             background-color: #0D1B3E;
@@ -516,9 +540,37 @@
                     </tbody>
                 </table>
 
-                <div class="callout callout-green">
-                    FactLens is a platform for truth — not a political battleground. We apply these rules equally regardless of the political, ideological, or cultural viewpoint of the content being evaluated.
+                <!-- Platform Neutrality Statement -->
+                <div class="neutrality-card">
+                    <h3>FactLens Is a Neutral Platform</h3>
+                    <p>FactLens does not take sides.</p>
+                    <p>We do not endorse, promote, or suppress any political party, ideology, religion, nationality, or viewpoint. Our platform exists solely to help communities evaluate the accuracy of claims — not to influence what people believe.</p>
+                    <p>FactLens does not intervene in community verdicts. Once a claim enters the voting process, the outcome is determined entirely by community participation and the transparent verification algorithm. No FactLens employee, administrator, or AI system will alter, override, or manipulate a community verdict except in cases of confirmed fraud, illegal content, or court order.</p>
+                    <p>The truth belongs to the community. Our job is to protect the process — not to decide the outcome.</p>
                 </div>
+
+                <div class="callout callout-green">
+                    <strong>Equal treatment guarantee:</strong> FactLens applies the same community rules, the same algorithm, and the same moderation standards to all claims regardless of the political, ideological, cultural, or geographic viewpoint of the subject matter. A claim about a left-leaning figure is evaluated by the same process as a claim about a right-leaning figure. No exceptions.
+                </div>
+
+                <h3>4.1 No Editorial Intervention</h3>
+                <p>MD Media LLC and its employees do not:</p>
+                <ul>
+                    <li>Select which claims receive AI analysis or community attention</li>
+                    <li>Adjust vote weights to favor a particular verdict</li>
+                    <li>Delay or accelerate the verification timeline based on claim subject matter</li>
+                    <li>Remove or suppress claims because of their political or ideological content</li>
+                    <li>Instruct the AI system to produce a specific verdict on any claim</li>
+                    <li>Interfere with the reputation system to elevate or suppress specific users</li>
+                </ul>
+                <p>The only grounds for claim removal are violation of Community Rules (Section 4), prohibited conduct (Section 11), applicable law, or a valid court order. Disagreement with a verdict is not grounds for removal.</p>
+
+                <h3>4.2 Algorithmic Transparency</h3>
+                <p>FactLens publishes the core logic of its verification algorithm so that users and the public can understand how verdicts are reached. The weighting formula, phase timing, minimum vote thresholds, and trust score system are documented and accessible.</p>
+                <p><strong>Final score formula:</strong></p>
+                <p style="margin-left: 20px; font-family: monospace; background-color: #f0f4f9; padding: 12px; border-left: 3px solid #0D1B3E; margin-bottom: 16px;">Final verdict = (AI confidence × 40%) + (weighted community score × 60%)</p>
+                <p>Community voting always carries more weight than AI analysis. No single user, regardless of trust level or verification status, controls more than a capped vote weight in any verdict.</p>
+                <p>FactLens will notify users of any material changes to the verification algorithm at least 14 days before they take effect.</p>
             </div>
         </section>
 
