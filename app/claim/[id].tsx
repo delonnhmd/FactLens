@@ -1055,7 +1055,7 @@ export default function ClaimDetailScreen() {
               {/* PHASE 5 STEP 1 */}
               <View style={styles.contributorMetaRow}>
                 <Text style={styles.rankPill}>{claim.author.rankTitle}</Text>
-                {getTopBadges(claim.author.badgeList, 2).map((badge) => (
+                {getTopBadges(claim.author.badgeList, 1).map((badge) => (
                   <Text key={badge.id} style={styles.smallBadge}>
                     {badge.name}
                   </Text>

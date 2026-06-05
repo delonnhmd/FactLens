@@ -22,6 +22,23 @@ export default function LeaderboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [nextMonthlyResetAt, setNextMonthlyResetAt] = useState<string | null>(null);
+
+  const resetCountdown = (() => {
+    if (!nextMonthlyResetAt) {
+      return "";
+    }
+
+    const remainingMs = new Date(nextMonthlyResetAt).getTime() - Date.now();
+
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+      return "Monthly board resets soon.";
+    }
+
+    const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    return `Monthly board resets in ${days}d ${hours}h.`;
+  })();
 
   const loadLeaderboard = useCallback(
     async (showRefresh = false) => {
@@ -41,6 +58,7 @@ export default function LeaderboardScreen() {
         }
 
         setUsers(result.users);
+        setNextMonthlyResetAt(result.nextMonthlyResetAt ?? null);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -76,6 +94,10 @@ export default function LeaderboardScreen() {
             );
           })}
         </View>
+
+        {scope === "monthly" && resetCountdown ? (
+          <Text style={styles.resetText}>{resetCountdown}</Text>
+        ) : null}
 
         <View style={styles.card}>
           {loading ? <Text style={styles.placeholder}>Loading leaderboard...</Text> : null}
@@ -162,6 +184,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderWidth: 0.5,
     overflow: "hidden",
+  },
+  resetText: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 10,
+    paddingHorizontal: 4,
   },
   row: {
     alignItems: "center",

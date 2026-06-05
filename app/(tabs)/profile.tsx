@@ -3,7 +3,7 @@
 // PHASE 3 STEP 28
 // PHASE 4 STEP 27
 import { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
+import { Alert, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
@@ -148,7 +148,7 @@ export default function ProfileScreen() {
                 </View>
                 <Text style={styles.progressText}>
                   {rankProgress.nextTitle
-                    ? `${profile.trust_score}/100 trust score toward ${rankProgress.nextTitle}`
+                    ? `${Math.round(rankProgress.progress * 100)}% toward ${rankProgress.nextTitle}`
                     : "Top rank reached"}
                 </Text>
               </View>
@@ -175,21 +175,15 @@ export default function ProfileScreen() {
               <>
                 <View style={styles.statsGrid}>
                   <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Trust Score</Text>
-                    <Text style={styles.statValue}>{profile.trust_score}</Text>
-                  </View>
-                  <View style={styles.statBox}>
                     <Text style={styles.statLabel}>Reputation</Text>
                     <Text style={styles.statValue}>{formatPoints(profile.reputation_points)}</Text>
                     <Text style={styles.statHint}>This month: {formatPoints(profile.monthly_reputation_points)}</Text>
                   </View>
                   <View style={styles.statBox}>
                     <Text style={styles.statLabel}>Correct Votes</Text>
-                    <Text style={styles.statValue}>{profile.correct_votes}</Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Total Votes</Text>
-                    <Text style={styles.statValue}>{totalVotes || profile.votes_cast}</Text>
+                    <Text style={styles.statValue}>
+                      {profile.correct_votes}/{totalVotes || profile.votes_cast || 0}
+                    </Text>
                   </View>
                   <View style={styles.statBox}>
                     <Text style={styles.statLabel}>Evidence Added</Text>
@@ -206,9 +200,14 @@ export default function ProfileScreen() {
                   {badges.length > 0 ? (
                     <View style={styles.badgeWrap}>
                       {badges.map((badge) => (
-                        <Text key={badge.id} style={styles.contributorBadge}>
-                          {badge.name}
-                        </Text>
+                        <TouchableOpacity
+                          key={badge.id}
+                          style={styles.contributorBadge}
+                          activeOpacity={0.8}
+                          onPress={() => Alert.alert(badge.name, "Badge earned through FactLens contributions.")}
+                        >
+                          <Text style={styles.contributorBadgeText}>{badge.name}</Text>
+                        </TouchableOpacity>
                       ))}
                     </View>
                   ) : (
@@ -447,11 +446,13 @@ const styles = StyleSheet.create({
   contributorBadge: {
     backgroundColor: theme.colors.sourceBg,
     borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  contributorBadgeText: {
     color: theme.colors.sourceText,
     fontSize: 11,
     fontWeight: "600",
-    paddingHorizontal: 9,
-    paddingVertical: 5,
   },
   successText: {
     color: theme.colors.success,

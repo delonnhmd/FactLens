@@ -72,6 +72,56 @@ def normalize_source_quality(value):
 
     return "unknown"
 
+
+# PHASE 5 STEP 1B
+RANK_ORDER = [
+    "New Scout",
+    "Claim Checker",
+    "Trusted Verifier",
+    "Source Hunter",
+    "FactLens Guardian",
+]
+
+
+def calculate_trust_tier(trust_score):
+    score = max(0, min(100, float(trust_score or 50)))
+    if score >= 75:
+        return "HIGH_TRUST"
+    if score >= 55:
+        return "TRUSTED"
+    if score >= 30:
+        return "BASIC"
+    return "LOW_TRUST"
+
+
+def calculate_rank_title(trust_score):
+    score = max(0, min(100, float(trust_score or 50)))
+    if score >= 90:
+        return "FactLens Guardian"
+    if score >= 75:
+        return "Source Hunter"
+    if score >= 55:
+        return "Trusted Verifier"
+    if score >= 30:
+        return "Claim Checker"
+    return "New Scout"
+
+
+def calculate_vote_weight(trust_tier):
+    weights = {
+        "LOW_TRUST": 0.75,
+        "BASIC": 1.0,
+        "TRUSTED": 1.2,
+        "HIGH_TRUST": 1.4,
+    }
+    return weights.get(str(trust_tier or "BASIC").upper(), 1.0)
+
+
+def resolve_display_rank(current_rank, highest_rank_achieved):
+    current_index = RANK_ORDER.index(current_rank) if current_rank in RANK_ORDER else 0
+    highest_index = RANK_ORDER.index(highest_rank_achieved) if highest_rank_achieved in RANK_ORDER else 0
+    return RANK_ORDER[max(current_index, highest_index)]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -154,6 +204,13 @@ class AiPrecheckRetryRequest(BaseModel):
     claim_id: str = ""
 
 
+# PHASE 5 STEP 1B
+class AdminOverrideRequest(BaseModel):
+    claim_id: str = ""
+    new_status: str = ""
+    reason: str = ""
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -193,6 +250,116 @@ def home():
 def health():
     # PHASE 4 STEP 21B
     return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-21b"}
+
+
+# PHASE 5 STEP 1B
+@app.get("/leaderboard")
+def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
+    enforce_rate_limit(request, "leaderboard", 120, AI_RATE_LIMIT_WINDOW_SECONDS)
+    leaderboard_type = "monthly" if type != "alltime" else "alltime"
+    safe_limit = max(1, min(50, int(limit or 20)))
+    supabase = get_supabase_client()
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    if leaderboard_type == "monthly":
+        reset_result = (
+            supabase.table("profiles")
+            .update({
+                "monthly_reputation_points": 0,
+                "monthly_reset_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .lt("monthly_reset_at", month_start)
+            .execute()
+        )
+        print("[leaderboard] monthly reset rows:", len(reset_result.data or []), flush=True)
+        order_column = "monthly_reputation_points"
+    else:
+        order_column = "reputation_points"
+
+    result = (
+        supabase.table("profiles")
+        .select("id, username, trust_score, trust_tier, rank_title, highest_rank_achieved, reputation_points, monthly_reputation_points, badge_list")
+        .order(order_column, desc=True)
+        .order("trust_score", desc=True)
+        .limit(safe_limit)
+        .execute()
+    )
+
+    rows = result.data or []
+    users = []
+    for index, row in enumerate(rows):
+        trust_score = row.get("trust_score") or 50
+        current_rank = calculate_rank_title(trust_score)
+        display_rank = resolve_display_rank(current_rank, row.get("highest_rank_achieved") or row.get("rank_title"))
+        badges = row.get("badge_list") or []
+        badge_count = len(badges) if isinstance(badges, list) else 0
+        users.append({
+            "rank_position": index + 1,
+            "username": row.get("username"),
+            "rank_title": display_rank,
+            "reputation_points": row.get("reputation_points") or 0,
+            "monthly_reputation_points": row.get("monthly_reputation_points") or 0,
+            "badge_count": badge_count,
+        })
+
+    next_reset = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    next_reset_month = 1 if next_reset.month == 12 else next_reset.month + 1
+    next_reset_year = next_reset.year + 1 if next_reset.month == 12 else next_reset.year
+    next_reset = next_reset.replace(year=next_reset_year, month=next_reset_month)
+
+    return {
+        "ok": True,
+        "type": leaderboard_type,
+        "limit": safe_limit,
+        "next_monthly_reset_at": next_reset.isoformat(),
+        "users": users,
+    }
+
+
+# PHASE 5 STEP 1B
+@app.post("/admin/claims/override")
+def admin_override_claim(payload: AdminOverrideRequest, request: Request):
+    require_admin_key(request)
+    claim_id = payload.claim_id.strip()
+    new_status = payload.new_status.strip().upper()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    if new_status not in {"FINALIZED_TRUE", "FINALIZED_FAKE", "INSUFFICIENT_DATA", "NEEDS_MORE_EVIDENCE"}:
+        raise HTTPException(status_code=400, detail="Unsupported override status.")
+
+    supabase = get_supabase_client()
+    print("[admin override] claim_id:", claim_id, flush=True)
+    print("[admin override] new_status:", new_status, flush=True)
+
+    reverse_result = supabase.rpc("reverse_claim_reputation", {"target_claim_id": claim_id}).execute()
+    print("[admin override] reverse rows:", reverse_result.data, flush=True)
+
+    update_result = (
+        supabase.table("claims")
+        .update({
+            "status": new_status,
+            "verdict_reason": payload.reason.strip() or "Admin override applied.",
+            "verdict_calculated_at": datetime.now(timezone.utc).isoformat(),
+            "published_at": datetime.now(timezone.utc).isoformat(),
+            "phase4_locked": True,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", claim_id)
+        .execute()
+    )
+
+    print("[admin override] updated rows:", len(update_result.data or []), flush=True)
+
+    process_result = supabase.rpc("process_claim_reputation", {"target_claim_id": claim_id}).execute()
+    print("[admin override] process result:", process_result.data, flush=True)
+
+    return {
+        "ok": True,
+        "claim_id": claim_id,
+        "status": new_status,
+    }
 
 
 # PHASE 4 STEP 8
@@ -311,6 +478,19 @@ def get_authenticated_user_id(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Authentication required.")
 
     return str(user_id)
+
+
+# PHASE 5 STEP 1B
+def require_admin_key(request: Request) -> None:
+    expected_key = os.environ.get("FACTLENS_ADMIN_API_KEY", "")
+
+    if not expected_key:
+        raise HTTPException(status_code=503, detail="Admin actions are not configured.")
+
+    provided_key = request.headers.get("x-admin-key", "")
+
+    if provided_key != expected_key:
+        raise HTTPException(status_code=403, detail="Admin access required.")
 
 
 # PHASE 4 STEP 5B

@@ -94,6 +94,20 @@ as $$
   end;
 $$;
 
+create or replace function public.factlens_vote_weight_for_tier(tier text)
+returns numeric
+language sql
+immutable
+as $$
+  select case upper(coalesce(tier, 'BASIC'))
+    when 'LOW_TRUST' then 0.75
+    when 'BASIC' then 1.0
+    when 'TRUSTED' then 1.2
+    when 'HIGH_TRUST' then 1.4
+    else 1.0
+  end;
+$$;
+
 create or replace function public.factlens_rank_order(rank_name text)
 returns integer
 language sql
@@ -572,6 +586,38 @@ begin
 end;
 $$;
 
+create or replace function public.factlens_set_vote_trust_weight()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  voter_tier text;
+begin
+  select trust_tier into voter_tier
+  from public.profiles
+  where id = new.user_id;
+
+  new.vote_value := case
+    when new.vote_type = 'TRUE' then 1.0
+    when new.vote_type = 'FAKE' then 0.0
+    else 0.5
+  end;
+  new.trust_weight := public.factlens_vote_weight_for_tier(voter_tier);
+  new.accepted := coalesce(new.accepted, true);
+  new.suspicious := coalesce(new.suspicious, false);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists factlens_set_vote_trust_weight on public.votes;
+create trigger factlens_set_vote_trust_weight
+before insert on public.votes
+for each row
+execute function public.factlens_set_vote_trust_weight();
+
 drop trigger if exists factlens_valid_vote_reputation on public.votes;
 create trigger factlens_valid_vote_reputation
 after insert on public.votes
@@ -702,7 +748,10 @@ begin
   loop
     vote_matches := vote_row.vote_type = final_vote_type;
     multiplier := coalesce(public.factlens_points_multiplier(vote_row.user_id), 1);
-    rep_delta := case when vote_matches then greatest(0, round(25 * multiplier)) else 0 end;
+    rep_delta := case
+      when vote_matches then greatest(0, round(25 * multiplier))
+      else greatest(0, round(5 * multiplier))
+    end;
 
     perform public.factlens_record_reputation_event(
       target_claim_id,
@@ -834,6 +883,48 @@ begin
 end;
 $$;
 
+create or replace function public.reject_evidence_for_reputation(target_evidence_id uuid, confirmed_spam boolean default false)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  evidence_row public.evidence%rowtype;
+  reputation_penalty integer := 3;
+  trust_penalty numeric := 0;
+  suspicious_delta integer := 0;
+begin
+  select * into evidence_row
+  from public.evidence
+  where id = target_evidence_id;
+
+  if not found then
+    return;
+  end if;
+
+  if confirmed_spam then
+    reputation_penalty := 10;
+    trust_penalty := -5;
+    suspicious_delta := 1;
+  end if;
+
+  perform public.factlens_apply_profile_delta(
+    evidence_row.user_id,
+    trust_penalty,
+    -reputation_penalty,
+    -reputation_penalty,
+    0,
+    0,
+    0,
+    0,
+    0,
+    suspicious_delta,
+    case when confirmed_spam then 'evidence_confirmed_spam' else 'evidence_rejected' end
+  );
+end;
+$$;
+
 create or replace function public.recalculate_claim_vote_scores(target_claim_id uuid)
 returns void
 language plpgsql
@@ -916,6 +1007,8 @@ $$;
 grant execute on function public.process_claim_reputation(uuid) to authenticated;
 revoke all on function public.reverse_claim_reputation(uuid) from anon, authenticated;
 grant execute on function public.reverse_claim_reputation(uuid) to service_role;
+revoke all on function public.reject_evidence_for_reputation(uuid, boolean) from anon, authenticated;
+grant execute on function public.reject_evidence_for_reputation(uuid, boolean) to service_role;
 grant execute on function public.recalculate_claim_vote_scores(uuid) to authenticated;
 
 notify pgrst, 'reload schema';

@@ -9,7 +9,6 @@ import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
 import type { Profile } from "./profileService";
-import { getVoteTrustWeight } from "../utils/reputation";
 
 export type VoteType = "TRUE" | "FAKE" | "UNSURE";
 type VoteTypeInput = VoteOption | VoteType | string;
@@ -322,10 +321,6 @@ export async function voteOnClaim(
   const normalizedVoteType = normalizeVoteType(voteType);
   const appVoteOption = toAppVoteOption(normalizedVoteType);
   const voteValue = getVoteValue(normalizedVoteType);
-  // PHASE 5 STEP 1
-  const trustWeight = profile?.trust_weight_override ?? getVoteTrustWeight({
-    trustScore: profile?.trust_score,
-  });
   console.log("[vote] normalizedVoteType:", normalizedVoteType);
   console.log("[vote] voteValue:", voteValue);
 
@@ -380,7 +375,6 @@ export async function voteOnClaim(
     user_id: userId,
     vote_type: normalizedVoteType,
     vote_value: voteValue,
-    trust_weight: trustWeight,
     accepted: true,
     suspicious: false,
     rejected_reason: null,

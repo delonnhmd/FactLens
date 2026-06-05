@@ -1,5 +1,6 @@
 // PHASE 5 STEP 1
-import { supabase } from "../lib/supabase";
+// PHASE 5 STEP 1B
+import { API_CONFIG } from "../constants/apiConfig";
 import { getDisplayRankTitle, parseBadgeList, type ReputationBadge } from "../utils/reputation";
 
 export type LeaderboardScope = "monthly" | "all_time";
@@ -28,6 +29,7 @@ interface LeaderboardRow {
 
 export interface LeaderboardResult {
   users: LeaderboardUser[];
+  nextMonthlyResetAt?: string | null;
   error?: string;
 }
 
@@ -53,31 +55,44 @@ export async function fetchLeaderboard(
   scope: LeaderboardScope = "monthly",
   limit = 20,
 ): Promise<LeaderboardResult> {
-  const orderColumn = scope === "monthly" ? "monthly_reputation_points" : "reputation_points";
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(
-      "id,username,display_name,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list",
-    )
-    .order(orderColumn, { ascending: false })
-    .order("trust_score", { ascending: false })
-    .limit(limit);
+  try {
+    const backendType = scope === "monthly" ? "monthly" : "alltime";
+    const response = await fetch(`${API_CONFIG.BACKEND_URL}/leaderboard?type=${backendType}&limit=${limit}`);
+    const json = await response.json();
 
-  if (error) {
-    console.log("[leaderboard] load error:", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
+    if (!response.ok || !json?.ok) {
+      console.log("[leaderboard] backend load error:", json);
+      return {
+        users: [],
+        error: "Could not load leaderboard right now.",
+      };
+    }
+
+    return {
+      users: (json.users ?? []).map((row: {
+        rank_position?: number;
+        username?: string;
+        rank_title?: string;
+        reputation_points?: number;
+        monthly_reputation_points?: number;
+        badge_count?: number;
+      }) => ({
+        id: `${row.rank_position ?? row.username}`,
+        username: row.username ?? "unknown",
+        displayName: row.username ?? "unknown",
+        rankTitle: row.rank_title ?? "Claim Checker",
+        points: scope === "monthly" ? row.monthly_reputation_points ?? 0 : row.reputation_points ?? 0,
+        trustScore: 50,
+        badges: [],
+      })),
+      nextMonthlyResetAt: json.next_monthly_reset_at ?? null,
+    };
+  } catch (error) {
+    console.log("[leaderboard] load error:", error);
 
     return {
       users: [],
       error: "Could not load leaderboard right now.",
     };
   }
-
-  return {
-    users: ((data ?? []) as LeaderboardRow[]).map((row) => mapLeaderboardRow(row, scope)),
-  };
 }
