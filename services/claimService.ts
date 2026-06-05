@@ -15,6 +15,7 @@
 // PHASE 4 STEP 17
 // PHASE 4 STEP 18
 // PHASE 4 STEP 22
+// PHASE 5 STEP 4
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
@@ -106,6 +107,8 @@ interface ClaimProfileRow {
   highest_rank_achieved?: string | null;
   monthly_reputation_points?: number | null;
   monthly_reset_at?: string | null;
+  is_deleted?: boolean | null;
+  deleted_at?: string | null;
   created_at?: string | null;
 }
 
@@ -230,7 +233,7 @@ const DEFAULT_CLAIM_LIMIT = 50;
 // PHASE 3 STEP 11
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 const CLAIM_PROFILE_SELECT =
-  "id,username,display_name,verified,reputation_score,avatar_url,bio,public_profile_slug,profile_visibility,votes_cast,accuracy_rate,trust_tier,trust_weight_override,trust_score,rank_title,correct_votes,incorrect_votes,evidence_count,helpful_evidence_count,suspicious_flags,reputation_points,badge_list,last_active_at,highest_rank_achieved,monthly_reputation_points,monthly_reset_at,created_at";
+  "id,username,display_name,verified,reputation_score,avatar_url,bio,public_profile_slug,profile_visibility,votes_cast,accuracy_rate,trust_tier,trust_weight_override,trust_score,rank_title,correct_votes,incorrect_votes,evidence_count,helpful_evidence_count,suspicious_flags,reputation_points,badge_list,last_active_at,highest_rank_achieved,monthly_reputation_points,monthly_reset_at,is_deleted,deleted_at,created_at";
 
 interface SupabaseErrorLike {
   code?: string;
@@ -371,6 +374,8 @@ function mapProfileToClaimProfile(profile: Profile): ClaimProfileRow {
     highest_rank_achieved: profile.highest_rank_achieved,
     monthly_reputation_points: profile.monthly_reputation_points,
     monthly_reset_at: profile.monthly_reset_at,
+    is_deleted: profile.is_deleted,
+    deleted_at: profile.deleted_at,
     created_at: profile.created_at,
   };
 }
@@ -666,8 +671,9 @@ function mapAuthor(row: ClaimRow): AppUser {
   // PHASE 4 STEP 12
   const authorId = row.author_id ?? "unknown-author";
   const profile = getEmbeddedProfile(row);
-  const username = profile?.username ?? "unknown";
-  const displayName = profile?.display_name || profile?.username || "Unknown User";
+  const isDeleted = Boolean(profile?.is_deleted);
+  const username = isDeleted ? "deleted_user" : profile?.username ?? "unknown";
+  const displayName = isDeleted ? "Deleted User" : profile?.display_name || profile?.username || "Unknown User";
   const createdAt = row.created_at ?? new Date().toISOString();
   // PHASE 5 STEP 1
   const badgeList = parseBadgeList(profile?.badge_list);
@@ -684,10 +690,10 @@ function mapAuthor(row: ClaimRow): AppUser {
     displayName,
     avatar: profile?.avatar_url ?? null,
     // PHASE 5 STEP 1E
-    bio: profile?.bio ?? null,
-    publicProfileSlug: profile?.public_profile_slug ?? username,
-    profileVisibility: normalizeProfileVisibility(profile?.profile_visibility),
-    verified: profile?.verified ?? false,
+    bio: isDeleted ? null : profile?.bio ?? null,
+    publicProfileSlug: isDeleted ? null : profile?.public_profile_slug ?? username,
+    profileVisibility: isDeleted ? "private" : normalizeProfileVisibility(profile?.profile_visibility),
+    verified: isDeleted ? false : profile?.verified ?? false,
     reputationScore: profile?.reputation_points ?? profile?.reputation_score ?? 0,
     joinedAt: profile?.created_at ?? createdAt,
     votesCast: profile?.votes_cast ?? 0,
@@ -706,6 +712,8 @@ function mapAuthor(row: ClaimRow): AppUser {
     suspiciousFlags: profile?.suspicious_flags ?? 0,
     badgeList,
     lastActiveAt: profile?.last_active_at ?? null,
+    isDeleted,
+    deletedAt: profile?.deleted_at ?? null,
   };
 }
 

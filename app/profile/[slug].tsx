@@ -1,4 +1,5 @@
 // PHASE 5 STEP 1E
+// PHASE 5 STEP 4
 import { useEffect, useState } from "react";
 import { Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -46,7 +47,8 @@ export default function PublicProfileScreen() {
 
   const displayName = profile?.displayName || profile?.username || "Contributor";
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
-  const isPrivate = profile?.profileVisibility === "private";
+  const isDeleted = Boolean(profile?.isDeleted);
+  const isPrivate = profile?.profileVisibility === "private" || isDeleted;
   const topBadges = getTopBadges(profile?.badgeList ?? [], 8);
   const canReportProfile = Boolean(profile && currentUser && currentUser.id !== profile.id);
 
@@ -104,14 +106,20 @@ export default function PublicProfileScreen() {
               )}
               <View style={styles.identity}>
                 <Text style={styles.title}>{displayName}</Text>
-                <Text style={styles.username}>@{profile.username}</Text>
-                <Text style={styles.rankPill}>{profile.rankTitle}</Text>
+                {isDeleted ? (
+                  <Text style={styles.username}>Account deleted</Text>
+                ) : (
+                  <Text style={styles.username}>@{profile.username}</Text>
+                )}
+                {!isDeleted ? <Text style={styles.rankPill}>{profile.rankTitle}</Text> : null}
               </View>
             </View>
 
             {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
 
-            {isPrivate ? (
+            {isDeleted ? (
+              <Text style={styles.privateNote}>This account was deleted. Public profile details are no longer shown.</Text>
+            ) : isPrivate ? (
               <Text style={styles.privateNote}>This contributor keeps detailed profile stats private.</Text>
             ) : (
               <>

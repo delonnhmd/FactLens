@@ -1,6 +1,7 @@
 // PHASE 3 STEP 2
 // PHASE 3 STEP 28
 // PHASE 3 STEP 29
+// PHASE 5 STEP 4
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
@@ -72,6 +73,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("[profile] profile verified:", existingProfile.profile?.verified);
 
       if (existingProfile.profile) {
+        if (existingProfile.profile.is_deleted) {
+          await supabase.auth.signOut();
+          setSession(null);
+          setCurrentUser(null);
+          setProfile(null);
+          setProfileError("This account has been deleted.");
+          return { error: "This account has been deleted.", profile: null };
+        }
+
         const profileResult =
           userVerified && !existingProfile.profile.verified
             ? await ensureProfileForUser(user)

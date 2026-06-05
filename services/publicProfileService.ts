@@ -1,4 +1,5 @@
 // PHASE 5 STEP 1E
+// PHASE 5 STEP 4
 import { supabase } from "../lib/supabase";
 import { normalizeProfileSlug, normalizeProfileVisibility, type ProfileVisibility } from "../utils/publicProfile";
 import { getDisplayRankTitle, parseBadgeList, type ReputationBadge } from "../utils/reputation";
@@ -20,6 +21,7 @@ export interface PublicProfileCard {
   evidenceCount: number;
   correctVotes: number;
   createdAt: string | null;
+  isDeleted: boolean;
 }
 
 interface PublicProfileRow {
@@ -39,6 +41,8 @@ interface PublicProfileRow {
   evidence_count?: number | null;
   correct_votes?: number | null;
   created_at?: string | null;
+  is_deleted?: boolean | null;
+  deleted_at?: string | null;
 }
 
 export interface PublicProfileResult {
@@ -47,9 +51,10 @@ export interface PublicProfileResult {
 }
 
 const PUBLIC_PROFILE_SELECT =
-  "id,username,display_name,avatar_url,bio,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list,evidence_count,correct_votes,created_at";
+  "id,username,display_name,avatar_url,bio,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list,evidence_count,correct_votes,created_at,is_deleted,deleted_at";
 
 function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
+  const isDeleted = Boolean(row.is_deleted);
   const visibility = normalizeProfileVisibility(row.profile_visibility);
   const rankTitle = getDisplayRankTitle({
     trustScore: row.trust_score ?? 50,
@@ -59,20 +64,21 @@ function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
 
   return {
     id: row.id,
-    username: row.username,
-    displayName: row.display_name ?? null,
-    avatarUrl: row.avatar_url ?? null,
-    bio: visibility === "private" ? null : row.bio ?? null,
-    publicProfileSlug: row.public_profile_slug ?? row.username,
-    profileVisibility: visibility,
+    username: isDeleted ? "deleted_user" : row.username,
+    displayName: isDeleted ? "Deleted User" : row.display_name ?? null,
+    avatarUrl: isDeleted ? null : row.avatar_url ?? null,
+    bio: visibility === "private" || isDeleted ? null : row.bio ?? null,
+    publicProfileSlug: isDeleted ? null : row.public_profile_slug ?? row.username,
+    profileVisibility: isDeleted ? "private" : visibility,
     rankTitle,
     highestRankAchieved: row.highest_rank_achieved ?? rankTitle,
-    reputationPoints: visibility === "private" ? 0 : row.reputation_points ?? 0,
-    monthlyReputationPoints: visibility === "private" ? 0 : row.monthly_reputation_points ?? 0,
-    badgeList: parseBadgeList(row.badge_list),
-    evidenceCount: visibility === "private" ? 0 : row.evidence_count ?? 0,
-    correctVotes: visibility === "private" ? 0 : row.correct_votes ?? 0,
-    createdAt: visibility === "private" ? null : row.created_at ?? null,
+    reputationPoints: visibility === "private" || isDeleted ? 0 : row.reputation_points ?? 0,
+    monthlyReputationPoints: visibility === "private" || isDeleted ? 0 : row.monthly_reputation_points ?? 0,
+    badgeList: isDeleted ? [] : parseBadgeList(row.badge_list),
+    evidenceCount: visibility === "private" || isDeleted ? 0 : row.evidence_count ?? 0,
+    correctVotes: visibility === "private" || isDeleted ? 0 : row.correct_votes ?? 0,
+    createdAt: visibility === "private" || isDeleted ? null : row.created_at ?? null,
+    isDeleted,
   };
 }
 

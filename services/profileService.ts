@@ -3,6 +3,7 @@
 // PHASE 3 STEP 22
 // PHASE 3 STEP 28
 // PHASE 3 STEP 29
+// PHASE 5 STEP 4
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { supabase } from "../lib/supabase";
@@ -47,6 +48,8 @@ export interface Profile {
   highest_rank_achieved: string;
   monthly_reputation_points: number;
   monthly_reset_at: string | null;
+  is_deleted: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +83,8 @@ type ProfileRow = {
   highest_rank_achieved?: string | null;
   monthly_reputation_points?: number | null;
   monthly_reset_at?: string | null;
+  is_deleted?: boolean | null;
+  deleted_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -138,15 +143,17 @@ function getProfileLoadErrorMessage(): string {
 
 // PHASE 3 STEP 18C
 function mapProfileRowToProfile(row: ProfileRow): Profile {
+  const isDeleted = Boolean(row.is_deleted);
+
   return {
     id: row.id,
-    username: row.username,
-    display_name: row.display_name ?? null,
-    avatar_url: row.avatar_url ?? null,
+    username: isDeleted ? "deleted_user" : row.username,
+    display_name: isDeleted ? "Deleted User" : row.display_name ?? null,
+    avatar_url: isDeleted ? null : row.avatar_url ?? null,
     // PHASE 5 STEP 1E
-    bio: row.bio ?? null,
-    public_profile_slug: row.public_profile_slug ?? generateProfileSlug(row.username, row.id),
-    profile_visibility: normalizeProfileVisibility(row.profile_visibility),
+    bio: isDeleted ? null : row.bio ?? null,
+    public_profile_slug: isDeleted ? null : row.public_profile_slug ?? generateProfileSlug(row.username, row.id),
+    profile_visibility: isDeleted ? "private" : normalizeProfileVisibility(row.profile_visibility),
     verified: Boolean(row.verified),
     reputation_score: row.reputation_score ?? 0,
     votes_cast: row.votes_cast ?? 0,
@@ -167,6 +174,8 @@ function mapProfileRowToProfile(row: ProfileRow): Profile {
     highest_rank_achieved: row.highest_rank_achieved ?? row.rank_title ?? "Claim Checker",
     monthly_reputation_points: row.monthly_reputation_points ?? 0,
     monthly_reset_at: row.monthly_reset_at ?? null,
+    is_deleted: isDeleted,
+    deleted_at: row.deleted_at ?? null,
     created_at: row.created_at ?? "",
     updated_at: row.updated_at ?? "",
   };
@@ -396,6 +405,10 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
   }
 
   if (existingProfile.profile) {
+    if (existingProfile.profile.is_deleted) {
+      return { profile: existingProfile.profile, error: "This account has been deleted." };
+    }
+
     const result = await syncProfileForUser(existingProfile.profile, user);
     console.log("[profile] ensure profile result:", result.profile?.id);
     console.log("[profile] ensure result:", result.profile?.id);

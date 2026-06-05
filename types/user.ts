@@ -33,4 +33,7 @@ export interface User {
   suspiciousFlags: number;
   badgeList: ReputationBadge[];
   lastActiveAt: string | null;
+  // PHASE 5 STEP 4
+  isDeleted?: boolean;
+  deletedAt?: string | null;
 }

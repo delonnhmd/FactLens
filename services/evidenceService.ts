@@ -3,6 +3,7 @@
 // PHASE 4 STEP 14
 // PHASE 4 STEP 14B
 // PHASE 4 STEP 23
+// PHASE 5 STEP 4
 import { supabase } from "../lib/supabase";
 import { getSourceQuality } from "./sourceQuality";
 import { ensureProfileForUser } from "./profileService";
@@ -58,6 +59,8 @@ interface EvidenceProfileRow {
   highest_rank_achieved?: string | null;
   badge_list?: unknown;
   evidence_count?: number | null;
+  is_deleted?: boolean | null;
+  deleted_at?: string | null;
 }
 
 interface EvidenceListResult {
@@ -199,6 +202,7 @@ function getEmbeddedProfile(row: EvidenceRow): EvidenceProfileRow | null {
 
 export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
   const profile = getEmbeddedProfile(row);
+  const isDeleted = Boolean(profile?.is_deleted);
   const rankTitle = profile
     ? getDisplayRankTitle({
         trustScore: profile.trust_score ?? 50,
@@ -211,15 +215,15 @@ export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
     id: row.id,
     userId: row.user_id,
     // PHASE 5 STEP 1
-    contributorUsername: profile?.username ?? null,
-    contributorDisplayName: profile?.display_name || profile?.username || null,
-    contributorRankTitle: rankTitle,
-    contributorBadges: parseBadgeList(profile?.badge_list),
+    contributorUsername: isDeleted ? "deleted_user" : profile?.username ?? null,
+    contributorDisplayName: isDeleted ? "Deleted User" : profile?.display_name || profile?.username || null,
+    contributorRankTitle: isDeleted ? null : rankTitle,
+    contributorBadges: isDeleted ? [] : parseBadgeList(profile?.badge_list),
     // PHASE 5 STEP 1E
-    contributorAvatarUrl: profile?.avatar_url ?? null,
-    contributorProfileSlug: profile?.public_profile_slug ?? profile?.username ?? null,
-    contributorProfileVisibility: normalizeProfileVisibility(profile?.profile_visibility),
-    contributorEvidenceCount: profile?.profile_visibility === "private" ? null : profile?.evidence_count ?? 0,
+    contributorAvatarUrl: isDeleted ? null : profile?.avatar_url ?? null,
+    contributorProfileSlug: isDeleted ? null : profile?.public_profile_slug ?? profile?.username ?? null,
+    contributorProfileVisibility: isDeleted ? "private" : normalizeProfileVisibility(profile?.profile_visibility),
+    contributorEvidenceCount: isDeleted || profile?.profile_visibility === "private" ? null : profile?.evidence_count ?? 0,
     url: row.url,
     note: row.note,
     type: row.evidence_type,
@@ -244,7 +248,7 @@ async function mergeEvidenceProfiles(rows: EvidenceRow[]): Promise<EvidenceRow[]
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id,username,display_name,avatar_url,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,badge_list,evidence_count")
+    .select("id,username,display_name,avatar_url,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,badge_list,evidence_count,is_deleted,deleted_at")
     .in("id", userIds);
 
   if (error) {

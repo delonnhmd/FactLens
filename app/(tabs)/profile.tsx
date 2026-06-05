@@ -2,8 +2,9 @@
 // PHASE 3 STEP 27
 // PHASE 3 STEP 28
 // PHASE 4 STEP 27
+// PHASE 5 STEP 4
 import { useEffect, useRef, useState } from "react";
-import { Alert, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput } from "react-native";
+import { Alert, Linking, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
@@ -68,7 +69,7 @@ export default function ProfileScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       "Delete account?",
-      "This permanently removes your FactLens account and public profile. This cannot be undone.",
+      "Your public profile will be anonymized as Deleted User. Claims, votes, and evidence stay in FactLens so verification history does not break. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -89,6 +90,20 @@ export default function ProfileScreen() {
         },
       ],
     );
+  };
+
+  // PHASE 5 STEP 4
+  const handleOpenPrivacyPolicy = () => {
+    Linking.openURL("https://factlens.app/privacy").catch(() => {
+      Alert.alert("Could not open Privacy Policy right now.");
+    });
+  };
+
+  // PHASE 5 STEP 4
+  const handleContactSupport = () => {
+    Linking.openURL("mailto:support@factlens.app").catch(() => {
+      Alert.alert("Contact support", "Email support@factlens.app");
+    });
   };
 
   const handleCreateMissingProfile = async () => {
@@ -415,8 +430,16 @@ export default function ProfileScreen() {
             </View>
 
             {/* PHASE 5 STEP 2 */}
+            {/* PHASE 5 STEP 4 */}
             <View style={styles.legalSection}>
-              <Text style={styles.detailLabel}>Launch safety</Text>
+              <Text style={styles.detailLabel}>Settings and safety</Text>
+              <Text style={styles.complianceNotice}>
+                FactLens uses AI and community voting to help review claims. Results are informational and may be
+                incorrect. Always check original sources.
+              </Text>
+              <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={handleOpenPrivacyPolicy}>
+                <Text style={styles.legalLinkText}>Privacy Policy</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={() => router.push("/legal/terms")}>
                 <Text style={styles.legalLinkText}>Terms of Service</Text>
               </TouchableOpacity>
@@ -433,6 +456,9 @@ export default function ProfileScreen() {
                 onPress={() => router.push("/legal/community-guidelines")}
               >
                 <Text style={styles.legalLinkText}>Community Guidelines</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={handleContactSupport}>
+                <Text style={styles.legalLinkText}>Contact Support</Text>
               </TouchableOpacity>
             </View>
 
@@ -814,6 +840,18 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: 0.5,
     paddingVertical: theme.spacing.md,
+  },
+  // PHASE 5 STEP 4
+  complianceNotice: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    color: theme.colors.subtext,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: theme.spacing.sm,
+    padding: 10,
   },
   legalLink: {
     paddingVertical: 8,

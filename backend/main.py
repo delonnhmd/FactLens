@@ -360,18 +360,39 @@ def profile_reputation_events(request: Request, limit: int = 50):
 
 
 # PHASE 5 STEP 2
+# PHASE 5 STEP 4
 @app.delete("/account")
 def delete_account(request: Request):
     authenticated_user_id = get_authenticated_user_id(request)
     supabase = get_supabase_client()
+    deleted_username = f"deleted_user_{authenticated_user_id.replace('-', '')[-8:]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     try:
-        supabase.table("profiles").delete().eq("id", authenticated_user_id).execute()
-        supabase.auth.admin.delete_user(authenticated_user_id)
-    except Exception:
+        result = (
+            supabase.table("profiles")
+            .update({
+                "is_deleted": True,
+                "deleted_at": now_iso,
+                "username": deleted_username,
+                "display_name": "Deleted User",
+                "avatar_url": None,
+                "bio": None,
+                "public_profile_slug": None,
+                "profile_visibility": "private",
+                "updated_at": now_iso,
+            })
+            .eq("id", authenticated_user_id)
+            .execute()
+        )
+    except Exception as error:
+        print("[account delete] profile anonymize failed:", str(error), flush=True)
         raise HTTPException(status_code=500, detail="Could not delete account right now.")
 
-    return {"ok": True}
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Account profile not found.")
+
+    return {"ok": True, "mode": "anonymized"}
 
 
 # PHASE 5 STEP 2
