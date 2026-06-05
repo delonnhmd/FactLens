@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="FactLens is a community-powered claim verification app for posting claims, reviewing sources, voting, adding evidence, and seeing AI-assisted source checks."
+    />
+    <title>FactLens | Community-powered claim verification</title>
+    <style>
+      :root {
+        --ink: #172033;
+        --muted: #667085;
+        --border: #e4e7ec;
+        --surface: #ffffff;
+        --soft: #f5f7fa;
+        --navy: #0d1b3e;
+        --blue: #1f65d6;
+        --gold: #ef9f27;
+        --green-bg: #eaf3de;
+        --green-text: #27500a;
+        --purple-bg: #eeedfe;
+        --purple-text: #534ab7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 20% 0%, rgba(239, 159, 39, 0.14), transparent 30%),
+          linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.5;
+        margin: 0;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .page {
+        margin: 0 auto;
+        max-width: 1120px;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .nav {
+        align-items: center;
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0 32px;
+      }
+
+      .brand {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+      }
+
+      .mark {
+        align-items: center;
+        background: var(--navy);
+        border-radius: 12px;
+        color: #ffffff;
+        display: grid;
+        font-size: 15px;
+        font-weight: 800;
+        height: 40px;
+        justify-content: center;
+        width: 40px;
+      }
+
+      .brand-name {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .nav-link {
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .hero {
+        display: grid;
+        gap: 28px;
+        padding: 18px 0 34px;
+      }
+
+      .eyebrow {
+        align-items: center;
+        background: var(--green-bg);
+        border-radius: 999px;
+        color: var(--green-text);
+        display: inline-flex;
+        font-size: 12px;
+        font-weight: 800;
+        gap: 6px;
+        padding: 7px 10px;
+        width: fit-content;
+      }
+
+      .eyebrow-dot {
+        background: var(--green-text);
+        border-radius: 50%;
+        height: 6px;
+        width: 6px;
+      }
+
+      h1 {
+        color: var(--navy);
+        font-size: clamp(42px, 11vw, 76px);
+        letter-spacing: 0;
+        line-height: 0.94;
+        margin: 14px 0 14px;
+      }
+
+      .tagline {
+        color: var(--ink);
+        font-size: clamp(20px, 5vw, 31px);
+        font-weight: 760;
+        letter-spacing: 0;
+        line-height: 1.15;
+        margin: 0 0 14px;
+      }
+
+      .description {
+        color: var(--muted);
+        font-size: 16px;
+        margin: 0;
+        max-width: 620px;
+      }
+
+      .buttons {
+        display: grid;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .store-button {
+        align-items: center;
+        background: var(--navy);
+        border-radius: 10px;
+        color: #ffffff;
+        display: flex;
+        font-size: 15px;
+        font-weight: 800;
+        justify-content: center;
+        min-height: 50px;
+        padding: 14px 18px;
+      }
+
+      .store-button.secondary {
+        background: #ffffff;
+        border: 1px solid var(--border);
+        color: var(--navy);
+      }
+
+      .product-card {
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: 0 24px 70px rgba(13, 27, 62, 0.11);
+        overflow: hidden;
+      }
+
+      .phone-top {
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        padding: 14px;
+      }
+
+      .status {
+        background: var(--purple-bg);
+        border-radius: 999px;
+        color: var(--purple-text);
+        font-size: 11px;
+        font-weight: 800;
+        padding: 5px 9px;
+      }
+
+      .claim-card {
+        padding: 16px;
+      }
+
+      .claim-meta {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .claim-title {
+        color: var(--ink);
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.2;
+        margin: 8px 0;
+      }
+
+      .claim-copy {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 14px;
+      }
+
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-bottom: 14px;
+      }
+
+      .badge {
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 5px 8px;
+      }
+
+      .badge.green {
+        background: var(--green-bg);
+        color: var(--green-text);
+      }
+
+      .badge.gold {
+        background: #faeeda;
+        color: #8a5400;
+      }
+
+      .source {
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        display: flex;
+        font-size: 12px;
+        gap: 8px;
+        padding: 11px 0;
+      }
+
+      .source-pill {
+        background: #e6f1fb;
+        border-radius: 999px;
+        color: #0c447c;
+        font-size: 11px;
+        font-weight: 800;
+        margin-left: auto;
+        padding: 4px 8px;
+      }
+
+      .ai-strip {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        padding: 12px 0 0;
+      }
+
+      .ai-dot {
+        background: var(--gold);
+        border-radius: 50%;
+        height: 7px;
+        width: 7px;
+      }
+
+      .ai-text {
+        color: var(--muted);
+        flex: 1;
+        font-size: 12px;
+      }
+
+      .ai-score {
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .features {
+        display: grid;
+        gap: 12px;
+        margin: 18px 0 32px;
+      }
+
+      .feature {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+      }
+
+      .feature h2 {
+        color: var(--navy);
+        font-size: 16px;
+        margin: 0 0 6px;
+      }
+
+      .feature p {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0;
+      }
+
+      .notice {
+        background: #fff8ec;
+        border: 1px solid #f6d49a;
+        border-radius: 16px;
+        color: #624000;
+        font-size: 14px;
+        margin: 0 0 28px;
+        padding: 14px;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        display: grid;
+        gap: 14px;
+        padding: 22px 0 12px;
+      }
+
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 18px;
+      }
+
+      .footer a {
+        color: var(--navy);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .copyright {
+        font-size: 12px;
+      }
+
+      @media (min-width: 760px) {
+        .page {
+          padding: 32px;
+        }
+
+        .hero {
+          align-items: center;
+          grid-template-columns: 1.05fr 0.95fr;
+          padding: 48px 0 54px;
+        }
+
+        .buttons {
+          grid-template-columns: repeat(2, minmax(0, 220px));
+        }
+
+        .features {
+          grid-template-columns: repeat(3, 1fr);
+        }
+
+        .footer {
+          align-items: center;
+          grid-template-columns: 1fr auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <nav class="nav" aria-label="Main navigation">
+        <a class="brand" href="/">
+          <span class="mark">FL</span>
+          <span class="brand-name">FactLens</span>
+        </a>
+        <a class="nav-link" href="mailto:support@factlens.app">Contact Support</a>
+      </nav>
+
+      <section class="hero">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> Public beta coming soon</div>
+          <h1>FactLens</h1>
+          <p class="tagline">Community-powered claim verification</p>
+          <p class="description">
+            FactLens helps users post claims, review sources, vote, add evidence, and see AI-assisted source checks.
+          </p>
+          <div class="buttons" aria-label="Download links">
+            <span class="store-button">App Store - Coming soon</span>
+            <span class="store-button secondary">Google Play - Coming soon</span>
+          </div>
+        </div>
+
+        <div class="product-card" aria-label="FactLens app preview">
+          <div class="phone-top">
+            <strong>Claim Review</strong>
+            <span class="status">AI Check Pending</span>
+          </div>
+          <div class="claim-card">
+            <div class="claim-meta">@communitychecker · 4m ago</div>
+            <div class="claim-title">Can this source support the claim?</div>
+            <p class="claim-copy">
+              FactLens keeps AI signals preliminary while community voting and evidence shape the final review.
+            </p>
+            <div class="badges">
+              <span class="badge green">Health</span>
+              <span class="badge gold">Needs evidence</span>
+            </div>
+            <div class="source">
+              <span>link</span>
+              <strong>example.com</strong>
+              <span class="source-pill">Medium · 78/100</span>
+            </div>
+            <div class="ai-strip">
+              <span class="ai-dot"></span>
+              <span class="ai-text">AI checks whether the source appears to support the claim.</span>
+              <span class="ai-score">50%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="features" aria-label="FactLens features">
+        <article class="feature">
+          <h2>Post claims</h2>
+          <p>Share a claim with a source so the community can review what was said and where it came from.</p>
+        </article>
+        <article class="feature">
+          <h2>Vote and add evidence</h2>
+          <p>Contributors can vote True, Fake, or Not sure, then add evidence to help others evaluate the claim.</p>
+        </article>
+        <article class="feature">
+          <h2>AI-assisted source checks</h2>
+          <p>AI helps summarize source support, but it is only a risk signal. Community review still matters.</p>
+        </article>
+      </section>
+
+      <p class="notice">
+        FactLens uses AI and community voting to help review claims. Results are informational and may be incorrect.
+        Always check original sources.
+      </p>
+
+      <footer class="footer">
+        <div class="footer-links">
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+          <a href="/community-guidelines">Community Guidelines</a>
+          <a href="/ai-disclaimer">AI Disclaimer</a>
+          <a href="mailto:support@factlens.app">Contact Support</a>
+        </div>
+        <div class="copyright">FactLens by PennyFloat. Target: factlens.pennyfloat.com</div>
+      </footer>
+    </main>
+  </body>
+</html>

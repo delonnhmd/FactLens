@@ -8,6 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "landing:build": "node scripts/build-landing.mjs",
     "typecheck": "tsc --noEmit",
     "backend": "python -m uvicorn backend.main:app --reload",
     "seed:test-users": "node scripts/seed-test-users.mjs",
