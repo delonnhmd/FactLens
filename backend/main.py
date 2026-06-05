@@ -257,7 +257,8 @@ def health():
 def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
     enforce_rate_limit(request, "leaderboard", 120, AI_RATE_LIMIT_WINDOW_SECONDS)
     leaderboard_type = "monthly" if type != "alltime" else "alltime"
-    safe_limit = max(1, min(50, int(limit or 20)))
+    # PHASE 5 STEP 1C
+    safe_limit = max(1, min(50, int(limit or 50)))
     supabase = get_supabase_client()
     month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
@@ -295,11 +296,16 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
         badge_count = len(badges) if isinstance(badges, list) else 0
         users.append({
             "rank_position": index + 1,
+            "id": row.get("id"),
             "username": row.get("username"),
             "rank_title": display_rank,
+            "current_rank_title": current_rank,
+            "highest_rank_achieved": row.get("highest_rank_achieved") or display_rank,
             "reputation_points": row.get("reputation_points") or 0,
             "monthly_reputation_points": row.get("monthly_reputation_points") or 0,
+            "badge_list": badges if isinstance(badges, list) else [],
             "badge_count": badge_count,
+            "trust_score": trust_score,
         })
 
     next_reset = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -313,6 +319,30 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
         "limit": safe_limit,
         "next_monthly_reset_at": next_reset.isoformat(),
         "users": users,
+    }
+
+
+# PHASE 5 STEP 1C
+@app.post("/admin/reputation/reset-monthly")
+def admin_reset_monthly_reputation(request: Request):
+    require_admin_key(request)
+    supabase = get_supabase_client()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    result = (
+        supabase.table("profiles")
+        .update({
+            "monthly_reputation_points": 0,
+            "monthly_reset_at": now_iso,
+        })
+        .execute()
+    )
+
+    print("[admin monthly reset] rows:", len(result.data or []), flush=True)
+
+    return {
+        "ok": True,
+        "reset_at": now_iso,
+        "rows": len(result.data or []),
     }
 
 

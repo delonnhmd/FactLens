@@ -1,7 +1,7 @@
 // PHASE 5 STEP 1
 // PHASE 5 STEP 1B
 import { API_CONFIG } from "../constants/apiConfig";
-import { getDisplayRankTitle, parseBadgeList, type ReputationBadge } from "../utils/reputation";
+import { parseBadgeList, type ReputationBadge } from "../utils/reputation";
 
 export type LeaderboardScope = "monthly" | "all_time";
 
@@ -18,7 +18,7 @@ export interface LeaderboardUser {
 interface LeaderboardRow {
   id: string;
   username: string;
-  display_name: string | null;
+  display_name?: string | null;
   trust_score: number | null;
   rank_title: string | null;
   highest_rank_achieved: string | null;
@@ -34,26 +34,20 @@ export interface LeaderboardResult {
 }
 
 function mapLeaderboardRow(row: LeaderboardRow, scope: LeaderboardScope): LeaderboardUser {
-  const trustScore = row.trust_score ?? 50;
-
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name || row.username,
-    rankTitle: getDisplayRankTitle({
-      trustScore,
-      rankTitle: row.rank_title,
-      highestRankAchieved: row.highest_rank_achieved,
-    }),
+    rankTitle: row.highest_rank_achieved || row.rank_title || "Claim Checker",
     points: scope === "monthly" ? row.monthly_reputation_points ?? 0 : row.reputation_points ?? 0,
-    trustScore,
+    trustScore: row.trust_score ?? 50,
     badges: parseBadgeList(row.badge_list),
   };
 }
 
 export async function fetchLeaderboard(
   scope: LeaderboardScope = "monthly",
-  limit = 20,
+  limit = 50,
 ): Promise<LeaderboardResult> {
   try {
     const backendType = scope === "monthly" ? "monthly" : "alltime";
@@ -69,22 +63,7 @@ export async function fetchLeaderboard(
     }
 
     return {
-      users: (json.users ?? []).map((row: {
-        rank_position?: number;
-        username?: string;
-        rank_title?: string;
-        reputation_points?: number;
-        monthly_reputation_points?: number;
-        badge_count?: number;
-      }) => ({
-        id: `${row.rank_position ?? row.username}`,
-        username: row.username ?? "unknown",
-        displayName: row.username ?? "unknown",
-        rankTitle: row.rank_title ?? "Claim Checker",
-        points: scope === "monthly" ? row.monthly_reputation_points ?? 0 : row.reputation_points ?? 0,
-        trustScore: 50,
-        badges: [],
-      })),
+      users: (json.users ?? []).map((row: LeaderboardRow) => mapLeaderboardRow(row, scope)),
       nextMonthlyResetAt: json.next_monthly_reset_at ?? null,
     };
   } catch (error) {

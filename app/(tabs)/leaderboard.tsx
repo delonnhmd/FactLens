@@ -51,7 +51,7 @@ export default function LeaderboardScreen() {
       setError("");
 
       try {
-        const result = await fetchLeaderboard(scope);
+        const result = await fetchLeaderboard(scope, 50);
 
         if (result.error) {
           setError(result.error);
@@ -107,7 +107,7 @@ export default function LeaderboardScreen() {
           ) : null}
 
           {users.map((user, index) => {
-            const topBadges = getTopBadges(user.badges, 2);
+            const topBadges = getTopBadges(user.badges, 1);
 
             return (
               <View key={user.id} style={styles.row}>

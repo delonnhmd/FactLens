@@ -254,25 +254,6 @@ async function insertProfileForUser(
       // PHASE 3 STEP 22
       // PHASE 3 STEP 28
       verified: getUserVerifiedForProfile(user),
-      reputation_score: 0,
-      votes_cast: 0,
-      accuracy_rate: null,
-      // PHASE 5 STEP 1
-      trust_tier: "BASIC",
-      trust_weight_override: null,
-      trust_score: 50,
-      rank_title: "Claim Checker",
-      highest_rank_achieved: "Claim Checker",
-      correct_votes: 0,
-      incorrect_votes: 0,
-      evidence_count: 0,
-      helpful_evidence_count: 0,
-      suspicious_flags: 0,
-      reputation_points: 0,
-      badge_list: [],
-      monthly_reputation_points: 0,
-      monthly_reset_at: new Date().toISOString(),
-      last_active_at: new Date().toISOString(),
     })
     .select()
     .single();
@@ -320,24 +301,6 @@ export async function createProfile(
       display_name: displayName?.trim() || normalizedUsername,
       // PHASE 3 STEP 28
       verified: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? false : true,
-      votes_cast: 0,
-      accuracy_rate: null,
-      // PHASE 5 STEP 1
-      trust_tier: "BASIC",
-      trust_weight_override: null,
-      trust_score: 50,
-      rank_title: "Claim Checker",
-      highest_rank_achieved: "Claim Checker",
-      correct_votes: 0,
-      incorrect_votes: 0,
-      evidence_count: 0,
-      helpful_evidence_count: 0,
-      suspicious_flags: 0,
-      reputation_points: 0,
-      badge_list: [],
-      monthly_reputation_points: 0,
-      monthly_reset_at: new Date().toISOString(),
-      last_active_at: new Date().toISOString(),
     })
     .select()
     .single();

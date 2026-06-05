@@ -47,6 +47,7 @@ export default function ProfileScreen() {
   } : null);
   const badges = getTopBadges(profile?.badge_list ?? [], 8);
   const totalVotes = (profile?.correct_votes ?? 0) + (profile?.incorrect_votes ?? 0);
+  const highestRank = profile?.highest_rank_achieved || rankInfo.title;
 
   const handleSignOut = async () => {
     await signOut();
@@ -151,6 +152,7 @@ export default function ProfileScreen() {
                     ? `${Math.round(rankProgress.progress * 100)}% toward ${rankProgress.nextTitle}`
                     : "Top rank reached"}
                 </Text>
+                <Text style={styles.progressText}>Highest rank achieved: {highestRank}</Text>
               </View>
             ) : null}
 
@@ -211,7 +213,7 @@ export default function ProfileScreen() {
                       ))}
                     </View>
                   ) : (
-                    <Text style={styles.detailValue}>Earn your first badge by voting or adding evidence.</Text>
+                    <Text style={styles.detailValue}>No badges yet.</Text>
                   )}
                 </View>
               </>
