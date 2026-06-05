@@ -322,6 +322,29 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
     }
 
 
+# PHASE 5 STEP 1D
+@app.get("/profile/reputation-events")
+def profile_reputation_events(request: Request, limit: int = 50):
+    authenticated_user_id = get_authenticated_user_id(request)
+    safe_limit = max(1, min(50, int(limit or 50)))
+    supabase = get_supabase_client()
+
+    result = (
+        supabase.table("reputation_events")
+        .select("event_type, points_delta, trust_delta, badge_unlocked, rank_before, rank_after, reason, created_at, claim_id")
+        .eq("user_id", authenticated_user_id)
+        .order("created_at", desc=True)
+        .limit(safe_limit)
+        .execute()
+    )
+
+    return {
+        "ok": True,
+        "limit": safe_limit,
+        "events": result.data or [],
+    }
+
+
 # PHASE 5 STEP 1C
 @app.post("/admin/reputation/reset-monthly")
 def admin_reset_monthly_reputation(request: Request):

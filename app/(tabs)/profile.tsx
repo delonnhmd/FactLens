@@ -9,6 +9,7 @@ import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthProfile } from "../../services/authProfile";
+import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
 import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
 
 export default function ProfileScreen() {
@@ -27,6 +28,9 @@ export default function ProfileScreen() {
   const fallbackProfile = getAuthProfile(currentUser);
   const [actionMessage, setActionMessage] = useState("");
   const [actionError, setActionError] = useState("");
+  const [reputationEvents, setReputationEvents] = useState<ReputationEvent[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState("");
   const profileAutoFixAttempted = useRef(false);
 
   const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
@@ -80,6 +84,76 @@ export default function ProfileScreen() {
     profileAutoFixAttempted.current = true;
     void handleCreateMissingProfile();
   }, [isAuthenticated, loading, profile]);
+
+  // PHASE 5 STEP 1D
+  useEffect(() => {
+    if (!profile || !isAuthenticated) {
+      setReputationEvents([]);
+      return;
+    }
+
+    let isMounted = true;
+    setActivityLoading(true);
+    setActivityError("");
+
+    fetchReputationEvents(50)
+      .then((result) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setReputationEvents(result.events);
+        setActivityError(result.error ?? "");
+      })
+      .finally(() => {
+        if (isMounted) {
+          setActivityLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, profile?.id]);
+
+  function getActivityTitle(event: ReputationEvent): string {
+    switch (event.event_type) {
+      case "CORRECT_VOTE":
+        return "Correct Vote";
+      case "INCORRECT_VOTE":
+        return "Incorrect Vote";
+      case "VOTE_CAST":
+        return "Vote Cast";
+      case "EVIDENCE_ADDED":
+        return "Evidence Added";
+      case "HELPFUL_EVIDENCE":
+        return "Helpful Evidence";
+      case "BADGE_UNLOCKED":
+        return `Badge Unlocked${event.badge_unlocked ? `: ${event.badge_unlocked}` : ""}`;
+      case "RANK_UPGRADED":
+        return `Rank upgraded${event.rank_after ? `: ${event.rank_after}` : ""}`;
+      case "SUSPICIOUS_PENALTY":
+        return "Suspicious Penalty";
+      case "HIGH_QUALITY_SOURCE":
+        return "High-quality Source";
+      case "EVIDENCE_REJECTED":
+        return "Evidence Rejected";
+      default:
+        return event.event_type
+          .toLowerCase()
+          .split("_")
+          .map((word) => word.slice(0, 1).toUpperCase() + word.slice(1))
+          .join(" ");
+    }
+  }
+
+  function getActivityDelta(event: ReputationEvent): string {
+    if (!event.points_delta) {
+      return "0";
+    }
+
+    return event.points_delta > 0 ? `+${event.points_delta}` : String(event.points_delta);
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -215,6 +289,44 @@ export default function ProfileScreen() {
                   ) : (
                     <Text style={styles.detailValue}>No badges yet.</Text>
                   )}
+                </View>
+
+                <View style={styles.activitySection}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.detailLabel}>Reputation Activity</Text>
+                    {activityLoading ? <Text style={styles.activityStatusText}>Loading...</Text> : null}
+                  </View>
+                  {activityError ? <Text style={styles.errorText}>{activityError}</Text> : null}
+                  {!activityLoading && !activityError && reputationEvents.length === 0 ? (
+                    <Text style={styles.detailValue}>No reputation activity yet.</Text>
+                  ) : null}
+                  {reputationEvents.slice(0, 8).map((event, index) => (
+                    <View
+                      key={`${event.event_type}-${event.created_at}-${index}`}
+                      style={styles.activityRow}
+                    >
+                      <View style={styles.activityDeltaPill}>
+                        <Text
+                          style={[
+                            styles.activityDeltaText,
+                            event.points_delta < 0 ? styles.activityDeltaNegative : styles.activityDeltaPositive,
+                          ]}
+                        >
+                          {getActivityDelta(event)}
+                        </Text>
+                      </View>
+                      <View style={styles.activityCopy}>
+                        <Text style={styles.activityTitle}>{getActivityTitle(event)}</Text>
+                        {event.event_type === "RANK_UPGRADED" && event.rank_before && event.rank_after ? (
+                          <Text style={styles.activityReason}>
+                            {event.rank_before} {"->"} {event.rank_after}
+                          </Text>
+                        ) : (
+                          <Text style={styles.activityReason}>{event.reason || "Your reputation changed."}</Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
                 </View>
               </>
             ) : null}
@@ -439,6 +551,63 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: 0.5,
     paddingVertical: theme.spacing.md,
+  },
+  // PHASE 5 STEP 1D
+  activitySection: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+  },
+  sectionHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  activityStatusText: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+  },
+  activityRow: {
+    alignItems: "flex-start",
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  activityDeltaPill: {
+    alignItems: "center",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    minWidth: 42,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  activityDeltaText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  activityDeltaPositive: {
+    color: theme.colors.success,
+  },
+  activityDeltaNegative: {
+    color: theme.colors.danger,
+  },
+  activityCopy: {
+    flex: 1,
+  },
+  activityTitle: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  activityReason: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
   },
   badgeWrap: {
     flexDirection: "row",
