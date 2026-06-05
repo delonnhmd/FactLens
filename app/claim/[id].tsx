@@ -12,6 +12,7 @@
 // PHASE 4 STEP 22
 // PHASE 4 STEP 23
 // PHASE 5 STEP 5 PRE-LAUNCH
+// PHASE 5 STEP 6
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -48,6 +49,12 @@ import { theme } from "../../constants/theme";
 import { normalizeUrl } from "../../utils/url";
 import { getTopBadges } from "../../utils/reputation";
 import { reportEvidence } from "../../services/reportService";
+import {
+  formatImageSize,
+  pickImageFromCamera,
+  pickImageFromLibrary,
+  type PickedOptimizedImage,
+} from "../../services/imageUploadService";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
@@ -291,6 +298,9 @@ export default function ClaimDetailScreen() {
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceNote, setEvidenceNote] = useState("");
   const [evidenceType, setEvidenceType] = useState<EvidenceType>("ADDS_CONTEXT");
+  // PHASE 5 STEP 6
+  const [selectedEvidenceImage, setSelectedEvidenceImage] = useState<PickedOptimizedImage | null>(null);
+  const [evidenceImageError, setEvidenceImageError] = useState("");
   const [evidenceErrors, setEvidenceErrors] = useState<EvidenceErrors>({});
   // PHASE 3 STEP 5
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -599,6 +609,40 @@ export default function ClaimDetailScreen() {
     }
   };
 
+  // PHASE 5 STEP 6
+  const handlePickEvidenceImageFromSource = async (source: "camera" | "library") => {
+    setEvidenceImageError("");
+
+    try {
+      const image = source === "camera" ? await pickImageFromCamera() : await pickImageFromLibrary();
+
+      if (image) {
+        setSelectedEvidenceImage(image);
+      }
+    } catch (error) {
+      setEvidenceImageError(error instanceof Error ? error.message : "Could not select this image right now.");
+    }
+  };
+
+  // PHASE 5 STEP 6
+  const handlePickEvidenceImage = () => {
+    Alert.alert("Add evidence image", "Choose a source for this evidence image.", [
+      {
+        text: "Camera",
+        onPress: () => {
+          void handlePickEvidenceImageFromSource("camera");
+        },
+      },
+      {
+        text: "Photo Library",
+        onPress: () => {
+          void handlePickEvidenceImageFromSource("library");
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   const validateEvidence = (): EvidenceErrors => {
     const nextErrors: EvidenceErrors = {};
     const trimmedUrl = evidenceUrl.trim();
@@ -644,10 +688,14 @@ export default function ClaimDetailScreen() {
         url: normalizeUrl(evidenceUrl),
         note: evidenceNote.replace(/\s+/g, " ").trim(),
         type: evidenceType,
+        // PHASE 5 STEP 6
+        imageAsset: selectedEvidenceImage,
       });
       setEvidenceUrl("");
       setEvidenceNote("");
       setEvidenceType("ADDS_CONTEXT");
+      setSelectedEvidenceImage(null);
+      setEvidenceImageError("");
       setEvidenceErrors({});
       setEvidenceSuccess("Evidence saved.");
     } catch (error) {
@@ -1161,7 +1209,16 @@ export default function ClaimDetailScreen() {
             <View style={styles.mediaList}>
               {/* PHASE 3 STEP 7 */}
               {claim.media.imageUrl ? (
-                <Image source={{ uri: claim.media.imageUrl }} style={styles.detailImage} resizeMode="cover" />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    Linking.openURL(claim.media.imageUrl || "").catch(() => {
+                      Alert.alert("Could not open image.");
+                    });
+                  }}
+                >
+                  <Image source={{ uri: claim.media.imageUrl }} style={styles.detailImage} resizeMode="cover" />
+                </TouchableOpacity>
               ) : null}
               {/* PHASE 3 STEP 8 */}
               {mediaUrl && mediaPlatform ? (
@@ -1327,6 +1384,41 @@ export default function ClaimDetailScreen() {
             </View>
           </View>
 
+          {/* PHASE 5 STEP 6 */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Evidence image (optional)</Text>
+            {selectedEvidenceImage ? (
+              <View style={styles.evidenceImagePreviewPanel}>
+                <Image source={{ uri: selectedEvidenceImage.uri }} style={styles.evidenceImagePreview} resizeMode="cover" />
+                <Text style={styles.fieldHint}>
+                  {formatImageSize(selectedEvidenceImage.fileSize)}
+                  {selectedEvidenceImage.warning ? `  •  ${selectedEvidenceImage.warning}` : ""}
+                </Text>
+                <TouchableOpacity
+                  style={styles.removeEvidenceImageButton}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedEvidenceImage(null);
+                    setEvidenceImageError("");
+                  }}
+                  disabled={evidenceSubmitLoading}
+                >
+                  <Text style={styles.removeEvidenceImageText}>Remove image</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.openSourceButton, evidenceSubmitLoading && styles.disabledButton]}
+              activeOpacity={0.8}
+              onPress={handlePickEvidenceImage}
+              disabled={evidenceSubmitLoading}
+            >
+              <Text style={styles.openSourceButtonText}>Add Image</Text>
+              <Ionicons name="image-outline" size={13} color={theme.colors.link} />
+            </TouchableOpacity>
+            {evidenceImageError ? <Text style={styles.errorText}>{evidenceImageError}</Text> : null}
+          </View>
+
           {evidenceError ? <Text style={styles.errorText}>{evidenceError}</Text> : null}
           {evidenceSuccess ? <Text style={styles.reportSuccess}>{evidenceSuccess}</Text> : null}
 
@@ -1337,7 +1429,7 @@ export default function ClaimDetailScreen() {
             disabled={evidenceSubmitLoading}
           >
             <Text style={styles.addEvidenceButtonText}>
-              {evidenceSubmitLoading ? "Saving..." : "Add Evidence"}
+              {evidenceSubmitLoading ? "Uploading..." : "Add Evidence"}
             </Text>
           </TouchableOpacity>
 
@@ -1414,6 +1506,23 @@ export default function ClaimDetailScreen() {
                       <SourceQualityBadge quality={sourceQuality} showScore />
                       <Text style={styles.sourceQualityReason}>{sourceQuality.reason}</Text>
                     </View>
+                    {/* PHASE 5 STEP 6 */}
+                    {item.thumbnailUrl || item.imageUrl ? (
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          Linking.openURL(item.imageUrl || item.thumbnailUrl || "").catch(() => {
+                            Alert.alert("Could not open image.");
+                          });
+                        }}
+                      >
+                        <Image
+                          source={{ uri: item.thumbnailUrl || item.imageUrl || "" }}
+                          style={styles.evidenceImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                    ) : null}
                     <Text style={styles.evidenceNote} numberOfLines={6}>{item.note}</Text>
                     <TouchableOpacity
                       style={styles.openSourceButton}
@@ -2326,6 +2435,36 @@ const styles = StyleSheet.create({
     color: theme.colors.link,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
+  },
+  // PHASE 5 STEP 6
+  evidenceImagePreviewPanel: {
+    gap: theme.spacing.sm,
+  },
+  evidenceImagePreview: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.sm,
+    height: 160,
+    width: "100%",
+  },
+  removeEvidenceImageButton: {
+    alignSelf: "flex-start",
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  removeEvidenceImageText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
+  evidenceImage: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.sm,
+    height: 160,
+    marginBottom: theme.spacing.sm,
+    width: "100%",
   },
   // PHASE 5 STEP 2
   reportEvidenceButton: {

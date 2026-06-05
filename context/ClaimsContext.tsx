@@ -57,6 +57,7 @@ import {
 } from "../services/realtimeService";
 import type { Claim, ClaimStatus, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
 import { getDebugErrorParts } from "../utils/debugError";
+import type { PickedOptimizedImage } from "../services/imageUploadService";
 
 export interface CreateClaimInput {
   title: string;
@@ -65,6 +66,8 @@ export interface CreateClaimInput {
   videoUrl?: string;
   // PHASE 3 STEP 7
   imageUrl?: string | null;
+  // PHASE 5 STEP 6
+  imageAsset?: PickedOptimizedImage | null;
   category?: string;
 }
 
@@ -74,6 +77,8 @@ export interface EvidenceInput {
   note: string;
   // PHASE 4 STEP 14B
   type?: EvidenceType;
+  // PHASE 5 STEP 6
+  imageAsset?: PickedOptimizedImage | null;
 }
 
 interface ClaimsContextValue {
@@ -918,6 +923,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       sourceUrl: input.sourceUrl,
       videoUrl: input.videoUrl,
       imageUrl: input.imageUrl ?? null,
+      // PHASE 5 STEP 6
+      imageAsset: input.imageAsset ?? null,
       category: input.category,
       profile: authorProfile,
     });
@@ -937,6 +944,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
           sourceUrl: input.sourceUrl,
           videoUrl: input.videoUrl,
           imageUrl: input.imageUrl ?? null,
+          // PHASE 5 STEP 6
+          imageAsset: input.imageAsset ?? null,
           category: input.category,
           profile: authorProfile,
         });

@@ -16,6 +16,7 @@
 // PHASE 4 STEP 18
 // PHASE 4 STEP 22
 // PHASE 5 STEP 4
+// PHASE 5 STEP 6
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
@@ -43,6 +44,7 @@ import type { User as AppUser } from "../types/user";
 import { ensureProfileForUser, type Profile } from "./profileService";
 import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
 import { normalizeProfileVisibility } from "../utils/publicProfile";
+import { uploadClaimImage, type PickedOptimizedImage } from "./imageUploadService";
 
 type ClaimAiStatus = AiCheck["status"];
 
@@ -120,6 +122,9 @@ export interface ClaimRow {
   source_url?: string | null;
   video_url: string | null;
   image_url: string | null;
+  // PHASE 5 STEP 6
+  image_path?: string | null;
+  thumbnail_url?: string | null;
   category: string | null;
   slug: string | null;
   share_url: string | null;
@@ -197,6 +202,10 @@ export interface CreateClaimInput {
   sourceUrl: string;
   videoUrl?: string;
   imageUrl?: string | null;
+  // PHASE 5 STEP 6
+  imagePath?: string | null;
+  thumbnailUrl?: string | null;
+  imageAsset?: PickedOptimizedImage | null;
   category?: string;
   profile?: Profile | null;
 }
@@ -207,6 +216,9 @@ export interface ClaimUpdates {
   sourceUrl?: string;
   videoUrl?: string | null;
   imageUrl?: string | null;
+  // PHASE 5 STEP 6
+  imagePath?: string | null;
+  thumbnailUrl?: string | null;
   category?: string;
   slug?: string | null;
   shareUrl?: string | null;
@@ -798,6 +810,9 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     sourceUrl,
     media: {
       imageUrl: row.image_url,
+      // PHASE 5 STEP 6
+      imagePath: row.image_path ?? null,
+      thumbnailUrl: row.thumbnail_url ?? row.image_url ?? null,
       videoUrl: videoUrl && videoPlatform !== "YouTube" ? videoUrl : null,
       youtubeUrl: videoUrl && videoPlatform === "YouTube" ? videoUrl : null,
       videoPlatform,
@@ -916,6 +931,9 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     sourceUrl: row.source_url ?? "",
     media: {
       imageUrl: row.image_url ?? null,
+      // PHASE 5 STEP 6
+      imagePath: row.image_path ?? null,
+      thumbnailUrl: row.thumbnail_url ?? row.image_url ?? null,
       videoUrl: row.video_url ?? null,
       youtubeUrl: null,
       videoPlatform: null,
@@ -1020,6 +1038,9 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
     source_url: safeSourceUrl,
     video_url: trimmedVideoUrl,
     image_url: input.imageUrl ?? null,
+    // PHASE 5 STEP 6
+    image_path: input.imagePath ?? null,
+    thumbnail_url: input.thumbnailUrl ?? input.imageUrl ?? null,
     category: input.category?.trim() || "Other",
     slug: generateClaimSlug(input.title),
     votes_true: 0,
@@ -1556,9 +1577,25 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   }
 
   const shareUrl = generateClaimShareUrl(insertedClaimId);
+  const mediaUpdatePayload: Record<string, unknown> = {
+    share_url: shareUrl,
+  };
+
+  // PHASE 5 STEP 6
+  if (input.imageAsset) {
+    try {
+      const uploadedImage = await uploadClaimImage(user.id, insertedClaimId, input.imageAsset);
+      mediaUpdatePayload.image_url = uploadedImage.imageUrl;
+      mediaUpdatePayload.image_path = uploadedImage.imagePath;
+      mediaUpdatePayload.thumbnail_url = uploadedImage.thumbnailUrl;
+    } catch (uploadError) {
+      console.log("[create claim] image upload warning:", uploadError);
+    }
+  }
+
   const { data: updatedData, error: shareUpdateError } = await supabase
     .from("claims")
-    .update({ share_url: shareUrl })
+    .update(mediaUpdatePayload)
     .eq("id", insertedClaimId)
     .select("*")
     .single();
@@ -1600,6 +1637,9 @@ export async function updateClaim(id: string, updates: ClaimUpdates): Promise<Cl
     ...(updates.sourceUrl !== undefined ? { source_url: normalizeUrl(updates.sourceUrl) } : {}),
     ...(updates.videoUrl !== undefined ? { video_url: updates.videoUrl ? normalizeUrl(updates.videoUrl) : null } : {}),
     ...(updates.imageUrl !== undefined ? { image_url: updates.imageUrl } : {}),
+    // PHASE 5 STEP 6
+    ...(updates.imagePath !== undefined ? { image_path: updates.imagePath } : {}),
+    ...(updates.thumbnailUrl !== undefined ? { thumbnail_url: updates.thumbnailUrl } : {}),
     ...(updates.category !== undefined ? { category: updates.category.trim() || "Other" } : {}),
     ...(updates.slug !== undefined ? { slug: updates.slug } : {}),
     ...(updates.shareUrl !== undefined ? { share_url: updates.shareUrl } : {}),

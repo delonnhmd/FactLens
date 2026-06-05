@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
@@ -131,6 +131,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       : null;
   const aiSummary = getAiSummary(claim);
   const avatarInitial = (claim.authorUsername || claim.authorDisplayName || "U").slice(0, 1).toUpperCase();
+  // PHASE 5 STEP 6
+  const thumbnailUrl = claim.media.thumbnailUrl || claim.media.imageUrl || null;
 
   const handleVote = useCallback(
     async (vote: VoteOption) => {
@@ -212,6 +214,19 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           <Text style={styles.description} numberOfLines={2}>
             {claim.description}
           </Text>
+
+          {thumbnailUrl ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                Linking.openURL(claim.media.imageUrl || thumbnailUrl).catch(() => {
+                  Alert.alert("Could not open image.");
+                });
+              }}
+            >
+              <Image source={{ uri: thumbnailUrl }} style={styles.claimThumbnail} resizeMode="cover" />
+            </TouchableOpacity>
+          ) : null}
 
           <View style={styles.badgeRow}>
             {claim.category ? <Text style={styles.categoryBadge}>{claim.category}</Text> : null}
@@ -336,6 +351,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "400",
     lineHeight: 18,
+  },
+  // PHASE 5 STEP 6
+  claimThumbnail: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    height: 180,
+    width: "100%",
   },
   badgeRow: {
     alignItems: "center",

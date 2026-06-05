@@ -1,8 +1,9 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
 // PHASE 5 STEP 5 PRE-LAUNCH
+// PHASE 5 STEP 6
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
+import { ActivityIndicator, Alert, Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
@@ -10,7 +11,12 @@ import { claimCategories } from "../../constants/claimCategories";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
-import { pickClaimImage, uploadClaimImage, type PickedClaimImage } from "../../services/imageUploadService";
+import {
+  formatImageSize,
+  pickImageFromCamera,
+  pickImageFromLibrary,
+  type PickedOptimizedImage,
+} from "../../services/imageUploadService";
 import { analyzeClaimDraft } from "../../utils/claimQuality";
 import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
@@ -27,7 +33,7 @@ type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
 export default function CreateScreen() {
   const router = useRouter();
   // PHASE 3 STEP 2
-  const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
+  const { profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -35,7 +41,7 @@ export default function CreateScreen() {
   const [videoUrl, setVideoUrl] = useState("");
   const [category, setCategory] = useState("");
   // PHASE 3 STEP 7
-  const [selectedImage, setSelectedImage] = useState<PickedClaimImage | null>(null);
+  const [selectedImage, setSelectedImage] = useState<PickedOptimizedImage | null>(null);
   const [imageError, setImageError] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -146,34 +152,43 @@ export default function CreateScreen() {
     return nextErrors;
   };
 
-  // PHASE 3 STEP 7
-  const handlePickImage = async () => {
+  // PHASE 5 STEP 6
+  const handlePickImageFromSource = async (source: "camera" | "library") => {
     setImageError("");
 
     try {
-      const image = await pickClaimImage();
+      const image = source === "camera" ? await pickImageFromCamera() : await pickImageFromLibrary();
 
       if (image) {
         setSelectedImage(image);
       }
-    } catch {
-      setImageError("Could not select this image right now.");
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "Could not select this image right now.");
     }
   };
 
-  // PHASE 3 STEP 7
+  // PHASE 5 STEP 6
+  const handlePickImage = () => {
+    Alert.alert("Add image", "Choose a source for this claim image.", [
+      {
+        text: "Camera",
+        onPress: () => {
+          void handlePickImageFromSource("camera");
+        },
+      },
+      {
+        text: "Photo Library",
+        onPress: () => {
+          void handlePickImageFromSource("library");
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   const submitClaim = async () => {
     try {
       setIsSubmitting(true);
-      let imageUrl: string | null = null;
-
-      if (selectedImage) {
-        if (!currentUser) {
-          throw new Error("You need an account to post.");
-        }
-
-        imageUrl = await uploadClaimImage(currentUser.id, selectedImage.uri, selectedImage.mimeType);
-      }
 
       console.log("[url] normalized source url:", normalizedSourceUrl);
 
@@ -182,7 +197,7 @@ export default function CreateScreen() {
         description,
         sourceUrl: normalizedSourceUrl,
         videoUrl: trimmedVideoUrl ? normalizedVideoUrl : "",
-        imageUrl,
+        imageAsset: selectedImage,
         category,
       });
 
@@ -195,10 +210,11 @@ export default function CreateScreen() {
       setImageError("");
       setErrors({});
       router.replace(`/claim/${createdClaim.id}`);
-    } catch {
+    } catch (error) {
       setErrors({
         // PHASE 4 STEP 24
-        general: "Could not submit claim right now. Please try again.",
+        // PHASE 5 STEP 6
+        general: error instanceof Error ? error.message : "Could not submit claim right now. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -494,6 +510,10 @@ export default function CreateScreen() {
             {selectedImage ? (
               <View style={styles.imagePreviewPanel}>
                 <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} resizeMode="cover" />
+                <Text style={styles.helperText}>
+                  {formatImageSize(selectedImage.fileSize)}
+                  {selectedImage.warning ? `  •  ${selectedImage.warning}` : ""}
+                </Text>
                 <TouchableOpacity
                   style={styles.removeImageButton}
                   activeOpacity={0.8}
@@ -515,10 +535,7 @@ export default function CreateScreen() {
               <Text style={styles.imageButtonText}>Add Image / Screenshot</Text>
             </TouchableOpacity>
             {imageError ? <Text style={styles.errorText}>{imageError}</Text> : null}
-            <Text style={styles.helperText}>Images are compressed before upload to save storage.</Text>
-            <Text style={styles.helperText}>
-              Full 1200px resize compression will be enabled after expo-image-manipulator is installed.
-            </Text>
+            <Text style={styles.helperText}>Images are compressed to JPEG and thumbnails are generated before upload.</Text>
           </View>
 
           <TouchableOpacity
@@ -527,7 +544,7 @@ export default function CreateScreen() {
             activeOpacity={0.8}
             disabled={submitDisabled}
           >
-            <Text style={styles.buttonText}>{isSubmitting ? "Posting..." : "Post Claim"}</Text>
+            <Text style={styles.buttonText}>{isSubmitting ? "Uploading..." : "Post Claim"}</Text>
             {isSubmitting ? <ActivityIndicator size="small" color={theme.colors.background} /> : null}
           </TouchableOpacity>
         </View>

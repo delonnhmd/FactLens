@@ -4,6 +4,7 @@
 // PHASE 3 STEP 28
 // PHASE 3 STEP 29
 // PHASE 5 STEP 4
+// PHASE 5 STEP 6
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { supabase } from "../lib/supabase";
@@ -23,6 +24,7 @@ export interface Profile {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_path: string | null;
   // PHASE 5 STEP 1E
   bio: string | null;
   public_profile_slug: string | null;
@@ -59,6 +61,7 @@ type ProfileRow = {
   username: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_path?: string | null;
   // PHASE 5 STEP 1E
   bio?: string | null;
   public_profile_slug?: string | null;
@@ -89,7 +92,7 @@ type ProfileRow = {
   updated_at?: string | null;
 };
 
-export type ProfileUpdates = Partial<Pick<Profile, "username" | "display_name" | "avatar_url" | "bio" | "profile_visibility">>;
+export type ProfileUpdates = Partial<Pick<Profile, "username" | "display_name" | "avatar_url" | "avatar_path" | "bio" | "profile_visibility">>;
 
 export interface ProfileResult {
   profile: Profile | null;
@@ -150,6 +153,7 @@ function mapProfileRowToProfile(row: ProfileRow): Profile {
     username: isDeleted ? "deleted_user" : row.username,
     display_name: isDeleted ? "Deleted User" : row.display_name ?? null,
     avatar_url: isDeleted ? null : row.avatar_url ?? null,
+    avatar_path: isDeleted ? null : row.avatar_path ?? null,
     // PHASE 5 STEP 1E
     bio: isDeleted ? null : row.bio ?? null,
     public_profile_slug: isDeleted ? null : row.public_profile_slug ?? generateProfileSlug(row.username, row.id),

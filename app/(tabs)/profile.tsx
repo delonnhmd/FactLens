@@ -3,8 +3,9 @@
 // PHASE 3 STEP 28
 // PHASE 4 STEP 27
 // PHASE 5 STEP 4
+// PHASE 5 STEP 6
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput } from "react-native";
+import { Alert, Image, Linking, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
@@ -14,6 +15,13 @@ import { deleteCurrentAccount } from "../../services/accountService";
 import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
 import { updateProfile } from "../../services/profileService";
 import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
+import {
+  formatImageSize,
+  pickImageFromCamera,
+  pickImageFromLibrary,
+  uploadProfileAvatar,
+  type PickedOptimizedImage,
+} from "../../services/imageUploadService";
 
 export default function ProfileScreen() {
   // PHASE 3 STEP 2
@@ -38,6 +46,10 @@ export default function ProfileScreen() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState("");
   const [usernameSaving, setUsernameSaving] = useState(false);
+  // PHASE 5 STEP 6
+  const [selectedAvatar, setSelectedAvatar] = useState<PickedOptimizedImage | null>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const profileAutoFixAttempted = useRef(false);
 
   const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
@@ -59,6 +71,7 @@ export default function ProfileScreen() {
   const badges = getTopBadges(profile?.badge_list ?? [], 8);
   const totalVotes = (profile?.correct_votes ?? 0) + (profile?.incorrect_votes ?? 0);
   const highestRank = profile?.highest_rank_achieved || rankInfo.title;
+  const avatarPreviewUri = selectedAvatar?.uri || profile?.avatar_url || null;
 
   const handleSignOut = async () => {
     await signOut();
@@ -143,6 +156,72 @@ export default function ProfileScreen() {
     setUsernameDraft("");
     setActionMessage("Username updated.");
     await refreshProfile();
+  };
+
+  // PHASE 5 STEP 6
+  const handlePickAvatarFromSource = async (source: "camera" | "library") => {
+    setAvatarError("");
+
+    try {
+      const image = source === "camera" ? await pickImageFromCamera() : await pickImageFromLibrary();
+
+      if (image) {
+        setSelectedAvatar(image);
+      }
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : "Could not select this image right now.");
+    }
+  };
+
+  // PHASE 5 STEP 6
+  const handlePickAvatar = () => {
+    Alert.alert("Update avatar", "Choose a source for your profile avatar.", [
+      {
+        text: "Camera",
+        onPress: () => {
+          void handlePickAvatarFromSource("camera");
+        },
+      },
+      {
+        text: "Photo Library",
+        onPress: () => {
+          void handlePickAvatarFromSource("library");
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  // PHASE 5 STEP 6
+  const handleSaveAvatar = async () => {
+    if (!currentUser || !selectedAvatar) {
+      return;
+    }
+
+    setAvatarSaving(true);
+    setAvatarError("");
+    setActionMessage("");
+
+    try {
+      const uploadedAvatar = await uploadProfileAvatar(currentUser.id, selectedAvatar, profile?.avatar_path ?? null);
+      const result = await updateProfile(currentUser.id, {
+        avatar_url: uploadedAvatar.imageUrl,
+        avatar_path: uploadedAvatar.imagePath,
+      });
+
+      if (result.error) {
+        setAvatarError(result.error);
+        return;
+      }
+
+      setSelectedAvatar(null);
+      setActionMessage("Avatar updated.");
+      await refreshProfile();
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : "Could not upload image. Please try again.");
+    } finally {
+      setAvatarSaving(false);
+    }
   };
 
   // PHASE 3 STEP 28
@@ -250,7 +329,11 @@ export default function ProfileScreen() {
           <View style={styles.card}>
             <View style={styles.profileHeader}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initial}</Text>
+                {avatarPreviewUri ? (
+                  <Image source={{ uri: avatarPreviewUri }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarText}>{initial}</Text>
+                )}
               </View>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
@@ -263,6 +346,7 @@ export default function ProfileScreen() {
 
             {visibleProfileError ? <Text style={styles.errorText}>{visibleProfileError}</Text> : null}
             {visibleActionError ? <Text style={styles.errorText}>{visibleActionError}</Text> : null}
+            {avatarError ? <Text style={styles.errorText}>{avatarError}</Text> : null}
             {actionMessage ? <Text style={styles.messageText}>{actionMessage}</Text> : null}
 
             {!profile ? (
@@ -297,6 +381,53 @@ export default function ProfileScreen() {
                     : "Top rank reached"}
                 </Text>
                 <Text style={styles.progressText}>Highest rank achieved: {highestRank}</Text>
+              </View>
+            ) : null}
+
+            {profile ? (
+              <View style={styles.avatarEditPanel}>
+                <Text style={styles.detailLabel}>Profile avatar</Text>
+                {selectedAvatar ? (
+                  <Text style={styles.detailValue}>
+                    Selected image: {formatImageSize(selectedAvatar.fileSize)}
+                    {selectedAvatar.warning ? `  •  ${selectedAvatar.warning}` : ""}
+                  </Text>
+                ) : (
+                  <Text style={styles.detailValue}>Choose a profile image for your public contributor card.</Text>
+                )}
+                <View style={styles.avatarActionRow}>
+                  <TouchableOpacity
+                    style={styles.smallOutlineButton}
+                    activeOpacity={0.8}
+                    onPress={handlePickAvatar}
+                    disabled={avatarSaving}
+                  >
+                    <Text style={styles.smallOutlineButtonText}>Choose avatar</Text>
+                  </TouchableOpacity>
+                  {selectedAvatar ? (
+                    <TouchableOpacity
+                      style={[styles.smallButton, avatarSaving && styles.disabledButton]}
+                      activeOpacity={0.8}
+                      onPress={handleSaveAvatar}
+                      disabled={avatarSaving}
+                    >
+                      <Text style={styles.smallButtonText}>{avatarSaving ? "Uploading..." : "Save avatar"}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {selectedAvatar ? (
+                    <TouchableOpacity
+                      style={styles.smallOutlineButton}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setSelectedAvatar(null);
+                        setAvatarError("");
+                      }}
+                      disabled={avatarSaving}
+                    >
+                      <Text style={styles.smallOutlineButtonText}>Remove</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
             ) : null}
 
@@ -528,6 +659,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "500",
   },
+  // PHASE 5 STEP 6
+  avatarImage: {
+    borderRadius: 28,
+    height: 56,
+    width: 56,
+  },
   identity: {
     flex: 1,
   },
@@ -591,6 +728,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     paddingVertical: theme.spacing.md,
   },
+  // PHASE 5 STEP 6
+  avatarEditPanel: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+  },
+  avatarActionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
   usernameInput: {
     backgroundColor: theme.colors.card,
     borderColor: theme.colors.lightBorder,
@@ -612,6 +762,21 @@ const styles = StyleSheet.create({
   },
   smallButtonText: {
     color: theme.colors.background,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  // PHASE 5 STEP 6
+  smallOutlineButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  smallOutlineButtonText: {
+    color: theme.colors.primary,
     fontSize: 13,
     fontWeight: "500",
   },

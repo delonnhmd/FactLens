@@ -50,6 +50,10 @@ export interface Evidence {
   note: string;
   type: EvidenceType;
   createdAt: string;
+  // PHASE 5 STEP 6
+  imageUrl?: string | null;
+  imagePath?: string | null;
+  thumbnailUrl?: string | null;
   // PHASE 5 STEP 3
   hidden?: boolean;
   hiddenReason?: string | null;
@@ -104,6 +108,9 @@ export interface Report {
 // PHASE 2 STEP 8
 export interface ClaimMedia {
   imageUrl?: string | null;
+  // PHASE 5 STEP 6
+  imagePath?: string | null;
+  thumbnailUrl?: string | null;
   videoUrl?: string | null;
   youtubeUrl?: string | null;
   // PHASE 3 STEP 8

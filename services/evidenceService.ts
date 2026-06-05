@@ -4,6 +4,7 @@
 // PHASE 4 STEP 14B
 // PHASE 4 STEP 23
 // PHASE 5 STEP 4
+// PHASE 5 STEP 6
 import { supabase } from "../lib/supabase";
 import { getSourceQuality } from "./sourceQuality";
 import { ensureProfileForUser } from "./profileService";
@@ -12,6 +13,7 @@ import { getDebugErrorParts } from "../utils/debugError";
 import { normalizeUrl } from "../utils/url";
 import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
 import { normalizeProfileVisibility } from "../utils/publicProfile";
+import { uploadEvidenceImage, type PickedOptimizedImage } from "./imageUploadService";
 
 const EVIDENCE_NOTE_MAX_LENGTH = 500;
 const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
@@ -20,6 +22,7 @@ export interface EvidenceInput {
   url: string;
   note: string;
   type?: EvidenceType;
+  imageAsset?: PickedOptimizedImage | null;
 }
 
 export interface EvidenceUpdates {
@@ -35,6 +38,10 @@ export interface EvidenceRow {
   evidence_type: EvidenceType;
   url: string;
   note: string;
+  // PHASE 5 STEP 6
+  image_url?: string | null;
+  image_path?: string | null;
+  thumbnail_url?: string | null;
   source_quality_label: string | null;
   source_quality_score: number | null;
   source_quality_reason: string | null;
@@ -228,6 +235,10 @@ export function mapEvidenceRowToEvidence(row: EvidenceRow): Evidence {
     note: row.note,
     type: row.evidence_type,
     createdAt: row.created_at,
+    // PHASE 5 STEP 6
+    imageUrl: row.image_url ?? null,
+    imagePath: row.image_path ?? null,
+    thumbnailUrl: row.thumbnail_url ?? row.image_url ?? null,
     // PHASE 5 STEP 3
     hidden: Boolean(row.hidden),
     hiddenReason: row.hidden_reason ?? null,
@@ -403,17 +414,45 @@ export async function addEvidence(
 
   console.log("[evidence] inserted:", data);
 
+  // PHASE 5 STEP 6
+  let evidenceRow = data as EvidenceRow;
+
+  if (input.imageAsset && evidenceRow.id) {
+    try {
+      const uploadedImage = await uploadEvidenceImage(user.id, evidenceRow.id, input.imageAsset);
+      const { data: updatedEvidence, error: imageUpdateError } = await supabase
+        .from("evidence")
+        .update({
+          image_url: uploadedImage.imageUrl,
+          image_path: uploadedImage.imagePath,
+          thumbnail_url: uploadedImage.thumbnailUrl,
+        })
+        .eq("id", evidenceRow.id)
+        .eq("user_id", user.id)
+        .select("*")
+        .single();
+
+      if (imageUpdateError) {
+        console.log("[evidence] image field update error:", imageUpdateError);
+      } else {
+        evidenceRow = updatedEvidence as EvidenceRow;
+      }
+    } catch (uploadError) {
+      console.log("[evidence] image upload warning:", uploadError);
+    }
+  }
+
   const countResult = await recalculateEvidenceCount(claimId);
 
   if (countResult.error) {
     console.log("[evidence] count refresh warning:", countResult.error);
     return {
-      evidence: mapEvidenceRowToEvidence(data as EvidenceRow),
+      evidence: mapEvidenceRowToEvidence(evidenceRow),
     };
   }
 
   return {
-    evidence: mapEvidenceRowToEvidence(data as EvidenceRow),
+    evidence: mapEvidenceRowToEvidence(evidenceRow),
     evidenceCount: countResult.evidenceCount,
   };
 }
