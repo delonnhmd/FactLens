@@ -290,6 +290,84 @@
         margin: 18px 0 32px;
       }
 
+      .screenshots {
+        margin: 0 0 32px;
+      }
+
+      .section-heading {
+        color: var(--navy);
+        font-size: 24px;
+        line-height: 1.16;
+        margin: 0 0 8px;
+      }
+
+      .section-copy {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 14px;
+        max-width: 680px;
+      }
+
+      .screenshot-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .screenshot-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+
+      .screenshot-preview {
+        background: linear-gradient(180deg, #f8fafc, #eef2f7);
+        min-height: 180px;
+        padding: 14px;
+      }
+
+      .mini-top {
+        color: var(--navy);
+        font-size: 13px;
+        font-weight: 800;
+        margin-bottom: 10px;
+      }
+
+      .mini-line {
+        background: #d8dee8;
+        border-radius: 999px;
+        height: 9px;
+        margin: 8px 0;
+      }
+
+      .mini-line.short {
+        width: 58%;
+      }
+
+      .mini-pill-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 14px;
+      }
+
+      .mini-pill {
+        background: var(--green-bg);
+        border-radius: 999px;
+        height: 20px;
+        width: 70px;
+      }
+
+      .mini-pill.gold {
+        background: #faeeda;
+      }
+
+      .screenshot-caption {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+        padding: 12px;
+      }
+
       .feature {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -359,6 +437,10 @@
         }
 
         .features {
+          grid-template-columns: repeat(3, 1fr);
+        }
+
+        .screenshot-grid {
           grid-template-columns: repeat(3, 1fr);
         }
 
@@ -435,6 +517,53 @@
           <h2>AI-assisted source checks</h2>
           <p>AI helps summarize source support, but it is only a risk signal. Community review still matters.</p>
         </article>
+      </section>
+
+      <section class="screenshots" aria-label="App store screenshot preview">
+        <h2 class="section-heading">Launch screenshots to prepare</h2>
+        <p class="section-copy">
+          Store screenshots should show the actual app flow: feed, claim detail, source-support checks, evidence,
+          reputation, and reporting. These panels are the public landing preview; final store screenshots should be
+          captured from the production app.
+        </p>
+        <div class="screenshot-grid">
+          <div class="screenshot-card">
+            <div class="screenshot-preview">
+              <div class="mini-top">Claim Feed</div>
+              <div class="mini-line"></div>
+              <div class="mini-line short"></div>
+              <div class="mini-pill-row">
+                <span class="mini-pill"></span>
+                <span class="mini-pill gold"></span>
+              </div>
+            </div>
+            <div class="screenshot-caption">Review claims with the community.</div>
+          </div>
+          <div class="screenshot-card">
+            <div class="screenshot-preview">
+              <div class="mini-top">Source Support</div>
+              <div class="mini-line"></div>
+              <div class="mini-line"></div>
+              <div class="mini-line short"></div>
+              <div class="mini-pill-row">
+                <span class="mini-pill gold"></span>
+              </div>
+            </div>
+            <div class="screenshot-caption">AI-assisted source checks, not final truth.</div>
+          </div>
+          <div class="screenshot-card">
+            <div class="screenshot-preview">
+              <div class="mini-top">Contributor Profile</div>
+              <div class="mini-line short"></div>
+              <div class="mini-pill-row">
+                <span class="mini-pill"></span>
+                <span class="mini-pill"></span>
+              </div>
+              <div class="mini-line"></div>
+            </div>
+            <div class="screenshot-caption">Build reputation through reliable contributions.</div>
+          </div>
+        </div>
       </section>
 
       <p class="notice">

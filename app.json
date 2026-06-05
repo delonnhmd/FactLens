@@ -2,17 +2,25 @@
   "expo": {
     "name": "FactLens",
     "slug": "factlens",
+    "description": "Community-powered claim verification with evidence, voting, and AI-assisted source checks.",
     "version": "1.0.0",
     "scheme": "factlens",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon/icon.png",
+    "splash": {
+      "image": "./assets/icon/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D1B3E"
+    },
     "plugins": [
       "expo-router",
       "expo-status-bar",
       "expo-font"
     ],
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/icon/favicon.png"
     },
     "extra": {
       "router": {},
@@ -21,7 +29,11 @@
       }
     },
     "android": {
-      "package": "com.pennyfloat.factlens"
+      "package": "com.pennyfloat.factlens",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon/adaptive-foreground.png",
+        "backgroundColor": "#0D1B3E"
+      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
@@ -29,6 +41,9 @@
     "updates": {
       "url": "https://u.expo.dev/d3b9498f-a0d4-435c-81f5-e7b9b0d35d80"
     },
-    "ios": {}
+    "ios": {
+      "bundleIdentifier": "com.pennyfloat.factlens",
+      "supportsTablet": false
+    }
   }
 }
