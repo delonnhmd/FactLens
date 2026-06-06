@@ -341,7 +341,25 @@ function removeUndefinedValues<T extends Record<string, unknown>>(payload: T): T
 function formatSupabaseMutationError(error: SupabaseErrorLike): string {
   // PHASE 4 STEP 24
   console.log("[create claim] friendly error from Supabase:", getDebugErrorParts(error));
-  return "Could not create claim right now.";
+  // URGENT DEBUG - create claim image insert
+  const message = error.message || "";
+  const details = error.details || "";
+  const hint = error.hint || "";
+  const combined = `${message} ${details} ${hint}`.toLowerCase();
+
+  if (combined.includes("source_url") || combined.includes("source url")) {
+    return "Please add a source URL.";
+  }
+
+  if (combined.includes("row-level security") || combined.includes("rls") || combined.includes("policy")) {
+    return "You must be logged in to create a claim.";
+  }
+
+  if (combined.includes("schema cache") || combined.includes("image_path") || combined.includes("thumbnail_url")) {
+    return `Could not save claim: ${message}`;
+  }
+
+  return message ? `Could not save claim: ${message}` : "Could not save claim. Please try again.";
 }
 
 // PHASE 4 STEP 12
@@ -1037,10 +1055,13 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
     description: input.description.trim(),
     source_url: safeSourceUrl,
     video_url: trimmedVideoUrl,
-    image_url: input.imageUrl ?? null,
-    // PHASE 5 STEP 6
-    image_path: input.imagePath ?? null,
-    thumbnail_url: input.thumbnailUrl ?? input.imageUrl ?? null,
+    // URGENT DEBUG - create claim image insert
+    // Image upload is optional and happens after insert once the claim id exists.
+    // Do not send new image columns during initial insert; stale PostgREST schemas
+    // can reject the whole claim before the optional image flow starts.
+    ...(input.imageUrl ? { image_url: input.imageUrl } : {}),
+    ...(input.imagePath ? { image_path: input.imagePath } : {}),
+    ...(input.thumbnailUrl ? { thumbnail_url: input.thumbnailUrl } : {}),
     category: input.category?.trim() || "Other",
     slug: generateClaimSlug(input.title),
     votes_true: 0,
@@ -1086,6 +1107,7 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
   });
 
   console.log("[create claim] insert payload:", payload);
+  console.log("CREATE_CLAIM_PAYLOAD", payload);
 
   return payload;
 }
@@ -1537,8 +1559,13 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   }
 
   console.log("[create claim] auth user id:", user.id);
+  console.log("[create claim] input image selected:", Boolean(input.imageAsset));
 
   const profileResult = await ensureProfileForUser(user);
+  console.log("[create claim] profile exists:", Boolean(profileResult.profile), {
+    profileId: profileResult.profile?.id,
+    profileError: profileResult.error,
+  });
 
   if (profileResult.error || !profileResult.profile) {
     return {
@@ -1550,9 +1577,11 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   const authorProfile = profileResult.profile;
   const payload = mapClaimToInsert(input, user.id);
   const { data, error } = await supabase.from("claims").insert(payload).select("*").single();
+  console.log("CREATE_CLAIM_DATA", data);
 
   if (error) {
     console.log("[create claim] error:", error);
+    console.log("CREATE_CLAIM_ERROR", error);
     console.log("[create claim] insert error:", {
       code: error.code,
       message: error.message,
@@ -1584,12 +1613,18 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   // PHASE 5 STEP 6
   if (input.imageAsset) {
     try {
+      console.log("[create claim] image upload start:", {
+        claimId: insertedClaimId,
+        userId: user.id,
+      });
       const uploadedImage = await uploadClaimImage(user.id, insertedClaimId, input.imageAsset);
+      console.log("[create claim] image upload complete:", uploadedImage);
       mediaUpdatePayload.image_url = uploadedImage.imageUrl;
       mediaUpdatePayload.image_path = uploadedImage.imagePath;
       mediaUpdatePayload.thumbnail_url = uploadedImage.thumbnailUrl;
     } catch (uploadError) {
       console.log("[create claim] image upload warning:", uploadError);
+      console.log("CREATE_CLAIM_IMAGE_UPLOAD_ERROR", uploadError);
     }
   }
 

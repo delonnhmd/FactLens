@@ -33,7 +33,7 @@ type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
 export default function CreateScreen() {
   const router = useRouter();
   // PHASE 3 STEP 2
-  const { profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
+  const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
   const { createClaim } = useClaims();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -191,6 +191,19 @@ export default function CreateScreen() {
       setIsSubmitting(true);
 
       console.log("[url] normalized source url:", normalizedSourceUrl);
+      console.log("[create submit] current authenticated user:", {
+        userId: currentUser?.id ?? null,
+        isAuthenticated,
+        isVerified,
+      });
+      console.log("[create submit] profile exists:", Boolean(profile), {
+        profileId: profile?.id ?? null,
+      });
+      console.log("[create submit] image selected:", Boolean(selectedImage), {
+        fileName: selectedImage?.fileName ?? null,
+        fileSize: selectedImage?.fileSize ?? null,
+        mimeType: selectedImage?.mimeType ?? null,
+      });
 
       const createdClaim = await createClaim({
         title,
@@ -211,6 +224,7 @@ export default function CreateScreen() {
       setErrors({});
       router.replace(`/claim/${createdClaim.id}`);
     } catch (error) {
+      console.log("[create submit] final thrown error:", error);
       setErrors({
         // PHASE 4 STEP 24
         // PHASE 5 STEP 6

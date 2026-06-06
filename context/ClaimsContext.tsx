@@ -811,6 +811,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       try {
         const precheckResult = await runAiPrecheckForClaim(targetClaim);
+        console.log("[create claim] AI precheck result:", {
+          claimId: targetClaim.id,
+          ok: precheckResult.ok,
+          aiStatus: precheckResult.ai_status,
+          error: precheckResult.error,
+        });
 
         if (!precheckResult.ok) {
           const message = getAiPrecheckErrorMessage(precheckResult);
