@@ -246,6 +246,9 @@ const DEFAULT_CLAIM_LIMIT = 50;
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 const CLAIM_PROFILE_SELECT =
   "id,username,display_name,verified,reputation_score,avatar_url,bio,public_profile_slug,profile_visibility,votes_cast,accuracy_rate,trust_tier,trust_weight_override,trust_score,rank_title,correct_votes,incorrect_votes,evidence_count,helpful_evidence_count,suspicious_flags,reputation_points,badge_list,last_active_at,highest_rank_achieved,monthly_reputation_points,monthly_reset_at,is_deleted,deleted_at,created_at";
+// BUG FIX - claim detail author profile join
+const CLAIM_PROFILE_SAFE_SELECT =
+  "id,username,display_name,verified,reputation_score,avatar_url,public_profile_slug,profile_visibility,trust_tier,trust_score,rank_title,reputation_points,badge_list,highest_rank_achieved";
 
 interface SupabaseErrorLike {
   code?: string;
@@ -420,27 +423,51 @@ async function mergeAuthorProfilesIntoRows(rows: ClaimRow[]): Promise<ClaimRow[]
     return rows;
   }
 
-  const { data, error } = await supabase
+  const profileResult = await supabase
     .from("profiles")
     .select(CLAIM_PROFILE_SELECT)
     .in("id", authorIds);
+  let profiles = (profileResult.data ?? []) as ClaimProfileRow[];
+  let profileError = profileResult.error;
 
-  if (error) {
+  if (profileError) {
     console.log("[claims] profiles load error:", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
+      code: profileError.code,
+      message: profileError.message,
+      details: profileError.details,
+      hint: profileError.hint,
     });
-    return rows;
+
+    // BUG FIX - claim detail author profile join
+    // Some deployed databases may not yet have newer profile columns such as
+    // is_deleted/deleted_at. Retry with only the safe public author-card fields
+    // instead of rendering every author as Unknown User.
+    const safeResult = await supabase
+      .from("profiles")
+      .select(CLAIM_PROFILE_SAFE_SELECT)
+      .in("id", authorIds);
+
+    profiles = (safeResult.data ?? []) as ClaimProfileRow[];
+    profileError = safeResult.error;
+
+    if (profileError) {
+      console.log("[claims] safe profiles load error:", {
+        code: profileError.code,
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+      });
+      return rows;
+    }
   }
 
-  const profiles = (data ?? []) as ClaimProfileRow[];
   console.log("[claims] profiles loaded:", profiles.length);
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
 
   return rows.map((row) => {
     const profile = row.author_id ? profilesById.get(row.author_id) ?? null : null;
+    console.log("CLAIM_AUTHOR_ID", row.author_id);
+    console.log("AUTHOR_PROFILE", profile);
     console.log("[claim map] author profile:", profile);
 
     return profile ? { ...row, profiles: profile } : row;
