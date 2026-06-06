@@ -1,6 +1,7 @@
 // PHASE 5 STEP 6
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import { Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 
 export type ImageUploadBucket = "claim-images" | "evidence-images" | "profile-avatars";
@@ -77,7 +78,7 @@ function getImageUploadErrorMessage(message: string): string {
   const normalizedMessage = message.toLowerCase();
 
   if (normalizedMessage.includes("bucket not found")) {
-    return "Image storage is not configured yet.";
+    return "Could not upload image. Please try again.";
   }
 
   if (normalizedMessage.includes("row-level security") || normalizedMessage.includes("policy")) {
@@ -126,7 +127,14 @@ async function pickImage(source: ImagePickSource): Promise<PickedOptimizedImage 
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
   if (!permission.granted) {
-    throw new Error(source === "camera" ? "Camera permission is required." : "Photo library permission is required.");
+    Alert.alert(
+      source === "camera" ? "Camera access needed" : "Photo library access needed",
+      source === "camera"
+        ? "Please allow camera access in your device settings to take photos."
+        : "Please allow photo library access in your device settings.",
+      [{ text: "OK" }],
+    );
+    return null;
   }
 
   const result =

@@ -16,7 +16,14 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FactLens uses your photo library to attach images to claims and evidence.",
+          "cameraPermission": "FactLens uses your camera to capture images for claims and evidence."
+        }
+      ]
     ],
     "web": {
       "bundler": "metro",

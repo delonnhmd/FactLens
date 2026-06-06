@@ -1,6 +1,7 @@
 // PHASE 3 STEP 14
 // Fixed FactLens bottom tabs with explicit labels
 // PHASE 3 STEP 29
+// PHASE 5 STEP 6
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +33,7 @@ export default function TabLayout() {
   // PHASE 3 STEP 21
   // PHASE 3 STEP 23
   const insets = useSafeAreaInsets();
-  const tabBarBottomPadding = Math.max(insets.bottom, 20);
+  const tabBarBottomInset = Platform.OS === 'ios' ? insets.bottom : 0;
 
   return (
     <Tabs
@@ -41,16 +42,22 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
-          height: 76 + tabBarBottomPadding,
-          paddingBottom: tabBarBottomPadding,
-          paddingTop: 8,
+          height: 56 + tabBarBottomInset,
+          paddingBottom: Math.max(tabBarBottomInset, 8),
+          paddingTop: 4,
+          borderTopWidth: 0.5,
           borderTopColor: '#E5E7EB',
           backgroundColor: '#FFFFFF',
-          marginBottom: Platform.OS === 'android' ? 8 : 0,
+          elevation: 0,
+          shadowOpacity: 0,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '500',
+          marginBottom: 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 2,
         },
       }}
     >

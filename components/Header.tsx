@@ -34,7 +34,9 @@ export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderP
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    // PHASE 5 STEP 6
+    paddingTop: 8,
+    paddingBottom: 10,
     backgroundColor: theme.colors.navy,
     borderBottomWidth: 0,
     flexDirection: "row",
