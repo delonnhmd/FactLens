@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { View, Text, TextInput, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
-import { Header } from "../components/Header";
-import { theme } from "../constants/theme";
-import { useAuth } from "../context/AuthContext";
+import { Header } from "../../components/Header";
+import { theme } from "../../constants/theme";
+import { useAuth } from "../../context/AuthContext";
 
 type AuthMode = "LOGIN" | "SIGN_UP";
 

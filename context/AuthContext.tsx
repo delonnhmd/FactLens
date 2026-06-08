@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
+import { AUTH_CALLBACK_URL } from "../constants/launchConfig";
 import { supabase, supabaseConfigError } from "../lib/supabase";
 import { ensureProfileForUser, getProfile } from "../services/profileService";
 import type { Profile } from "../services/profileService";
@@ -287,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: email.trim(),
       password,
       options: {
+        emailRedirectTo: AUTH_CALLBACK_URL,
         data: {
           username: trimmedUsername,
           displayName: username.trim() || trimmedUsername,
