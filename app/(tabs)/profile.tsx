@@ -9,6 +9,7 @@ import { Alert, Image, Linking, View, Text, StyleSheet, SafeAreaView, ScrollView
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { theme } from "../../constants/theme";
+import { PUBLIC_SITE_URL, SUPPORT_EMAIL } from "../../constants/launchConfig";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthProfile } from "../../services/authProfile";
 import { deleteCurrentAccount } from "../../services/accountService";
@@ -50,6 +51,7 @@ export default function ProfileScreen() {
   const [selectedAvatar, setSelectedAvatar] = useState<PickedOptimizedImage | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const profileAutoFixAttempted = useRef(false);
 
   const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
@@ -72,6 +74,11 @@ export default function ProfileScreen() {
   const totalVotes = (profile?.correct_votes ?? 0) + (profile?.incorrect_votes ?? 0);
   const highestRank = profile?.highest_rank_achieved || rankInfo.title;
   const avatarPreviewUri = selectedAvatar?.uri || profile?.avatar_url || null;
+  const showAvatarImage = Boolean(avatarPreviewUri && !avatarLoadFailed);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarPreviewUri]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -107,15 +114,15 @@ export default function ProfileScreen() {
 
   // PHASE 5 STEP 4
   const handleOpenPrivacyPolicy = () => {
-    Linking.openURL("https://factlens.app/privacy").catch(() => {
+    Linking.openURL(`${PUBLIC_SITE_URL}/privacy`).catch(() => {
       Alert.alert("Could not open Privacy Policy right now.");
     });
   };
 
   // PHASE 5 STEP 4
   const handleContactSupport = () => {
-    Linking.openURL("mailto:support@factlens.app").catch(() => {
-      Alert.alert("Contact support", "Email support@factlens.app");
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => {
+      Alert.alert("Contact support", `Email ${SUPPORT_EMAIL}`);
     });
   };
 
@@ -329,18 +336,26 @@ export default function ProfileScreen() {
           <View style={styles.card}>
             <View style={styles.profileHeader}>
               <View style={styles.avatar}>
-                {avatarPreviewUri ? (
-                  <Image source={{ uri: avatarPreviewUri }} style={styles.avatarImage} />
+                {showAvatarImage && avatarPreviewUri ? (
+                  <Image
+                    source={{ uri: avatarPreviewUri }}
+                    style={styles.avatarImage}
+                    onError={() => setAvatarLoadFailed(true)}
+                  />
                 ) : (
                   <Text style={styles.avatarText}>{initial}</Text>
                 )}
               </View>
               <View style={styles.identity}>
                 <View style={styles.nameRow}>
-                  <Text style={styles.displayName}>{displayName}</Text>
+                  <Text style={styles.displayName} numberOfLines={1}>
+                    {displayName}
+                  </Text>
                   {isVerified ? <Text style={styles.verifiedBadge}>Email verified</Text> : null}
                 </View>
-                <Text style={styles.username}>@{username}</Text>
+                <Text style={styles.username} numberOfLines={1}>
+                  @{username}
+                </Text>
               </View>
             </View>
 
@@ -677,11 +692,13 @@ const styles = StyleSheet.create({
   },
   displayName: {
     color: theme.colors.text,
+    flexShrink: 1,
     fontSize: theme.typography.title.fontSize,
     fontWeight: "500",
   },
   username: {
     color: theme.colors.subtext,
+    flexShrink: 1,
     fontSize: theme.typography.body.fontSize,
   },
   verifiedBadge: {

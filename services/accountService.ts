@@ -28,7 +28,7 @@ export async function deleteCurrentAccount(): Promise<{ ok: boolean; error?: str
     if (!response.ok || !json.ok) {
       return {
         ok: false,
-        error: json.error || json.detail || "Could not delete account right now.",
+        error: "Could not delete account right now.",
       };
     }
 

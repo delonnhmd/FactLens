@@ -8,11 +8,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon/icon.png",
-    "splash": {
-      "image": "./assets/icon/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0D1B3E"
-    },
     "plugins": [
       "expo-router",
       "expo-status-bar",
@@ -21,7 +16,17 @@
         "expo-image-picker",
         {
           "photosPermission": "FactLens uses your photo library to attach images to claims and evidence.",
-          "cameraPermission": "FactLens uses your camera to capture images for claims and evidence."
+          "cameraPermission": "FactLens uses your camera to capture images for claims and evidence.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0D1B3E",
+          "imageWidth": 200
         }
       ]
     ],
@@ -37,6 +42,9 @@
     },
     "android": {
       "package": "com.pennyfloat.factlens",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon/adaptive-foreground.png",
         "backgroundColor": "#0D1B3E"

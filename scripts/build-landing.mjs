@@ -5,10 +5,21 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
-const source = join(repoRoot, "client", "landing", "index.html");
-const destination = join(repoRoot, "dist", "index.html");
+const pages = [
+  { source: "index.html", destination: join(repoRoot, "dist", "index.html") },
+  { source: "privacy.html", destination: join(repoRoot, "dist", "privacy", "index.html") },
+  { source: "terms.html", destination: join(repoRoot, "dist", "terms", "index.html") },
+  {
+    source: "community-guidelines.html",
+    destination: join(repoRoot, "dist", "community-guidelines", "index.html"),
+  },
+  { source: "ai-disclaimer.html", destination: join(repoRoot, "dist", "ai-disclaimer", "index.html") },
+];
 
-mkdirSync(dirname(destination), { recursive: true });
-copyFileSync(source, destination);
+pages.forEach((page) => {
+  const source = join(repoRoot, "client", "landing", page.source);
 
-console.log("Landing page built:", destination);
+  mkdirSync(dirname(page.destination), { recursive: true });
+  copyFileSync(source, page.destination);
+  console.log("Landing page built:", page.destination);
+});

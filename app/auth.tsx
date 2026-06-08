@@ -107,7 +107,7 @@ export default function AuthScreen() {
               <TextInput
                 value={username}
                 onChangeText={setUsername}
-                placeholder="demo_user"
+                placeholder="your_username"
                 placeholderTextColor={theme.colors.muted}
                 style={styles.input}
                 autoCapitalize="none"

@@ -252,7 +252,7 @@ export default function HomeScreen() {
       </ScrollView>
       {claimPosted === "1" ? (
         <View style={styles.successBanner}>
-          <Text style={styles.successText}>Claim posted. Test voting closes in 10 minutes.</Text>
+          <Text style={styles.successText}>Claim posted.</Text>
         </View>
       ) : null}
       {displayError ? (

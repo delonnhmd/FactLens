@@ -35,6 +35,41 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const CONFIG_UNAVAILABLE_MESSAGE = "FactLens account services are temporarily unavailable.";
+
+function getAuthErrorMessage(message: string, action: "sign-in" | "sign-up" | "sign-out" | "refresh" = "refresh"): string {
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes("invalid login credentials")) {
+    return "Email or password is incorrect.";
+  }
+
+  if (normalizedMessage.includes("already registered") || normalizedMessage.includes("already exists")) {
+    return "An account with this email may already exist.";
+  }
+
+  if (normalizedMessage.includes("password")) {
+    return "Please check your password and try again.";
+  }
+
+  if (normalizedMessage.includes("rate limit") || normalizedMessage.includes("too many")) {
+    return "Too many attempts. Please try again later.";
+  }
+
+  if (action === "sign-in") {
+    return "Could not sign in right now.";
+  }
+
+  if (action === "sign-up") {
+    return "Could not create account right now.";
+  }
+
+  if (action === "sign-out") {
+    return "Could not sign out right now.";
+  }
+
+  return "Could not refresh your account right now.";
+}
 
 // PHASE 3 STEP 28
 function getUserVerified(user: SupabaseUser | null): boolean {
@@ -158,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (supabaseConfigError) {
-      setProfileError(supabaseConfigError);
+      setProfileError(CONFIG_UNAVAILABLE_MESSAGE);
       setLoading(false);
       return;
     }
@@ -221,13 +256,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async (): Promise<AuthActionResult> => {
     if (supabaseConfigError) {
-      return { error: supabaseConfigError };
+      return { error: CONFIG_UNAVAILABLE_MESSAGE };
     }
 
     const { data, error } = await supabase.auth.getUser();
 
     if (error) {
-      return { error: error.message };
+      return { error: getAuthErrorMessage(error.message, "refresh") };
     }
 
     const { data: sessionData } = await supabase.auth.getSession();
@@ -239,7 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string, username: string): Promise<AuthActionResult> => {
     if (supabaseConfigError) {
-      return { error: supabaseConfigError };
+      return { error: CONFIG_UNAVAILABLE_MESSAGE };
     }
 
     const trimmedUsername = normalizeUsername(username);
@@ -260,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (error) {
-      return { error: error.message };
+      return { error: getAuthErrorMessage(error.message, "sign-up") };
     }
 
     const nextUser = data.session?.user ?? data.user ?? null;
@@ -286,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(
     async (email: string, password: string): Promise<AuthActionResult> => {
       if (supabaseConfigError) {
-        return { error: supabaseConfigError };
+        return { error: CONFIG_UNAVAILABLE_MESSAGE };
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -295,7 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
-        return { error: error.message };
+        return { error: getAuthErrorMessage(error.message, "sign-in") };
       }
 
       setSession(data.session);
@@ -311,14 +346,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setCurrentUser(null);
       setProfile(null);
-      setProfileError(supabaseConfigError);
+      setProfileError(CONFIG_UNAVAILABLE_MESSAGE);
       return {};
     }
 
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      return { error: error.message };
+      return { error: getAuthErrorMessage(error.message, "sign-out") };
     }
 
     setSession(null);

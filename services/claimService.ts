@@ -368,10 +368,10 @@ function formatSupabaseMutationError(error: SupabaseErrorLike): string {
   }
 
   if (combined.includes("schema cache") || combined.includes("image_path") || combined.includes("thumbnail_url")) {
-    return `Could not save claim: ${message}`;
+    return "Could not save claim right now.";
   }
 
-  return message ? `Could not save claim: ${message}` : "Could not save claim. Please try again.";
+  return "Could not save claim. Please try again.";
 }
 
 // PHASE 4 STEP 12
@@ -450,7 +450,7 @@ async function mergeAuthorProfilesIntoRows(rows: ClaimRow[]): Promise<ClaimRow[]
     // BUG FIX - claim detail author profile join
     // Some deployed databases may not yet have newer profile columns such as
     // is_deleted/deleted_at. Retry with only the safe public author-card fields
-    // instead of rendering every author as Unknown User.
+    // instead of rendering every author without a contributor identity.
     const safeResult = await supabase
       .from("profiles")
       .select(CLAIM_PROFILE_SAFE_SELECT)
@@ -738,8 +738,8 @@ function mapAuthor(row: ClaimRow): AppUser {
   const authorId = row.author_id ?? "unknown-author";
   const profile = getEmbeddedProfile(row);
   const isDeleted = Boolean(profile?.is_deleted);
-  const username = isDeleted ? "deleted_user" : profile?.username ?? "unknown";
-  const displayName = isDeleted ? "Deleted User" : profile?.display_name || profile?.username || "Unknown User";
+  const username = isDeleted ? "deleted_user" : profile?.username ?? "contributor";
+  const displayName = isDeleted ? "Deleted User" : profile?.display_name || profile?.username || "FactLens contributor";
   const createdAt = row.created_at ?? new Date().toISOString();
   // PHASE 5 STEP 1
   const badgeList = parseBadgeList(profile?.badge_list);
@@ -949,8 +949,8 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
   const voteWindowEnd = row.vote_window_end ?? voteAcceptUntil;
   const fallbackAuthor: AppUser = {
     id: row.author_id ?? "unknown-author",
-    username: "unknown",
-    displayName: "Unknown User",
+    username: "contributor",
+    displayName: "FactLens contributor",
     avatar: null,
     verified: false,
     reputationScore: 0,
@@ -981,10 +981,10 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
 
   return {
     id: claimId,
-    slug: row.slug ?? generateClaimSlug(row.title ?? "Broken claim"),
+    slug: row.slug ?? generateClaimSlug(row.title ?? "Claim unavailable"),
     shareUrl: row.share_url ?? generateClaimShareUrl(claimId),
-    title: row.title ?? "Broken claim",
-    description: "This claim failed to map.",
+    title: row.title ?? "Claim unavailable",
+    description: "This claim is temporarily unavailable.",
     sourceUrl: row.source_url ?? "",
     media: {
       imageUrl: row.image_url ?? null,

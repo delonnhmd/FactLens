@@ -56,7 +56,6 @@ import {
   type RealtimeChangePayload,
 } from "../services/realtimeService";
 import type { Claim, ClaimStatus, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
-import { getDebugErrorParts } from "../utils/debugError";
 import type { PickedOptimizedImage } from "../services/imageUploadService";
 
 export interface CreateClaimInput {
@@ -93,12 +92,6 @@ interface ClaimsContextValue {
   // PHASE 3 STEP 12
   liveUpdatesEnabled: boolean;
   error: string | null;
-  // PHASE 3 STEP 27
-  claimsErrorMessage: string | null;
-  claimsErrorCode: string | null;
-  claimsErrorDetails: string | null;
-  claimsErrorHint: string | null;
-  rawClaimsError: unknown | null;
   // PHASE 4 STEP 2
   aiPrecheckNotice: string | null;
   clearAiPrecheckNotice: () => void;
@@ -398,12 +391,6 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [claimOffset, setClaimOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  // PHASE 3 STEP 27
-  const [claimsErrorMessage, setClaimsErrorMessage] = useState<string | null>(null);
-  const [claimsErrorCode, setClaimsErrorCode] = useState<string | null>(null);
-  const [claimsErrorDetails, setClaimsErrorDetails] = useState<string | null>(null);
-  const [claimsErrorHint, setClaimsErrorHint] = useState<string | null>(null);
-  const [rawClaimsError, setRawClaimsError] = useState<unknown | null>(null);
   // PHASE 3 STEP 12
   const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(false);
   // PHASE 4 STEP 2
@@ -428,34 +415,18 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   const clearClaimsError = useCallback(() => {
     setError(null);
-    setClaimsErrorMessage(null);
-    setClaimsErrorCode(null);
-    setClaimsErrorDetails(null);
-    setClaimsErrorHint(null);
-    setRawClaimsError(null);
   }, []);
 
   const setClaimsErrorFromResult = useCallback((result: Partial<ClaimsResult>) => {
-    const message = result.errorMessage ?? result.error ?? "Could not load claims.";
+    void result;
     // PHASE 4 STEP 24
     setError("Could not load claims.");
-    setClaimsErrorMessage(message);
-    setClaimsErrorCode(result.errorCode ?? null);
-    setClaimsErrorDetails(result.errorDetails ?? null);
-    setClaimsErrorHint(result.errorHint ?? null);
-    setRawClaimsError(result.rawError ?? null);
   }, []);
 
   const setClaimsErrorFromUnknown = useCallback((loadError: unknown) => {
-    const parts = getDebugErrorParts(loadError);
-    const message = parts.message || "Could not load claims.";
+    void loadError;
     // PHASE 4 STEP 24
     setError("Could not load claims.");
-    setClaimsErrorMessage(message);
-    setClaimsErrorCode(parts.code || null);
-    setClaimsErrorDetails(parts.details || null);
-    setClaimsErrorHint(parts.hint || null);
-    setRawClaimsError(loadError);
   }, []);
 
   // PHASE 3 STEP 20E
@@ -1487,11 +1458,6 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       loadingMore,
       liveUpdatesEnabled,
       error,
-      claimsErrorMessage,
-      claimsErrorCode,
-      claimsErrorDetails,
-      claimsErrorHint,
-      rawClaimsError,
       aiPrecheckNotice,
       clearAiPrecheckNotice,
       runAiPrecheckForClaimId,
@@ -1523,10 +1489,6 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       createClaim,
       currentClaims,
       error,
-      claimsErrorCode,
-      claimsErrorDetails,
-      claimsErrorHint,
-      claimsErrorMessage,
       aiPrecheckNotice,
       clearAiPrecheckNotice,
       fetchEvidenceForClaim,
@@ -1545,7 +1507,6 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       loading,
       loadingMore,
       now,
-      rawClaimsError,
       reportClaim,
       refreshClaims,
       refreshClaimVerdict,

@@ -19,6 +19,7 @@ export default function PublicProfileScreen() {
   const [profile, setProfile] = useState<PublicProfileCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -51,6 +52,11 @@ export default function PublicProfileScreen() {
   const isPrivate = profile?.profileVisibility === "private" || isDeleted;
   const topBadges = getTopBadges(profile?.badgeList ?? [], 8);
   const canReportProfile = Boolean(profile && currentUser && currentUser.id !== profile.id);
+  const showAvatarImage = Boolean(profile?.avatarUrl && !avatarLoadFailed);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [profile?.avatarUrl]);
 
   // PHASE 5 STEP 2
   const handleReportProfile = async () => {
@@ -97,19 +103,27 @@ export default function PublicProfileScreen() {
         {!loading && profile ? (
           <View style={styles.card}>
             <View style={styles.heroRow}>
-              {profile.avatarUrl ? (
-                <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImage} />
+              {showAvatarImage && profile.avatarUrl ? (
+                <Image
+                  source={{ uri: profile.avatarUrl }}
+                  style={styles.avatarImage}
+                  onError={() => setAvatarLoadFailed(true)}
+                />
               ) : (
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{initial}</Text>
                 </View>
               )}
               <View style={styles.identity}>
-                <Text style={styles.title}>{displayName}</Text>
+                <Text style={styles.title} numberOfLines={1}>
+                  {displayName}
+                </Text>
                 {isDeleted ? (
                   <Text style={styles.username}>Account deleted</Text>
                 ) : (
-                  <Text style={styles.username}>@{profile.username}</Text>
+                  <Text style={styles.username} numberOfLines={1}>
+                    @{profile.username}
+                  </Text>
                 )}
                 {!isDeleted ? <Text style={styles.rankPill}>{profile.rankTitle}</Text> : null}
               </View>
@@ -237,11 +251,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.text,
+    flexShrink: 1,
     fontSize: 22,
     fontWeight: "500",
   },
   username: {
     color: theme.colors.subtext,
+    flexShrink: 1,
     fontSize: 14,
     marginTop: 2,
   },

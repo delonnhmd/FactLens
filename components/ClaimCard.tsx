@@ -192,6 +192,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       : null;
   const aiSummary = getAiSummary(claim);
   const avatarInitial = (claim.authorUsername || claim.authorDisplayName || "U").slice(0, 1).toUpperCase();
+  const authorHandle = claim.authorUsername ? `@${claim.authorUsername}` : "Contributor";
   // PHASE 5 STEP 6
   const thumbnailUrl = claim.media.thumbnailUrl || claim.media.imageUrl || null;
   // PHASE 5 election positioning UI
@@ -232,10 +233,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         onPress: () => Alert.alert("Share", claim.shareUrl),
       },
       {
-        text: "Repost",
-        onPress: () => Alert.alert("Repost will be added later."),
-      },
-      {
         text: "Cancel",
         style: "cancel",
       },
@@ -266,7 +263,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
               <Text style={styles.avatarText}>{avatarInitial}</Text>
             </View>
             <Text style={styles.authorMeta} numberOfLines={1}>
-              @{claim.authorUsername} {"\u00B7"} {claim.author.rankTitle} {"\u00B7"} {getRelativeTime(claim.createdAt)}
+              {authorHandle} {"\u00B7"} {claim.author.rankTitle} {"\u00B7"} {getRelativeTime(claim.createdAt)}
             </Text>
           </View>
 

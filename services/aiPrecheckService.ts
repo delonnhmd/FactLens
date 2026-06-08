@@ -54,6 +54,12 @@ function isSourceQualityConstraintError(message: string): boolean {
   );
 }
 
+function isRawBackendError(message: string): boolean {
+  return /supabase|postgrest|schema|constraint|violates|traceback|exception|sql|column|relation|jwt|stack|http \d{3}/i.test(
+    message,
+  );
+}
+
 // PHASE 4 STEP 20
 export function formatAiPrecheckErrorForDisplay(parts: Array<unknown>, fallback = "AI pre-check unavailable."): string {
   const message = parts
@@ -62,7 +68,11 @@ export function formatAiPrecheckErrorForDisplay(parts: Array<unknown>, fallback 
     .join(" ");
 
   if (isSourceQualityConstraintError(message)) {
-    return "AI pre-check failed because source quality value was invalid. Please retry after update.";
+    return "AI pre-check is unavailable right now.";
+  }
+
+  if (isRawBackendError(message)) {
+    return fallback;
   }
 
   return message || fallback;
@@ -78,7 +88,7 @@ function getBackendErrorMessage(data: Partial<AiPrecheckResponse>, status: numbe
 
   return formatAiPrecheckErrorForDisplay(
     [data.error, detail, data.details, data.hint],
-    `AI pre-check failed with HTTP ${status}.`,
+    "AI pre-check is unavailable right now.",
   );
 }
 
@@ -95,7 +105,7 @@ async function postAiPrecheck(
     return {
       ok: false,
       claim_id: claimId,
-      error: "AI pre-check backend URL is not configured.",
+      error: "AI pre-check unavailable",
     };
   }
 
@@ -179,7 +189,7 @@ async function postAiPrecheck(
     return {
       ok: false,
       claim_id: claimId,
-      error: error instanceof Error ? error.message : "AI pre-check unavailable",
+      error: "AI pre-check unavailable",
     };
   } finally {
     clearTimeout(timeoutId);

@@ -1,5 +1,6 @@
 // PHASE 1 STEP 1
 // PHASE 3 STEP 29
+import "../utils/productionConsole";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";

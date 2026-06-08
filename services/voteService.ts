@@ -155,7 +155,7 @@ function getVoteErrorMessage(message: string): string {
   }
 
   // PHASE 3 STEP 22
-  return message || "Could not save vote right now.";
+  return "Could not save vote right now.";
 }
 
 function logVoteSupabaseError({

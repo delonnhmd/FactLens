@@ -1,4 +1,6 @@
 // PHASE 2 STEP 8
+import { PUBLIC_SITE_URL } from "../constants/launchConfig";
+
 export function generateClaimSlug(title: string): string {
   const slug = title
     .trim()
@@ -11,7 +13,7 @@ export function generateClaimSlug(title: string): string {
 }
 
 export function generateClaimShareUrl(claimId: string): string {
-  return `https://factlens.app/claim/${claimId}`;
+  return `${PUBLIC_SITE_URL}/claim/${claimId}`;
 }
 
 export function isYouTubeUrl(url: string): boolean {
@@ -22,4 +24,3 @@ export function isYouTubeUrl(url: string): boolean {
     return false;
   }
 }
-

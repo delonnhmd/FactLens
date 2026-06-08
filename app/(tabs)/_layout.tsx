@@ -42,9 +42,9 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#6B7280',
         tabBarStyle: {
-          height: 56 + tabBarBottomInset,
-          paddingBottom: Math.max(tabBarBottomInset, 8),
-          paddingTop: 4,
+          height: 52 + tabBarBottomInset,
+          paddingBottom: Math.max(tabBarBottomInset, 6),
+          paddingTop: 3,
           borderTopWidth: 0.5,
           borderTopColor: '#E5E7EB',
           backgroundColor: '#FFFFFF',
@@ -52,9 +52,9 @@ export default function TabLayout() {
           shadowOpacity: 0,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '500',
-          marginBottom: 2,
+          marginBottom: 1,
         },
         tabBarIconStyle: {
           marginTop: 2,
@@ -109,7 +109,7 @@ export default function TabLayout() {
         name="leaderboard"
         options={{
           title: 'Leaderboard',
-          tabBarLabel: 'Leaderboard',
+          tabBarLabel: 'Ranks',
           tabBarIcon: ({ color, size }) => (
             <TabIcon name="trophy-outline" color={color} size={size} />
           ),

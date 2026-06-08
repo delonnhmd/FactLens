@@ -643,14 +643,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
   },
   content: {
-    padding: theme.spacing.lg,
+    padding: 10,
   },
   gateCard: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    padding: theme.spacing.lg,
+    padding: 14,
     ...theme.shadows.light,
   },
   gateTitle: {
@@ -670,14 +670,14 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    padding: theme.spacing.lg,
+    padding: 14,
     ...theme.shadows.light,
   },
   accountRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   avatar: {
     alignItems: "center",
@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
-    padding: theme.spacing.md,
+    padding: theme.spacing.sm,
   },
   warningText: {
     color: theme.colors.warning,
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   fieldGroup: {
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   label: {
     color: theme.colors.text,
@@ -762,10 +762,10 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     color: theme.colors.text,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "500",
-    lineHeight: 30,
-    minHeight: 96,
+    lineHeight: 24,
+    minHeight: 76,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     textAlignVertical: "top",
@@ -784,7 +784,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.danger,
   },
   textArea: {
-    minHeight: 148,
+    minHeight: 112,
     textAlignVertical: "top",
   },
   fieldFooter: {
@@ -930,8 +930,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     justifyContent: "center",
     marginTop: theme.spacing.sm,
-    minHeight: 50,
-    paddingVertical: theme.spacing.lg,
+    minHeight: 48,
+    paddingVertical: theme.spacing.md,
   },
   buttonDisabled: {
     backgroundColor: theme.colors.muted,

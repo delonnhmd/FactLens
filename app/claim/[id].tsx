@@ -911,7 +911,6 @@ export default function ClaimDetailScreen() {
     router.push(`/profile/${slugOrUsername}`);
   };
   // PHASE 3 STEP 1
-  const isOwner = currentUser?.id === claim.authorId;
   // PHASE 2 STEP 5
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
   // Source trust label update
@@ -1180,25 +1179,6 @@ export default function ClaimDetailScreen() {
           </TouchableOpacity>
           {/* PHASE 4 STEP 12 */}
           <Text style={styles.authorText}>Reputation: {claim.author.reputationPoints.toLocaleString()} pts</Text>
-
-          {isOwner ? (
-            <View style={styles.ownerActionRow}>
-              <TouchableOpacity
-                style={styles.ownerButton}
-                activeOpacity={0.8}
-                onPress={() => Alert.alert("Edit claim will be added later.")}
-              >
-                <Text style={styles.ownerButtonText}>Edit Claim</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.ownerButton, styles.deleteButton]}
-                activeOpacity={0.8}
-                onPress={() => Alert.alert("Delete claim will be added later.")}
-              >
-                <Text style={styles.deleteButtonText}>Delete Claim</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -1266,7 +1246,6 @@ export default function ClaimDetailScreen() {
           ) : (
             <Text style={styles.placeholder}>No image or video attached yet.</Text>
           )}
-          <Text style={styles.mediaNote}>Video upload and real image moderation will be added later.</Text>
         </View>
 
         <View style={styles.compactCard}>
