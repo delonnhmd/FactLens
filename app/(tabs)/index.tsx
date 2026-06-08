@@ -212,6 +212,11 @@ export default function HomeScreen() {
 
   const listHeader = (
     <View>
+      {/* PHASE 5 election positioning UI */}
+      <View style={styles.midtermsBanner}>
+        <Text style={styles.midtermsBannerTitle}>2026 midterms watch</Text>
+        <Text style={styles.midtermsBannerSubtitle}>The red. The blue. The truth.</Text>
+      </View>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -341,6 +346,28 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
+  },
+  // PHASE 5 election positioning UI
+  midtermsBanner: {
+    backgroundColor: "#0D1B3E",
+    borderRadius: theme.radius.sm,
+    justifyContent: "center",
+    marginBottom: theme.spacing.md,
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  midtermsBannerTitle: {
+    color: theme.colors.background,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 17,
+  },
+  midtermsBannerSubtitle: {
+    color: "rgba(255, 255, 255, 0.72)",
+    fontSize: 12,
+    fontWeight: "400",
+    lineHeight: 16,
   },
   // PHASE 3 STEP 12
   liveText: {

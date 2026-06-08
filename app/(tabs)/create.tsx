@@ -26,8 +26,10 @@ import { getSourceQuality, getSourceTrustLabel } from "../../services/sourceQual
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
 const DESCRIPTION_MAX_LENGTH = 1000;
+// PHASE 5 election positioning UI
+const politicsSubCategories = ["Election 2026", "Policy", "Politician", "Government"];
 
-type FieldName = "title" | "description" | "sourceUrl" | "videoUrl";
+type FieldName = "title" | "description" | "sourceUrl" | "videoUrl" | "politicianTag";
 type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
 
 export default function CreateScreen() {
@@ -40,6 +42,9 @@ export default function CreateScreen() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [category, setCategory] = useState("");
+  // PHASE 5 election positioning UI
+  const [subCategory, setSubCategory] = useState("");
+  const [politicianTag, setPoliticianTag] = useState("");
   // PHASE 3 STEP 7
   const [selectedImage, setSelectedImage] = useState<PickedOptimizedImage | null>(null);
   const [imageError, setImageError] = useState("");
@@ -112,10 +117,27 @@ export default function CreateScreen() {
       setVideoUrl(value);
     }
 
+    if (field === "politicianTag") {
+      setPoliticianTag(value);
+    }
+
     if (errors[field] || errors.general) {
       setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined, general: undefined }));
     }
   };
+
+  // PHASE 5 election positioning UI
+  useEffect(() => {
+    if (category !== "Politics") {
+      setSubCategory("");
+      setPoliticianTag("");
+      return;
+    }
+
+    if (subCategory !== "Politician") {
+      setPoliticianTag("");
+    }
+  }, [category, subCategory]);
 
   const validateForm = (): FormErrors => {
     const nextErrors: FormErrors = {};
@@ -212,6 +234,9 @@ export default function CreateScreen() {
         videoUrl: trimmedVideoUrl ? normalizedVideoUrl : "",
         imageAsset: selectedImage,
         category,
+        // PHASE 5 election positioning UI
+        subCategory,
+        politicianTag,
       });
 
       setTitle("");
@@ -219,6 +244,8 @@ export default function CreateScreen() {
       setSourceUrl("");
       setVideoUrl("");
       setCategory("");
+      setSubCategory("");
+      setPoliticianTag("");
       setSelectedImage(null);
       setImageError("");
       setErrors({});
@@ -518,6 +545,49 @@ export default function CreateScreen() {
             </ScrollView>
             {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
           </View>
+
+          {/* PHASE 5 election positioning UI */}
+          {category === "Politics" ? (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Politics focus</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryGrid}>
+                {politicsSubCategories.map((option) => {
+                  const selected = subCategory === option;
+
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      style={[styles.categoryButton, selected && styles.categoryButtonSelected]}
+                      activeOpacity={0.8}
+                      onPress={() => setSubCategory((currentValue) => (currentValue === option ? "" : option))}
+                    >
+                      <Text style={[styles.categoryButtonText, selected && styles.categoryButtonTextSelected]}>
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {/* PHASE 5 election positioning UI */}
+          {category === "Politics" && subCategory === "Politician" ? (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Politician name</Text>
+              <TextInput
+                value={politicianTag}
+                onChangeText={(value) => updateField("politicianTag", value)}
+                placeholder="Politician name"
+                style={[styles.input, errors.politicianTag && styles.inputError]}
+                placeholderTextColor={theme.colors.muted}
+                autoCapitalize="words"
+                autoCorrect={false}
+                editable={!isSubmitting}
+              />
+              {errors.politicianTag ? <Text style={styles.errorText}>{errors.politicianTag}</Text> : null}
+            </View>
+          ) : null}
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Image / Screenshot</Text>

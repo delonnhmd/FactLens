@@ -158,6 +158,9 @@ export interface Claim {
   claimType: ClaimType;
   // PHASE 2 STEP 2
   category?: string;
+  // PHASE 5 election positioning UI
+  subCategory?: string | null;
+  politicianTag?: string | null;
   votesTrue: number;
   votesFake: number;
   votesUnsure: number;

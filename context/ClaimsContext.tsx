@@ -69,6 +69,9 @@ export interface CreateClaimInput {
   // PHASE 5 STEP 6
   imageAsset?: PickedOptimizedImage | null;
   category?: string;
+  // PHASE 5 election positioning UI
+  subCategory?: string | null;
+  politicianTag?: string | null;
 }
 
 // PHASE 2 STEP 4
@@ -932,6 +935,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       // PHASE 5 STEP 6
       imageAsset: input.imageAsset ?? null,
       category: input.category,
+      // PHASE 5 election positioning UI
+      subCategory: input.subCategory ?? null,
+      politicianTag: input.politicianTag ?? null,
       profile: authorProfile,
     });
 
@@ -953,6 +959,9 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
           // PHASE 5 STEP 6
           imageAsset: input.imageAsset ?? null,
           category: input.category,
+          // PHASE 5 election positioning UI
+          subCategory: input.subCategory ?? null,
+          politicianTag: input.politicianTag ?? null,
           profile: authorProfile,
         });
       }

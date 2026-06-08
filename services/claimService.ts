@@ -126,6 +126,9 @@ export interface ClaimRow {
   image_path?: string | null;
   thumbnail_url?: string | null;
   category: string | null;
+  // PHASE 5 election positioning UI
+  sub_category?: string | null;
+  politician_tag?: string | null;
   slug: string | null;
   share_url: string | null;
   votes_true: number | null;
@@ -207,6 +210,9 @@ export interface CreateClaimInput {
   thumbnailUrl?: string | null;
   imageAsset?: PickedOptimizedImage | null;
   category?: string;
+  // PHASE 5 election positioning UI
+  subCategory?: string | null;
+  politicianTag?: string | null;
   profile?: Profile | null;
 }
 
@@ -220,6 +226,9 @@ export interface ClaimUpdates {
   imagePath?: string | null;
   thumbnailUrl?: string | null;
   category?: string;
+  // PHASE 5 election positioning UI
+  subCategory?: string | null;
+  politicianTag?: string | null;
   slug?: string | null;
   shareUrl?: string | null;
   status?: ClaimStatus;
@@ -868,6 +877,9 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     aiConfidence,
     claimType,
     category: row.category ?? "Other",
+    // PHASE 5 election positioning UI
+    subCategory: row.sub_category ?? null,
+    politicianTag: row.politician_tag ?? null,
     votesTrue,
     votesFake,
     votesUnsure,
@@ -998,6 +1010,9 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     aiConfidence: null,
     claimType: mapClaimType(row.claim_type),
     category: row.category ?? "Other",
+    // PHASE 5 election positioning UI
+    subCategory: row.sub_category ?? null,
+    politicianTag: row.politician_tag ?? null,
     votesTrue: row.votes_true ?? 0,
     votesFake: row.votes_fake ?? 0,
     votesUnsure: row.votes_unsure ?? 0,
@@ -1068,6 +1083,11 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
   const safeSourceUrl = normalizedSourceUrl || (APP_CONFIG.TEST_MODE ? "https://www.pennyfloat.com" : "");
   const normalizedVideoUrl = input.videoUrl ? normalizeUrl(input.videoUrl) : "";
   const trimmedVideoUrl = normalizedVideoUrl || null;
+  // PHASE 5 election positioning UI
+  const category = input.category?.trim() || "Other";
+  const subCategory = category === "Politics" ? input.subCategory?.trim() || null : null;
+  const politicianTag =
+    category === "Politics" && subCategory === "Politician" ? input.politicianTag?.trim() || null : null;
   // PHASE 4 STEP 26
   const timing = createClaimTiming(VERIFICATION_MODE);
   const createdAt = timing.createdAt;
@@ -1089,7 +1109,10 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
     ...(input.imageUrl ? { image_url: input.imageUrl } : {}),
     ...(input.imagePath ? { image_path: input.imagePath } : {}),
     ...(input.thumbnailUrl ? { thumbnail_url: input.thumbnailUrl } : {}),
-    category: input.category?.trim() || "Other",
+    category,
+    // PHASE 5 election positioning UI
+    sub_category: subCategory,
+    politician_tag: politicianTag,
     slug: generateClaimSlug(input.title),
     votes_true: 0,
     votes_fake: 0,
@@ -1703,6 +1726,9 @@ export async function updateClaim(id: string, updates: ClaimUpdates): Promise<Cl
     ...(updates.imagePath !== undefined ? { image_path: updates.imagePath } : {}),
     ...(updates.thumbnailUrl !== undefined ? { thumbnail_url: updates.thumbnailUrl } : {}),
     ...(updates.category !== undefined ? { category: updates.category.trim() || "Other" } : {}),
+    // PHASE 5 election positioning UI
+    ...(updates.subCategory !== undefined ? { sub_category: updates.subCategory?.trim() || null } : {}),
+    ...(updates.politicianTag !== undefined ? { politician_tag: updates.politicianTag?.trim() || null } : {}),
     ...(updates.slug !== undefined ? { slug: updates.slug } : {}),
     ...(updates.shareUrl !== undefined ? { share_url: updates.shareUrl } : {}),
     ...(updates.status !== undefined ? { status: updates.status } : {}),

@@ -942,6 +942,8 @@ export default function ClaimDetailScreen() {
   const sourceSupportTextStyle = getSourceSupportTextStyle(claim.sourceSupportsClaim);
   const sourcePageTitle = claim.sourcePageTitle?.trim();
   const sourceSupportSummary = claim.sourceSupportSummary?.trim();
+  // PHASE 5 election positioning UI
+  const showNeutralPoliticsBadge = claim.category === "Politics" || claim.subCategory === "Election 2026";
   // PHASE 4 STEP 7
   const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
   // PHASE 4 STEP 3
@@ -1034,11 +1036,21 @@ export default function ClaimDetailScreen() {
             <Text style={styles.description}>{claim.description}</Text>
             <View style={styles.metaWrap}>
               {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
+              {/* PHASE 5 election positioning UI */}
+              {claim.subCategory === "Election 2026" ? (
+                <Text style={styles.electionBadge}>Election 2026</Text>
+              ) : null}
               <SourceQualityBadge quality={mainSourceQuality} />
               <AiCheckBadge status={claim.aiCheck.status} />
               <Text style={styles.claimTypeBadge}>{formatClaimType(claim.claimType)}</Text>
               {claim.isFlagged ? <Text style={styles.flaggedBadge}>Flagged for review</Text> : null}
             </View>
+            {/* PHASE 5 election positioning UI */}
+            {showNeutralPoliticsBadge ? (
+              <Text style={styles.neutralPoliticsBadge}>
+                Community reviewed {"\u00B7"} AI assisted {"\u00B7"} politically neutral
+              </Text>
+            ) : null}
             <View style={styles.sourceLinkRow}>
               <Ionicons name="link-outline" size={13} color={theme.colors.link} />
               <Text style={styles.sourceUrl} selectable numberOfLines={1}>
@@ -1971,6 +1983,29 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 4,
+  },
+  // PHASE 5 election positioning UI
+  electionBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#EEF2FF",
+    borderRadius: 999,
+    color: "#0D1B3E",
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  neutralPoliticsBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.secondarySurface,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: 999,
+    borderWidth: 0.5,
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   claimTypeBadge: {
     alignSelf: "flex-start",

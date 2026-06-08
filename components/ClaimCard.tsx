@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo } from "react";
-import { Alert, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { Alert, Animated, Easing, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
@@ -48,6 +48,67 @@ function getRelativeTime(createdAt: string): string {
   }
 
   return `${Math.floor(diffHours / 24)}d ago`;
+}
+
+// PHASE 5 election positioning UI
+function isLiveClaim(createdAt: string): boolean {
+  const createdTime = new Date(createdAt).getTime();
+
+  if (!Number.isFinite(createdTime)) {
+    return false;
+  }
+
+  return Date.now() - createdTime < 2 * 60 * 60 * 1000;
+}
+
+// PHASE 5 election positioning UI
+function LiveBadge() {
+  const pulseValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseValue, {
+          duration: 850,
+          easing: Easing.out(Easing.quad),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseValue, {
+          duration: 850,
+          easing: Easing.in(Easing.quad),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => animation.stop();
+  }, [pulseValue]);
+
+  const dotStyle = {
+    opacity: pulseValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.55, 1],
+    }),
+    transform: [
+      {
+        scale: pulseValue.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.85, 1.25],
+        }),
+      },
+    ],
+  };
+
+  return (
+    <View style={styles.liveBadge}>
+      <Animated.View style={[styles.liveDot, dotStyle]} />
+      <Text style={styles.liveBadgeText}>Live</Text>
+    </View>
+  );
 }
 
 function formatPercent(value: number | null | undefined): string {
@@ -133,6 +194,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const avatarInitial = (claim.authorUsername || claim.authorDisplayName || "U").slice(0, 1).toUpperCase();
   // PHASE 5 STEP 6
   const thumbnailUrl = claim.media.thumbnailUrl || claim.media.imageUrl || null;
+  // PHASE 5 election positioning UI
+  const isLive = isLiveClaim(claim.createdAt);
 
   const handleVote = useCallback(
     async (vote: VoteOption) => {
@@ -229,7 +292,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           ) : null}
 
           <View style={styles.badgeRow}>
+            {isLive ? <LiveBadge /> : null}
             {claim.category ? <Text style={styles.categoryBadge}>{claim.category}</Text> : null}
+            {claim.subCategory === "Election 2026" ? (
+              <Text style={styles.electionBadge}>Election 2026</Text>
+            ) : null}
             {claim.claimType === "OPINION" ? <Text style={styles.opinionBadge}>Opinion</Text> : null}
             {verdictLabel ? (
               <Text
@@ -369,6 +436,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF3DE",
     borderRadius: 999,
     color: "#27500A",
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  // PHASE 5 election positioning UI
+  liveBadge: {
+    alignItems: "center",
+    backgroundColor: "#FCEBEB",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  liveBadgeText: {
+    color: "#E24B4A",
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  liveDot: {
+    backgroundColor: "#E24B4A",
+    borderRadius: 4,
+    height: 7,
+    width: 7,
+  },
+  electionBadge: {
+    backgroundColor: "#EEF2FF",
+    borderRadius: 999,
+    color: "#0D1B3E",
     fontSize: 11,
     fontWeight: "500",
     paddingHorizontal: 9,
