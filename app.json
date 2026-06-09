@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Verifact",
-    "slug": "verifact",
+    "slug": "factlens",
     "description": "The red. The blue. The truth. Community-powered claim verification with evidence, voting, and AI-assisted source checks.",
     "version": "1.0.0",
     "scheme": "verifact",
