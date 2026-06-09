@@ -58,7 +58,10 @@
     },
     "ios": {
       "bundleIdentifier": "com.pennyfloat.factlens",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     }
   }
 }
