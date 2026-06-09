@@ -109,7 +109,7 @@ export default function AuthCallbackScreen() {
           if (!data.session) {
             if (mounted) {
               setStatus("success");
-              setMessage("Email verified. You can return to FactLens.");
+              setMessage("Email verified. You can return to Verifact.");
             }
             return;
           }
@@ -122,7 +122,7 @@ export default function AuthCallbackScreen() {
         }
 
         setStatus("success");
-        setMessage("Email verified. Opening FactLens...");
+        setMessage("Email verified. Opening Verifact...");
         setTimeout(() => {
           router.replace("/");
         }, 700);
@@ -132,7 +132,7 @@ export default function AuthCallbackScreen() {
         }
 
         setStatus("error");
-        setMessage("Could not verify this email link. Open FactLens and try logging in again.");
+        setMessage("Could not verify this email link. Open Verifact and try logging in again.");
       }
     }
 
@@ -150,7 +150,7 @@ export default function AuthCallbackScreen() {
         <Text style={styles.title}>{status === "loading" ? "Verifying your email..." : message}</Text>
         {status !== "loading" ? (
           <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={() => router.replace("/")}>
-            <Text style={styles.buttonText}>Open FactLens</Text>
+            <Text style={styles.buttonText}>Open Verifact</Text>
           </TouchableOpacity>
         ) : null}
       </View>

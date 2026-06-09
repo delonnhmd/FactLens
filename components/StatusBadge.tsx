@@ -1,5 +1,5 @@
 // PHASE 1 STEP 4
-// FactLens UI redesign
+// Verifact UI redesign
 import { View, Text, StyleSheet } from "react-native";
 import type { ClaimStatus } from "../types/claim";
 import { theme } from "../constants/theme";

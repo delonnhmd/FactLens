@@ -14,7 +14,7 @@ MAX_SOURCE_EXCERPT_CHARS = 5500
 MAX_SOURCE_HTML_BYTES = 750_000
 SOURCE_FETCH_TIMEOUT_SECONDS = 9
 SOURCE_FETCH_USER_AGENT = (
-    "FactLensBot/1.0 (+https://factlens.app; source support precheck; contact: support@factlens.app)"
+    "VerifactBot/1.0 (+https://verifact.pennyfloat.com; source support precheck; contact: support@verifact.pennyfloat.com)"
 )
 BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain"}
 

@@ -320,7 +320,7 @@ export default function CreateScreen() {
         <View style={styles.content}>
           <View style={styles.gateCard}>
             <Text style={styles.gateTitle}>Checking account...</Text>
-            <Text style={styles.gateText}>Please wait while FactLens checks your login session.</Text>
+            <Text style={styles.gateText}>Please wait while Verifact checks your login session.</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -341,7 +341,7 @@ export default function CreateScreen() {
             <Text style={styles.gateText}>
               {isAuthenticated
                 ? "Open the verification link from your email, then refresh your account status here."
-                : "FactLens requires a verified account before posting a news claim."}
+                : "Verifact requires a verified account before posting a news claim."}
             </Text>
             <TouchableOpacity style={styles.button} onPress={buttonAction} activeOpacity={0.8}>
               <Text style={styles.buttonText}>{buttonLabel}</Text>
@@ -406,7 +406,7 @@ export default function CreateScreen() {
 
           <View style={styles.warningPanel}>
             <Text style={styles.warningText}>
-              FactLens blocks nude, porn, sexually explicit, abusive, and harmful content. Images/videos may be
+              Verifact blocks nude, porn, sexually explicit, abusive, and harmful content. Images/videos may be
               reviewed by automated systems later.
             </Text>
           </View>

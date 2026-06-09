@@ -9,17 +9,17 @@ export default function AiDisclaimerScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="AI Disclaimer" subtitle="How FactLens uses AI signals" />
+      <Header title="AI Disclaimer" subtitle="How Verifact uses AI signals" />
       <ScrollView contentContainerStyle={styles.content}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8}>
           <Text style={styles.link}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.body}>
-          FactLens AI pre-checks are preliminary risk signals. AI may be incorrect, incomplete, outdated, or unable
+          Verifact AI pre-checks are preliminary risk signals. AI may be incorrect, incomplete, outdated, or unable
           to read a source page. AI does not decide final truth.
         </Text>
         <Text style={styles.body}>
-          Community voting, evidence, source quality, and finalization rules are also imperfect. Treat FactLens as
+          Community voting, evidence, source quality, and finalization rules are also imperfect. Treat Verifact as
           informational support, not legal, medical, financial, or safety advice.
         </Text>
         <Text style={styles.body}>

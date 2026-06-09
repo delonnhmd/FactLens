@@ -116,7 +116,7 @@ function mapPickedAsset(asset: ImagePicker.ImagePickerAsset): PickedOptimizedIma
     fileSize,
     width: asset.width,
     height: asset.height,
-    warning: fileSize && fileSize > LARGE_WARNING_BYTES ? "Large image. FactLens will compress it before upload." : null,
+    warning: fileSize && fileSize > LARGE_WARNING_BYTES ? "Large image. Verifact will compress it before upload." : null,
   };
 }
 
@@ -181,7 +181,7 @@ async function pickImage(source: ImagePickSource): Promise<PickedOptimizedImage 
   return {
     ...pickedImage,
     fileSize: size,
-    warning: size > LARGE_WARNING_BYTES ? "Large image. FactLens will compress it before upload." : pickedImage.warning,
+    warning: size > LARGE_WARNING_BYTES ? "Large image. Verifact will compress it before upload." : pickedImage.warning,
   };
 }
 

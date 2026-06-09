@@ -23,23 +23,23 @@ interface ClaimContentValidationResult {
 const BLOCKED_CONTENT_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   {
     pattern: /\b(i will|i am going to|going to)\s+(kill|shoot|stab|bomb|attack)\b/i,
-    message: "This content is not allowed on FactLens.",
+    message: "This content is not allowed on Verifact.",
   },
   {
     pattern: /\b(go kill yourself|kill yourself)\b/i,
-    message: "This content is not allowed on FactLens.",
+    message: "This content is not allowed on Verifact.",
   },
   {
     pattern: /\b(how to|help me)\s+(kill myself|commit suicide|self harm)\b/i,
-    message: "This content is not allowed on FactLens.",
+    message: "This content is not allowed on Verifact.",
   },
   {
     pattern: /\b(send me|dm me|cashapp me).*\b(money|cash|bitcoin|crypto)\b/i,
-    message: "This content is not allowed on FactLens.",
+    message: "This content is not allowed on Verifact.",
   },
   {
     pattern: /\b(guaranteed profit|guaranteed returns|get rich quick|free money link|claim your prize now)\b/i,
-    message: "This content is not allowed on FactLens.",
+    message: "This content is not allowed on Verifact.",
   },
 ];
 
@@ -82,7 +82,7 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
   }
 
   if (containsProhibitedTerm(`${title} ${description}`) || containsBlockedPattern(`${title} ${description}`)) {
-    errors.push("This content is not allowed on FactLens.");
+    errors.push("This content is not allowed on Verifact.");
   }
 
   return {

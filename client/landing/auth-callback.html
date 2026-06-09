@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="FactLens email verification callback." />
-    <title>FactLens Email Verification</title>
+    <meta name="description" content="Verifact email verification callback." />
+    <title>Verifact Email Verification</title>
     <style>
       :root {
         --ink: #172033;
@@ -75,12 +75,12 @@
   <body>
     <main>
       <h1 id="title">Verifying your email...</h1>
-      <p id="copy">FactLens is opening the app to finish verification.</p>
-      <a id="open-app" href="factlens://auth/callback">Open FactLens</a>
-      <p class="small">Email verified. You can return to FactLens.</p>
+      <p id="copy">Verifact is opening the app to finish verification.</p>
+      <a id="open-app" href="verifact://auth/callback">Open Verifact</a>
+      <p class="small">Email verified. You can return to Verifact.</p>
     </main>
     <script>
-      const deepLink = `factlens://auth/callback${window.location.search || ""}${window.location.hash || ""}`;
+      const deepLink = `verifact://auth/callback${window.location.search || ""}${window.location.hash || ""}`;
       const openApp = document.getElementById("open-app");
       openApp.href = deepLink;
 

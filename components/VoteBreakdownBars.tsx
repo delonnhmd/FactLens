@@ -1,4 +1,4 @@
-// FactLens UI redesign
+// Verifact UI redesign
 import { View, Text, StyleSheet } from "react-native";
 import type { DimensionValue } from "react-native";
 import { theme } from "../constants/theme";

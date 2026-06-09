@@ -7,7 +7,7 @@ import { theme } from "../../constants/theme";
 const rules = [
   "Post claims and evidence in good faith.",
   "Do not post nude, porn, sexually explicit, abusive, hateful, or harmful content.",
-  "Do not use FactLens for spam, scams, harassment, threats, or coordinated manipulation.",
+  "Do not use Verifact for spam, scams, harassment, threats, or coordinated manipulation.",
   "Do not submit malicious evidence or sources designed to mislead users.",
   "Report content that appears unsafe, abusive, explicit, spammy, or manipulative.",
 ];

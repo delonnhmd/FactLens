@@ -1,4 +1,4 @@
-// FactLens UI redesign
+// Verifact UI redesign
 // PHASE 4 STEP 3
 // PHASE 4 STEP 4
 // PHASE 4 STEP 6

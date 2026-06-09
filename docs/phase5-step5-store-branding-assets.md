@@ -2,30 +2,32 @@
 
 ## App Identity
 
-App name: FactLens
+App name: Verifact
 
-Primary tagline: Community-powered claim verification.
+Primary slogan: The red. The blue. The truth.
+
+Positioning tagline: Community-powered claim verification.
 
 Short positioning:
-FactLens helps people review claims together using sources, evidence, community voting, and AI-assisted source checks.
+Verifact helps people review claims together using sources, evidence, community voting, and AI-assisted source checks.
 
 Support contact:
-support@factlens.app
+support@verifact.pennyfloat.com
 
 Website:
-https://factlens.pennyfloat.com
+https://verifact.pennyfloat.com
 
 ## Store Short Description
 
-Community-powered claim verification with evidence, voting, and AI-assisted source checks.
+The red. The blue. The truth. Community-powered claim verification with evidence, voting, and AI-assisted source checks.
 
 ## Store Long Description
 
-FactLens is a community-powered claim verification app built for people who want to slow down rumors and review sources more carefully.
+Verifact is a community-powered claim verification app built for people who want to slow down rumors and review sources more carefully.
 
-Post a claim, attach a source, and let the community help evaluate it. FactLens supports claim feeds, source review, True/Fake/Not sure voting, evidence links, contributor reputation, and AI-assisted source checks.
+Post a claim, attach a source, and let the community help evaluate it. Verifact supports claim feeds, source review, True/Fake/Not sure voting, evidence links, contributor reputation, and AI-assisted source checks.
 
-What you can do with FactLens:
+What you can do with Verifact:
 
 - Post claims with source links.
 - Review source quality and source-support signals.
@@ -34,9 +36,9 @@ What you can do with FactLens:
 - See contributor reputation, badges, and ranks.
 - Report unsafe, spammy, misleading, or abusive content.
 
-AI in FactLens is preliminary. It can help read source pages and summarize whether a source appears to support a claim, but it does not decide final truth. Community voting, evidence, moderation, and source review all matter.
+AI in Verifact is preliminary. It can help read source pages and summarize whether a source appears to support a claim, but it does not decide final truth. Community voting, evidence, moderation, and source review all matter.
 
-FactLens results are informational and may be incorrect. Always check original sources before making important decisions.
+Verifact results are informational and may be incorrect. Always check original sources before making important decisions.
 
 ## Keywords
 
@@ -72,11 +74,11 @@ Prepare these screenshots for iPhone and Android:
 
 ## Compliance Checklist
 
-- Privacy Policy URL: https://factlens.pennyfloat.com/privacy
-- Terms URL: https://factlens.pennyfloat.com/terms
-- Community Guidelines URL: https://factlens.pennyfloat.com/community-guidelines
-- AI Disclaimer URL: https://factlens.pennyfloat.com/ai-disclaimer
-- Support email: support@factlens.app
+- Privacy Policy URL: https://verifact.pennyfloat.com/privacy
+- Terms URL: https://verifact.pennyfloat.com/terms
+- Community Guidelines URL: https://verifact.pennyfloat.com/community-guidelines
+- AI Disclaimer URL: https://verifact.pennyfloat.com/ai-disclaimer
+- Support email: support@verifact.pennyfloat.com
 - Account deletion: available in Profile settings.
 - Reporting: available for claims, evidence, and profiles.
 - Moderation: hidden content controls and admin review queue exist.
@@ -108,4 +110,5 @@ npx eas build -p ios --profile production
 - Capture final screenshots from the actual app on iPhone and Android.
 - Upload icons and screenshots in App Store Connect and Google Play Console.
 - Confirm production Privacy Policy page is live at the chosen public URL.
+- Rename or relink the EAS project so project ID `d3b9498f-a0d4-435c-81f5-e7b9b0d35d80` accepts slug `verifact` before production rebuilds.
 - Confirm Apple developer account and Google Play account metadata.

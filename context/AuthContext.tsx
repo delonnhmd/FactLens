@@ -36,7 +36,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const CONFIG_UNAVAILABLE_MESSAGE = "FactLens account services are temporarily unavailable.";
+const CONFIG_UNAVAILABLE_MESSAGE = "Verifact account services are temporarily unavailable.";
 
 function getAuthErrorMessage(message: string, action: "sign-in" | "sign-up" | "sign-out" | "refresh" = "refresh"): string {
   const normalizedMessage = message.toLowerCase();

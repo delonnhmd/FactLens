@@ -100,7 +100,7 @@ export interface ProfileResult {
   message?: string;
 }
 
-const FALLBACK_USERNAME_MESSAGE = "That username was taken, so FactLens created a fallback username for you.";
+const FALLBACK_USERNAME_MESSAGE = "That username was taken, so Verifact created a fallback username for you.";
 
 // PHASE 3 STEP 28
 function getUserVerifiedForProfile(user: SupabaseUser): boolean {

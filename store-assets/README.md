@@ -1,4 +1,4 @@
-# FactLens Store Assets
+# Verifact Store Assets
 
 ## Completed Assets
 
@@ -6,7 +6,7 @@
 - Android adaptive foreground: `assets/icon/adaptive-foreground.png`
 - Splash image: `assets/icon/splash.png`
 - Website favicon: `assets/icon/favicon.png`
-- SVG logo source: `assets/brand/factlens-logo.svg`
+- SVG logo source: `assets/brand/verifact-logo.svg`
 - Store listing copy and screenshot plan: `docs/phase5-step5-store-branding-assets.md`
 - Landing page source: `client/landing/index.html`
 
@@ -21,8 +21,8 @@ Capture final screenshots from the real app before App Store / Play Store submis
 5. Reputation/profile
 6. Moderation/report button
 
-Use real-looking beta data and avoid claims that imply FactLens guarantees truth.
+Use real-looking beta data and avoid claims that imply Verifact guarantees truth.
 
 ## Compliance Copy
 
-FactLens uses AI and community voting to help review claims. Results are informational and may be incorrect. Always check original sources.
+Verifact uses AI and community voting to help review claims. Results are informational and may be incorrect. Always check original sources.

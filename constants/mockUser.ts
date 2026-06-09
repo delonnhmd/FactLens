@@ -3,7 +3,7 @@ import type { User } from "../types/user";
 
 export const mockUser: User = {
   id: "demo-user-1",
-  username: "factlens_user",
+  username: "verifact_user",
   displayName: "Demo User",
   avatar: null,
   verified: true,

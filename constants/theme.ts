@@ -1,5 +1,5 @@
 // PHASE 1 STEP 4
-// FactLens UI redesign
+// Verifact UI redesign
 export const theme = {
   colors: {
     navy: "#0D1B3E",

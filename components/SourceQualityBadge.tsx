@@ -1,5 +1,5 @@
 // PHASE 2 STEP 5
-// FactLens UI redesign
+// Verifact UI redesign
 // PHASE 4 STEP 18
 // Source trust label update
 import { View, Text, StyleSheet } from "react-native";

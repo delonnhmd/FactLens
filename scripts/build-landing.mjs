@@ -1,4 +1,4 @@
-// Build the static FactLens landing page for factlens.pennyfloat.com.
+// Build the static Verifact landing page for verifact.pennyfloat.com.
 import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

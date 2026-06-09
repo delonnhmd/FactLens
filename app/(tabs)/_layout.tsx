@@ -1,5 +1,5 @@
 // PHASE 3 STEP 14
-// Fixed FactLens bottom tabs with explicit labels
+// Fixed Verifact bottom tabs with explicit labels
 // PHASE 3 STEP 29
 // PHASE 5 STEP 6
 

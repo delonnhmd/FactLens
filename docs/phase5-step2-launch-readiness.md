@@ -2,16 +2,16 @@
 
 ## Soft Launch Positioning
 
-FactLens should be described as an informational community news-verification app.
+Verifact should be described as an informational community news-verification app.
 Do not claim that AI or community voting guarantees truth.
 
 ## Store Copy
 
 Short description:
-FactLens helps people review news claims with community voting, evidence links, source checks, and AI risk signals.
+The red. The blue. The truth. Verifact helps people review news claims with community voting, evidence links, source checks, and AI risk signals.
 
 Long description:
-FactLens is a community-driven news verification app where users post claims, add source evidence, vote, and review AI pre-check signals. AI may be incorrect and does not decide final truth. Community voting and evidence review are informational tools, not professional advice.
+Verifact is a community-driven news verification app where users post claims, add source evidence, vote, and review AI pre-check signals. AI may be incorrect and does not decide final truth. Community voting and evidence review are informational tools, not professional advice.
 
 ## Required Store Fields
 
@@ -33,6 +33,6 @@ FactLens is a community-driven news verification app where users post claims, ad
 
 ## Remaining Manual Checks
 
-- Verify Render has `FACTLENS_ADMIN_API_KEY`.
+- Verify Render has the existing `FACTLENS_ADMIN_API_KEY` admin secret configured.
 - Verify admin report endpoints are reachable only with the admin key.
 - Verify Supabase RLS still blocks unauthorized report edits.

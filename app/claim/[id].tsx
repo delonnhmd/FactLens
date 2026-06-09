@@ -928,7 +928,7 @@ export default function ClaimDetailScreen() {
     claim.aiSummary ??
     claim.aiCheck.reason ??
     (claim.aiCheck.status === "PENDING"
-      ? "No AI result yet. FactLens will check this claim shortly."
+      ? "No AI result yet. Verifact will check this claim shortly."
       : "No AI result yet.");
   const aiRiskSummary = claim.redFlags.length > 0
     ? "AI found source or evidence concerns. Review the source support summary."
@@ -1119,7 +1119,7 @@ export default function ClaimDetailScreen() {
               <Text style={styles.aiText} numberOfLines={2}>{aiRiskSummary}</Text>
               {isNotFactCheckable ? (
                 <Text style={styles.notFactCheckableWarning}>
-                  This appears to be an opinion or non-factual post. FactLens cannot verify it as True or Fake.
+                  This appears to be an opinion or non-factual post. Verifact cannot verify it as True or Fake.
                 </Text>
               ) : null}
               <Text style={styles.aiDisclaimer}>

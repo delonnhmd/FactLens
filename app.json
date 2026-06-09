@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "FactLens",
-    "slug": "factlens",
-    "description": "Community-powered claim verification with evidence, voting, and AI-assisted source checks.",
+    "name": "Verifact",
+    "slug": "verifact",
+    "description": "The red. The blue. The truth. Community-powered claim verification with evidence, voting, and AI-assisted source checks.",
     "version": "1.0.0",
-    "scheme": "factlens",
+    "scheme": "verifact",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon/icon.png",
@@ -15,8 +15,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "FactLens uses your photo library to attach images to claims and evidence.",
-          "cameraPermission": "FactLens uses your camera to capture images for claims and evidence.",
+          "photosPermission": "Verifact uses your photo library to attach images to claims and evidence.",
+          "cameraPermission": "Verifact uses your camera to capture images for claims and evidence.",
           "microphonePermission": false
         }
       ],
@@ -41,7 +41,7 @@
       }
     },
     "android": {
-      "package": "com.pennyfloat.factlens",
+      "package": "com.pennyfloat.verifact",
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
@@ -57,7 +57,7 @@
       "url": "https://u.expo.dev/d3b9498f-a0d4-435c-81f5-e7b9b0d35d80"
     },
     "ios": {
-      "bundleIdentifier": "com.pennyfloat.factlens",
+      "bundleIdentifier": "com.pennyfloat.verifact",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false

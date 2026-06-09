@@ -9,7 +9,7 @@ from typing import Any
 AI_LIBRARY_DIR = Path(__file__).resolve().parents[1] / "ai_library"
 
 AI_LIBRARY_FILES = {
-    "factlens_rules": "factlens_rules.json",
+    "verifact_rules": "verifact_rules.json",
     "claim_type_rules": "claim_type_rules.json",
     "source_quality_rules": "source_quality_rules.json",
     "red_flag_rules": "red_flag_rules.json",
@@ -17,9 +17,9 @@ AI_LIBRARY_FILES = {
     "source_credibility": "source_credibility.json",
 }
 
-DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
-    "factlens_rules": {
-        "platform_purpose": "FactLens is a community-driven news verification app.",
+DEFAULT_VERIFACT_AI_LIBRARY: dict[str, Any] = {
+    "verifact_rules": {
+        "platform_purpose": "Verifact is a community-driven news verification app.",
         "ai_role": "AI provides risk signals only. AI does not decide final truth.",
         "final_score_formula": "final_score = ai_confidence * 0.40 + weighted_community_score * 0.60",
         "community_weight": "Community voting is stronger than AI.",
@@ -54,7 +54,7 @@ DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
     },
     "source_credibility": {
         "domains": {},
-        "unknown": {"score": 45, "quality": "Not in FactLens library", "lean": "Unknown"},
+        "unknown": {"score": 45, "quality": "Not in Verifact library", "lean": "Unknown"},
         "invalid": {"score": 20, "quality": "Invalid URL", "lean": "Unknown"},
     },
     "red_flag_rules": {
@@ -78,7 +78,7 @@ DEFAULT_FACTLENS_AI_LIBRARY: dict[str, Any] = {
 
 
 @lru_cache(maxsize=1)
-def load_factlens_ai_library() -> dict[str, Any]:
+def load_verifact_ai_library() -> dict[str, Any]:
     library: dict[str, Any] = {}
 
     for section, filename in AI_LIBRARY_FILES.items():
@@ -88,7 +88,7 @@ def load_factlens_ai_library() -> dict[str, Any]:
             with path.open("r", encoding="utf-8") as file:
                 library[section] = json.load(file)
         except (OSError, json.JSONDecodeError):
-            library[section] = DEFAULT_FACTLENS_AI_LIBRARY[section]
+            library[section] = DEFAULT_VERIFACT_AI_LIBRARY[section]
 
     print("[ai_library] loaded sections:", list(library.keys()), flush=True)
     return library

@@ -298,7 +298,7 @@
   },
   "unknown": {
     "score": 40,
-    "quality": "Not in FactLens library",
+    "quality": "Not in Verifact library",
     "lean": "Unknown"
   },
   "invalid": {

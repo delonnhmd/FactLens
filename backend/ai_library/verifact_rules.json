@@ -1,5 +1,5 @@
 {
-  "platform_purpose": "FactLens is a community-driven news verification app.",
+  "platform_purpose": "Verifact is a community-driven news verification app.",
   "ai_role": "AI provides risk signals only. AI does not decide final truth.",
   "final_score_formula": "final_score = ai_confidence * 0.40 + weighted_community_score * 0.60",
   "community_weight": "Community voting is stronger than AI.",

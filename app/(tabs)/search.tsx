@@ -1,5 +1,5 @@
 // PHASE 3 STEP 14
-// FactLens UI redesign
+// Verifact UI redesign
 
 import { SafeAreaView, Text, TextInput, View, StyleSheet } from 'react-native';
 import { Header } from '../../components/Header';

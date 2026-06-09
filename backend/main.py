@@ -31,7 +31,7 @@ try:
         analyze_claim_with_openai,
         get_openai_model,
     )
-    from services.ai_library_loader import load_factlens_ai_library
+    from services.ai_library_loader import load_verifact_ai_library
     from services.source_page_fetcher import fetch_source_page
     from services.source_credibility import score_source_url
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
@@ -39,14 +39,14 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         analyze_claim_with_openai,
         get_openai_model,
     )
-    from backend.services.ai_library_loader import load_factlens_ai_library
+    from backend.services.ai_library_loader import load_verifact_ai_library
     from backend.services.source_page_fetcher import fetch_source_page
     from backend.services.source_credibility import score_source_url
 
 
 load_dotenv()
 # PHASE 4 STEP 27
-app = FastAPI(title="FactLens backend", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(title="Verifact backend", docs_url=None, redoc_url=None, openapi_url=None)
 
 # PHASE 4 STEP 20
 # PHASE 4 STEP 20C
@@ -79,7 +79,7 @@ RANK_ORDER = [
     "Claim Checker",
     "Trusted Verifier",
     "Source Hunter",
-    "FactLens Guardian",
+    "Verifact Guardian",
 ]
 
 
@@ -97,7 +97,7 @@ def calculate_trust_tier(trust_score):
 def calculate_rank_title(trust_score):
     score = max(0, min(100, float(trust_score or 50)))
     if score >= 90:
-        return "FactLens Guardian"
+        return "Verifact Guardian"
     if score >= 75:
         return "Source Hunter"
     if score >= 55:
@@ -257,13 +257,13 @@ class AiPrecheckResponse(BaseModel):
 
 @app.get("/")
 def home():
-    return {"message": "FactLens API running"}
+    return {"message": "Verifact API running"}
 
 
 @app.get("/health")
 def health():
     # PHASE 4 STEP 21B
-    return {"ok": True, "service": "FactLens backend", "version": "phase-4-step-21b"}
+    return {"ok": True, "service": "Verifact backend", "version": "phase-4-step-21b"}
 
 
 # PHASE 5 STEP 1B
@@ -624,9 +624,9 @@ def admin_override_claim(payload: AdminOverrideRequest, request: Request):
 # PHASE 4 STEP 8
 @app.get("/ai/library")
 def ai_library():
-    library = load_factlens_ai_library()
+    library = load_verifact_ai_library()
     sections = [
-        "factlens_rules",
+        "verifact_rules",
         "claim_type_rules",
         "source_quality_rules",
         "red_flag_rules",

@@ -81,7 +81,7 @@ export default function PublicProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Contributor" subtitle="Public FactLens profile" />
+      <Header title="Contributor" subtitle="Public Verifact profile" />
       <ScrollView contentContainerStyle={styles.content}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.8} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={16} color={theme.colors.link} />

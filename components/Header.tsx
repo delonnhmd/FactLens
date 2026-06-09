@@ -1,5 +1,5 @@
 // PHASE 1 STEP 4
-// FactLens UI redesign
+// Verifact UI redesign
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";

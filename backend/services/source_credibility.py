@@ -76,12 +76,12 @@ DEFAULT_DOMAIN_LIBRARY: dict[str, dict[str, Any]] = {
 
 DEFAULT_SOURCE_CREDIBILITY: dict[str, Any] = {
     "domains": DEFAULT_DOMAIN_LIBRARY,
-    "unknown": {"score": 45, "quality": "Not in FactLens library"},
+    "unknown": {"score": 45, "quality": "Not in Verifact library"},
     "invalid": {"score": 20, "quality": "Invalid URL"},
 }
 
 def get_source_message(score: int | None, quality: str | None) -> dict[str, str]:
-    safe_quality = str(quality or "Not in FactLens library").strip() or "Not in FactLens library"
+    safe_quality = str(quality or "Not in Verifact library").strip() or "Not in Verifact library"
 
     if score is None:
         return {
@@ -227,7 +227,7 @@ def load_source_credibility() -> dict[str, Any]:
     normalized_domains = {
         str(domain).lower().strip(): {
             "score": int(metadata.get("score", 45)),
-            "quality": str(metadata.get("quality") or "Not in FactLens library"),
+            "quality": str(metadata.get("quality") or "Not in Verifact library"),
         }
         for domain, metadata in domains.items()
         if str(domain).strip() and isinstance(metadata, dict)
@@ -240,7 +240,7 @@ def load_source_credibility() -> dict[str, Any]:
         "domains": normalized_domains or DEFAULT_DOMAIN_LIBRARY,
         "unknown": {
             "score": int(unknown.get("score", 45)),
-            "quality": str(unknown.get("quality") or "Not in FactLens library"),
+            "quality": str(unknown.get("quality") or "Not in Verifact library"),
         },
         "invalid": {
             "score": int(invalid.get("score", 20)),
@@ -301,7 +301,7 @@ def _score_source_values(domain: str, source_quality: str, source_score: int, so
 
 def _score_result(domain: str, metadata: dict[str, Any]) -> dict:
     source_score = int(metadata.get("score", 45))
-    source_detail = str(metadata.get("quality") or "Not in FactLens library")
+    source_detail = str(metadata.get("quality") or "Not in Verifact library")
     source_quality = normalize_source_quality(metadata.get("source_quality"))
 
     if source_quality == "unknown":

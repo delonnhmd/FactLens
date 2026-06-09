@@ -81,7 +81,7 @@ export default function LeaderboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Leaderboard" subtitle="Top FactLens contributors" />
+      <Header title="Leaderboard" subtitle="Top Verifact contributors" />
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadLeaderboard(true)} />}

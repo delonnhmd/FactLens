@@ -34,8 +34,8 @@ const RANKS: RankInfo[] = [
   { title: "New Scout", tier: "LOW_TRUST", minScore: 0, nextTitle: "Claim Checker", nextScore: 30, weight: 0.75 },
   { title: "Claim Checker", tier: "BASIC", minScore: 30, nextTitle: "Trusted Verifier", nextScore: 55, weight: 1 },
   { title: "Trusted Verifier", tier: "TRUSTED", minScore: 55, nextTitle: "Source Hunter", nextScore: 75, weight: 1.2 },
-  { title: "Source Hunter", tier: "HIGH_TRUST", minScore: 75, nextTitle: "FactLens Guardian", nextScore: 90, weight: 1.4 },
-  { title: "FactLens Guardian", tier: "HIGH_TRUST", minScore: 90, nextTitle: null, nextScore: null, weight: 1.6 },
+  { title: "Source Hunter", tier: "HIGH_TRUST", minScore: 75, nextTitle: "Verifact Guardian", nextScore: 90, weight: 1.4 },
+  { title: "Verifact Guardian", tier: "HIGH_TRUST", minScore: 90, nextTitle: null, nextScore: null, weight: 1.6 },
 ];
 
 const RANK_ORDER = new Map(RANKS.map((rank, index) => [rank.title, index]));

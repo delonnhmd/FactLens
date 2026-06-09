@@ -89,7 +89,7 @@ export default function ProfileScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       "Delete account?",
-      "Your public profile will be anonymized as Deleted User. Claims, votes, and evidence stay in FactLens so verification history does not break. This cannot be undone.",
+      "Your public profile will be anonymized as Deleted User. Claims, votes, and evidence stay in Verifact so verification history does not break. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -318,7 +318,7 @@ export default function ProfileScreen() {
         {loading ? (
           <View style={styles.card}>
             <Text style={styles.title}>Loading account...</Text>
-            <Text style={styles.subtitle}>Please wait while FactLens checks your session.</Text>
+            <Text style={styles.subtitle}>Please wait while Verifact checks your session.</Text>
           </View>
         ) : null}
 
@@ -368,7 +368,7 @@ export default function ProfileScreen() {
               <View style={styles.missingProfilePanel}>
                 <Text style={styles.missingProfileTitle}>Profile missing</Text>
                 <Text style={styles.subtitle}>
-                  FactLens could not find your public profile row. Create it from your auth metadata.
+                  Verifact could not find your public profile row. Create it from your auth metadata.
                 </Text>
                 <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateMissingProfile}>
                   <Text style={styles.buttonText}>Fix profile</Text>
@@ -380,7 +380,7 @@ export default function ProfileScreen() {
               <View style={styles.rankPanel}>
                 <View style={styles.rankHeaderRow}>
                   <View style={styles.rankIcon}>
-                    <Text style={styles.rankIconText}>FL</Text>
+                    <Text style={styles.rankIconText}>VF</Text>
                   </View>
                   <View style={styles.rankTextBlock}>
                     <Text style={styles.rankTitle}>{rankInfo.title}</Text>
@@ -519,7 +519,7 @@ export default function ProfileScreen() {
                           key={badge.id}
                           style={styles.contributorBadge}
                           activeOpacity={0.8}
-                          onPress={() => Alert.alert(badge.name, "Badge earned through FactLens contributions.")}
+                          onPress={() => Alert.alert(badge.name, "Badge earned through Verifact contributions.")}
                         >
                           <Text style={styles.contributorBadgeText}>{badge.name}</Text>
                         </TouchableOpacity>
@@ -580,7 +580,7 @@ export default function ProfileScreen() {
             <View style={styles.legalSection}>
               <Text style={styles.detailLabel}>Settings and safety</Text>
               <Text style={styles.complianceNotice}>
-                FactLens uses AI and community voting to help review claims. Results are informational and may be
+                Verifact uses AI and community voting to help review claims. Results are informational and may be
                 incorrect. Always check original sources.
               </Text>
               <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={handleOpenPrivacyPolicy}>

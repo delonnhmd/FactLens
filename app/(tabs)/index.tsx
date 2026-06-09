@@ -273,7 +273,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="FactLens" subtitle="Verify news with community evidence" />
+      <Header title="Verifact" subtitle="Verify news with community evidence" />
       <FlatList
         data={visibleClaims}
         keyExtractor={(claim) => claim.id}

@@ -65,14 +65,14 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="FactLens Account" subtitle="Log in or create a verified account" />
+      <Header title="Verifact Account" subtitle="Log in or create a verified account" />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.title}>{signingUp ? "Create account" : "Log in"}</Text>
           <Text style={styles.subtitle}>
             {signingUp
               ? "Sign up with email and password. You will need to verify your email before posting."
-              : "Log in to post claims and manage your FactLens account."}
+              : "Log in to post claims and manage your Verifact account."}
           </Text>
 
           <View style={styles.fieldGroup}>

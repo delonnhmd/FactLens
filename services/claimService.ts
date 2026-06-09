@@ -739,7 +739,7 @@ function mapAuthor(row: ClaimRow): AppUser {
   const profile = getEmbeddedProfile(row);
   const isDeleted = Boolean(profile?.is_deleted);
   const username = isDeleted ? "deleted_user" : profile?.username ?? "contributor";
-  const displayName = isDeleted ? "Deleted User" : profile?.display_name || profile?.username || "FactLens contributor";
+  const displayName = isDeleted ? "Deleted User" : profile?.display_name || profile?.username || "Verifact contributor";
   const createdAt = row.created_at ?? new Date().toISOString();
   // PHASE 5 STEP 1
   const badgeList = parseBadgeList(profile?.badge_list);
@@ -950,7 +950,7 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
   const fallbackAuthor: AppUser = {
     id: row.author_id ?? "unknown-author",
     username: "contributor",
-    displayName: "FactLens contributor",
+    displayName: "Verifact contributor",
     avatar: null,
     verified: false,
     reputationScore: 0,

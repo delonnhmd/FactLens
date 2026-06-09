@@ -1,6 +1,6 @@
 // PHASE 1 STEP 4
 // PHASE 3 STEP 20E
-// FactLens UI redesign
+// Verifact UI redesign
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { theme } from "../constants/theme";
 import type { VoteOption } from "../types/claim";

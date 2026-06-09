@@ -9,14 +9,14 @@ export default function TermsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Terms of Service" subtitle="FactLens public launch terms" />
+      <Header title="Terms of Service" subtitle="Verifact public launch terms" />
       <ScrollView contentContainerStyle={styles.content}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8}>
           <Text style={styles.link}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.heading}>Use of FactLens</Text>
+        <Text style={styles.heading}>Use of Verifact</Text>
         <Text style={styles.body}>
-          FactLens is an informational community news-verification app. Content, AI pre-checks, source analysis,
+          Verifact is an informational community news-verification app. Content, AI pre-checks, source analysis,
           and community voting are not guaranteed to be complete, accurate, or final truth.
         </Text>
         <Text style={styles.heading}>User Content</Text>
@@ -26,7 +26,7 @@ export default function TermsScreen() {
         </Text>
         <Text style={styles.heading}>Moderation</Text>
         <Text style={styles.body}>
-          FactLens may remove, hide, or restrict content and accounts that violate these terms or create safety risk.
+          Verifact may remove, hide, or restrict content and accounts that violate these terms or create safety risk.
           Reports are reviewed for launch safety and abuse prevention.
         </Text>
       </ScrollView>

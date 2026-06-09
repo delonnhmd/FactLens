@@ -73,7 +73,7 @@ language sql
 immutable
 as $$
   select case
-    when coalesce(score, 50) >= 90 then 'FactLens Guardian'
+    when coalesce(score, 50) >= 90 then 'Verifact Guardian'
     when coalesce(score, 50) >= 75 then 'Source Hunter'
     when coalesce(score, 50) >= 55 then 'Trusted Verifier'
     when coalesce(score, 50) >= 30 then 'Claim Checker'
@@ -118,7 +118,7 @@ as $$
     when 'Claim Checker' then 2
     when 'Trusted Verifier' then 3
     when 'Source Hunter' then 4
-    when 'FactLens Guardian' then 5
+    when 'Verifact Guardian' then 5
     else 1
   end;
 $$;
@@ -355,7 +355,7 @@ begin
     perform public.factlens_queue_reputation_notification(
       target_user_id,
       'badge_earned',
-      'New FactLens badge earned',
+      'New Verifact badge earned',
       'You earned a new badge! Your contributions are making a difference.',
       jsonb_build_object('badge_count', new_badge_count)
     );
@@ -444,7 +444,7 @@ begin
       target_user_id,
       'rank_reached',
       'You reached ' || new_rank,
-      'Your FactLens contributor rank increased.',
+      'Your Verifact contributor rank increased.',
       jsonb_build_object('rank_title', new_rank, 'reason', notification_reason)
     );
   end if;
@@ -474,7 +474,7 @@ begin
       target_user_id,
       'monthly_top_10',
       'You reached the monthly top 10',
-      'You are now in the top 10 FactLens contributors this month.',
+      'You are now in the top 10 Verifact contributors this month.',
       jsonb_build_object('position', monthly_position)
     );
   end if;
@@ -831,7 +831,7 @@ begin
         evidence_row.user_id,
         'helpful_evidence',
         'Your evidence helped',
-        'Your evidence supported a finalized FactLens result.',
+        'Your evidence supported a finalized Verifact result.',
         jsonb_build_object('claim_id', target_claim_id)
       );
     end if;

@@ -21,10 +21,10 @@ except ImportError:  # pragma: no cover - Render installs this from requirements
     OpenAI = None
 
 try:
-    from services.ai_library_loader import load_factlens_ai_library
+    from services.ai_library_loader import load_verifact_ai_library
     from services.source_credibility import normalize_source_quality, score_source_url
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
-    from backend.services.ai_library_loader import load_factlens_ai_library
+    from backend.services.ai_library_loader import load_verifact_ai_library
     from backend.services.source_credibility import normalize_source_quality, score_source_url
 
 
@@ -39,7 +39,7 @@ AiStatus = Literal[
 ]
 
 
-class FactLensAiPrecheckResult(BaseModel):
+class VerifactAiPrecheckResult(BaseModel):
     claim_type: ClaimType
     ai_confidence: float
     source_count: int
@@ -53,7 +53,7 @@ class FactLensAiPrecheckResult(BaseModel):
 
 
 # PHASE 4 STEP 5
-class FactLensAiConnectionResult(BaseModel):
+class VerifactAiConnectionResult(BaseModel):
     message: str
 
 
@@ -145,7 +145,7 @@ def _not_fact_checkable_analysis(claim_type: ClaimType) -> dict:
         "source_quality": "unknown",
         "evidence_used_count": 0,
         "red_flags": [f"Claim type is {type_label}, not a factual news claim"],
-        "ai_summary": "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake.",
+        "ai_summary": "This appears to be an opinion or subjective claim, so Verifact cannot verify it as True or Fake.",
         "ai_status": "NOT_FACT_CHECKABLE",
     }
 
@@ -297,12 +297,12 @@ def _fallback_source_risk_analysis(
     elif source_score >= 85:
         ai_confidence = 0.65
         source_count = 1
-        ai_summary = "The source has a high credibility score in the FactLens library."
+        ai_summary = "The source has a high credibility score in the Verifact library."
         ai_status = "LOW_RISK"
     elif source_score >= 70:
         ai_confidence = 0.58
         source_count = 1
-        ai_summary = "The source has an established credibility score in the FactLens library."
+        ai_summary = "The source has an established credibility score in the Verifact library."
         ai_status = "LOW_RISK"
     elif source_score >= 50:
         ai_confidence = 0.50
@@ -314,7 +314,7 @@ def _fallback_source_risk_analysis(
     else:
         ai_confidence = 0.35
         red_flags.append("Low credibility source needs corroborating evidence")
-        ai_summary = "The source has a low credibility score in the FactLens library."
+        ai_summary = "The source has a low credibility score in the Verifact library."
 
     for term in SUSPICIOUS_TERMS:
         if term in searchable_text:
@@ -422,7 +422,7 @@ def _normalize_analysis(raw_result: dict) -> dict:
 
     if not ai_summary:
         if ai_status == "NOT_FACT_CHECKABLE":
-            ai_summary = "This appears to be an opinion or subjective claim, so FactLens cannot verify it as True or Fake."
+            ai_summary = "This appears to be an opinion or subjective claim, so Verifact cannot verify it as True or Fake."
         else:
             ai_summary = "AI pre-check could not find enough support. Community voting and evidence are still needed."
 
@@ -469,10 +469,10 @@ def _invalid_json_response(raw: str) -> dict:
 def _normalize_connection_message(value: object) -> str:
     message = str(value or "").strip()
 
-    if "factlens ai is connected" in message.lower():
-        return "FactLens AI is connected"
+    if "ai is connected" in message.lower():
+        return "Verifact AI is connected"
 
-    return message or "FactLens AI is connected"
+    return message or "Verifact AI is connected"
 
 
 def _build_prompt(
@@ -489,7 +489,7 @@ def _build_prompt(
     # PHASE 4 STEP 10
     # PHASE 4 STEP 16
     # PHASE 4 STEP 18
-    ai_library = load_factlens_ai_library()
+    ai_library = load_verifact_ai_library()
     ai_library_json = json.dumps(ai_library, ensure_ascii=True, sort_keys=True)
     source_metadata_for_prompt = dict(source_metadata)
     source_metadata_json = json.dumps(source_metadata_for_prompt, ensure_ascii=True, sort_keys=True)
@@ -503,8 +503,8 @@ def _build_prompt(
     source_page_json = json.dumps(source_page_for_prompt, ensure_ascii=True, sort_keys=True)
     evidence_json = json.dumps(_normalize_evidence_rows(evidence_rows), ensure_ascii=True, sort_keys=True)
     system_prompt = (
-        "You are the AI pre-check engine for FactLens. "
-        "Use the FactLens AI Teaching Library below as the highest priority platform rule set. "
+        "You are the AI pre-check engine for Verifact. "
+        "Use the Verifact AI Teaching Library below as the highest priority platform rule set. "
         "You do not decide the final truth. You provide risk signals only. "
         "Analyze the claim, source URL, and wording. Return only valid JSON. "
         "Do not make final verdicts. "
@@ -519,8 +519,8 @@ def _build_prompt(
         "Never return verify, verified, verification, credible, not credible, moderate, moderate credibility, needs_more_evidence, low_risk, medium_risk, high_risk, opinion, question, satire, promotion, unclear, or not_fact_checkable as source_quality. "
         "If you want to say verify with additional evidence or moderate credibility, put that text in source_reason, ai_summary, or red_flags, never in source_quality. "
         "Opinion, question, satire, promotion, and unclear belong only in claim_type. "
-        "FactLens already scored the source using source_domain, source_quality, source_score, and source_reason. "
-        "Do not override official, mainstream, specialized, or social source_quality from FactLens source scoring. "
+        "Verifact already scored the source using source_domain, source_quality, source_score, and source_reason. "
+        "Do not override official, mainstream, specialized, or social source_quality from Verifact source scoring. "
         "Use source quality as a signal, but do not assume the source supports the claim unless the content actually matches the claim. "
         # PHASE 4 STEP 21
         "You are given fetched source page content with source_page_title, source_meta_description, and source_excerpt. "
@@ -544,7 +544,7 @@ def _build_prompt(
         "Never invent evidence. Mention evidence in ai_summary only when you used it. "
         "Set evidence_used_count to the number of provided community evidence links you considered. "
         "No live search is available in this call, so source_count must count only the main source and provided community evidence that you actually use. "
-        f"FactLens AI Teaching Library: {ai_library_json}"
+        f"Verifact AI Teaching Library: {ai_library_json}"
     )
     user_prompt = (
         "Main source:\n"
@@ -554,7 +554,7 @@ def _build_prompt(
         f"Category: {category or 'Other'}\n"
         f"Source score: {source_metadata.get('source_score')}\n"
         f"Source quality: {source_metadata.get('source_quality')}\n"
-        f"FactLens source metadata: {source_metadata_json}\n"
+        f"Verifact source metadata: {source_metadata_json}\n"
         f"Source page read status: {source_page_for_prompt.get('status')}\n"
         f"Source page title: {source_page_for_prompt.get('title')}\n"
         f"Source meta description: {source_page_for_prompt.get('meta_description')}\n"
@@ -607,10 +607,10 @@ def test_openai_connection() -> dict:
                 },
                 {
                     "role": "user",
-                    "content": "Return JSON saying FactLens AI is connected.",
+                    "content": "Return JSON saying Verifact AI is connected.",
                 },
             ],
-            text_format=FactLensAiConnectionResult,
+            text_format=VerifactAiConnectionResult,
         )
         parsed = getattr(response, "output_parsed", None)
 
@@ -681,7 +681,7 @@ def analyze_claim_with_openai_response(
         response = client.responses.parse(
             model=model,
             input=_build_prompt(title, description, source_url, category, scored_source, source_page, normalized_evidence),
-            text_format=FactLensAiPrecheckResult,
+            text_format=VerifactAiPrecheckResult,
         )
         parsed = getattr(response, "output_parsed", None)
 
