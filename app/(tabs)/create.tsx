@@ -605,6 +605,9 @@ export default function CreateScreen() {
                     setSelectedImage(null);
                     setImageError("");
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove attached image"
+                  accessibilityHint="Detach the selected image from this claim"
                 >
                   <Text style={styles.removeImageButtonText}>Remove image</Text>
                 </TouchableOpacity>
@@ -615,6 +618,9 @@ export default function CreateScreen() {
               activeOpacity={0.8}
               onPress={handlePickImage}
               disabled={isSubmitting}
+              accessibilityRole="button"
+              accessibilityLabel="Add image or screenshot"
+              accessibilityHint="Open the image picker to attach a photo to your claim"
             >
               <Text style={styles.imageButtonText}>Add Image / Screenshot</Text>
             </TouchableOpacity>
@@ -627,6 +633,10 @@ export default function CreateScreen() {
             onPress={handleSubmit}
             activeOpacity={0.8}
             disabled={submitDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={isSubmitting ? "Uploading claim" : "Post claim"}
+            accessibilityHint="Submit your claim for verification"
+            accessibilityState={{ disabled: submitDisabled, busy: isSubmitting }}
           >
             <Text style={styles.buttonText}>{isSubmitting ? "Uploading..." : "Post Claim"}</Text>
             {isSubmitting ? <ActivityIndicator size="small" color={theme.colors.background} /> : null}

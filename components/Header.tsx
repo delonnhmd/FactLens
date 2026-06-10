@@ -21,7 +21,14 @@ export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderP
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
       {rightIcon ? (
-        <TouchableOpacity style={styles.actionSlot} activeOpacity={0.75} onPress={onRightIconPress}>
+        <TouchableOpacity
+          style={styles.actionSlot}
+          activeOpacity={0.75}
+          onPress={onRightIconPress}
+          accessibilityRole="button"
+          accessibilityLabel="Header action"
+          accessibilityHint="Tap to activate the header action"
+        >
           <Ionicons name={rightIcon} size={22} color="rgba(255, 255, 255, 0.7)" />
         </TouchableOpacity>
       ) : (

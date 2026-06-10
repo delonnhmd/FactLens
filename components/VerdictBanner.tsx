@@ -1,5 +1,6 @@
 // Verifact UI redesign
 import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
 import type { ClaimStatus } from "../types/claim";
 
@@ -85,13 +86,25 @@ export function VerdictBanner({
   earlyVerdictFired,
 }: VerdictBannerProps) {
   const config = getVerdictConfig(status);
+  const verdictIconName =
+    status === "FINALIZED_TRUE" || status === "COMMUNITY_TRUE"
+      ? "checkmark-circle-outline"
+      : status === "FINALIZED_FAKE" || status === "COMMUNITY_FAKE"
+      ? "close-circle-outline"
+      : "help-circle-outline";
 
   return (
     <View style={styles.banner}>
       <Text style={styles.kicker}>System verdict</Text>
       <View style={styles.verdictRow}>
         <Text style={styles.verdict}>{verdictLabel ?? config.label}</Text>
-        <View style={[styles.badge, { backgroundColor: config.badgeColor }]}>
+        <View
+          style={[styles.badge, { backgroundColor: config.badgeColor }]}
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={`Verdict: ${config.badge}`}
+        >
+          <Ionicons name={verdictIconName} size={12} color={config.badgeTextColor} />
           <Text style={[styles.badgeText, { color: config.badgeTextColor }]}>{config.badge}</Text>
         </View>
       </View>

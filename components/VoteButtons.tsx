@@ -68,6 +68,10 @@ export function VoteButtons({
               ]}
               activeOpacity={0.8}
               disabled={isLocked}
+              accessibilityRole="button"
+              accessibilityLabel={`Vote ${option.label}`}
+              accessibilityHint="Cast your vote"
+              accessibilityState={{ disabled: isLocked, selected }}
               onPress={() => onVote(option.value)}
             >
               <Text style={[styles.label, isLocked && !selected && styles.disabledLabel]}>{option.label}</Text>

@@ -1,5 +1,16 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
-import { Alert, Animated, Easing, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AccessibilityInfo,
+  Alert,
+  Animated,
+  Easing,
+  Image,
+  Linking,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
 import { theme } from "../constants/theme";
@@ -64,8 +75,17 @@ function isLiveClaim(createdAt: string): boolean {
 // PHASE 5 election positioning UI
 function LiveBadge() {
   const pulseValue = useRef(new Animated.Value(0)).current;
+  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
 
   useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotionEnabled);
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotionEnabled) {
+      return;
+    }
+
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseValue, {
@@ -86,7 +106,7 @@ function LiveBadge() {
     animation.start();
 
     return () => animation.stop();
-  }, [pulseValue]);
+  }, [pulseValue, reduceMotionEnabled]);
 
   const dotStyle = {
     opacity: pulseValue.interpolate({
@@ -105,7 +125,7 @@ function LiveBadge() {
 
   return (
     <View style={styles.liveBadge}>
-      <Animated.View style={[styles.liveDot, dotStyle]} />
+      {reduceMotionEnabled ? <View style={styles.liveDot} /> : <Animated.View style={[styles.liveDot, dotStyle]} />}
       <Text style={styles.liveBadgeText}>Live</Text>
     </View>
   );
@@ -219,6 +239,20 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     }
   }, [claim.id, onReport]);
 
+  const verdictIconName =
+    claim.status === "FINALIZED_TRUE" || claim.status === "COMMUNITY_TRUE"
+      ? "checkmark-circle-outline"
+      : claim.status === "FINALIZED_FAKE" || claim.status === "COMMUNITY_FAKE"
+      ? "close-circle-outline"
+      : "help-circle-outline";
+
+  const verdictIconColor =
+    claim.status === "FINALIZED_TRUE" || claim.status === "COMMUNITY_TRUE"
+      ? theme.colors.success
+      : claim.status === "FINALIZED_FAKE" || claim.status === "COMMUNITY_FAKE"
+      ? theme.colors.danger
+      : theme.colors.warning;
+
   const handleOptions = useCallback(() => {
     Alert.alert("Post options", undefined, [
       {
@@ -256,7 +290,15 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
   return (
     <View style={styles.card}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.9} disabled={!onPress}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.9}
+        disabled={!onPress}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !Boolean(onPress) }}
+        accessibilityLabel={`Open claim: ${claim.title}`}
+        accessibilityHint="View full claim details and evidence"
+      >
         <View style={styles.body}>
           <View style={styles.authorRow}>
             <View style={styles.avatar}>
@@ -267,11 +309,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             </Text>
           </View>
 
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={styles.title}>
             {claim.title}
           </Text>
 
-          <Text style={styles.description} numberOfLines={2}>
+          <Text style={styles.description}>
             {claim.description}
           </Text>
 
@@ -283,6 +325,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
                   Alert.alert("Could not open image.");
                 });
               }}
+              accessibilityRole="button"
+              accessibilityLabel="Open claim image"
+              accessibilityHint="Opens the claim image in a browser"
             >
               <Image source={{ uri: thumbnailUrl }} style={styles.claimThumbnail} resizeMode="cover" />
             </TouchableOpacity>
@@ -296,7 +341,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             ) : null}
             {claim.claimType === "OPINION" ? <Text style={styles.opinionBadge}>Opinion</Text> : null}
             {verdictLabel ? (
-              <Text
+              <View
                 style={[
                   styles.verdictBadge,
                   claim.status === "FINALIZED_TRUE" && styles.verdictTrue,
@@ -306,9 +351,13 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
                   claim.status === "COMMUNITY_FAKE" && styles.verdictFake,
                   claim.status === "NEEDS_MORE_EVIDENCE" && styles.verdictEvidence,
                 ]}
+                accessible
+                accessibilityRole="text"
+                accessibilityLabel={`Verdict: ${verdictLabel}`}
               >
-                {verdictLabel}
-              </Text>
+                <Ionicons name={verdictIconName} size={12} color={verdictIconColor} />
+                <Text style={[styles.verdictBadgeText, { color: verdictIconColor }]}>{verdictLabel}</Text>
+              </View>
             ) : null}
           </View>
 
@@ -409,12 +458,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     lineHeight: 20,
+    flexShrink: 1,
   },
   description: {
     color: theme.colors.subtext,
     fontSize: 13,
     fontWeight: "400",
     lineHeight: 18,
+    flexShrink: 1,
   },
   // PHASE 5 STEP 6
   claimThumbnail: {
@@ -478,11 +529,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   verdictBadge: {
+    alignItems: "center",
     borderRadius: 999,
-    fontSize: 11,
-    fontWeight: "500",
+    flexDirection: "row",
+    gap: 6,
     paddingHorizontal: 9,
     paddingVertical: 4,
+  },
+  verdictBadgeText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
   verdictEvidence: {
     backgroundColor: theme.colors.warningBg,

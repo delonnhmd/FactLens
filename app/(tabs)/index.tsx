@@ -230,7 +230,14 @@ export default function HomeScreen() {
       {liveUpdatesEnabled ? <Text style={styles.liveText}>Live updates on</Text> : null}
       {/* PHASE 4 STEP 2 */}
       {aiPrecheckNotice ? (
-        <TouchableOpacity style={styles.aiNoticeBanner} activeOpacity={0.85} onPress={clearAiPrecheckNotice}>
+        <TouchableOpacity
+          style={styles.aiNoticeBanner}
+          activeOpacity={0.85}
+          onPress={clearAiPrecheckNotice}
+          accessibilityRole="button"
+          accessibilityLabel="AI notice"
+          accessibilityHint="Tap to dismiss the AI information banner"
+        >
           <Text style={styles.aiNoticeText}>{aiPrecheckNotice}</Text>
         </TouchableOpacity>
       ) : null}
@@ -244,6 +251,10 @@ export default function HomeScreen() {
               style={[styles.categoryChip, selected && styles.categoryChipSelected]}
               activeOpacity={0.8}
               onPress={() => setActiveCategory(category === "All" ? null : category)}
+              accessibilityRole="tab"
+              accessibilityLabel={`Filter claims by ${category}`}
+              accessibilityHint="Selects this claim category"
+              accessibilityState={{ selected }}
             >
               <Text style={[styles.categoryChipText, selected && styles.categoryChipTextSelected]}>{category}</Text>
             </TouchableOpacity>
@@ -260,7 +271,14 @@ export default function HomeScreen() {
           <Text style={styles.errorTitle}>Could not load claims.</Text>
           {/* PHASE 4 STEP 24 */}
           <Text style={styles.errorText}>Check your connection and try again.</Text>
-          <TouchableOpacity style={styles.retryButton} activeOpacity={0.8} onPress={handleRefresh}>
+          <TouchableOpacity
+            style={styles.retryButton}
+            activeOpacity={0.8}
+            onPress={handleRefresh}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading claims"
+            accessibilityHint="Reloads the claim list"
+          >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
