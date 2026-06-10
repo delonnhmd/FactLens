@@ -15,16 +15,18 @@
 # PHASE 4 STEP 18
 # PHASE 4 STEP 27
 import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from time import monotonic
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from supabase import Client, create_client
 
 try:
     from services.openai_factcheck import (
@@ -47,6 +49,175 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
 load_dotenv()
 # PHASE 4 STEP 27
 app = FastAPI(title="Verifact backend", docs_url=None, redoc_url=None, openapi_url=None)
+
+AUTH_CALLBACK_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Verifact email verification callback." />
+    <title>Verifact Email Verification</title>
+    <style>
+      :root {
+        --ink: #172033;
+        --muted: #667085;
+        --border: #e4e7ec;
+        --surface: #ffffff;
+        --soft: #f5f7fa;
+        --navy: #0d1b3e;
+        --danger: #e24b4a;
+        --danger-soft: #fcebeb;
+        --success-soft: #e1f5ee;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        align-items: center;
+        background: var(--soft);
+        color: var(--ink);
+        display: flex;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        justify-content: center;
+        line-height: 1.5;
+        margin: 0;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      main {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        max-width: 480px;
+        padding: 28px;
+        text-align: center;
+        width: 100%;
+      }
+
+      .mark {
+        align-items: center;
+        background: var(--success-soft);
+        border-radius: 999px;
+        color: var(--navy);
+        display: inline-flex;
+        font-size: 28px;
+        font-weight: 800;
+        height: 68px;
+        justify-content: center;
+        margin-bottom: 18px;
+        width: 68px;
+      }
+
+      main[data-state="error"] .mark {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      h1 {
+        color: var(--navy);
+        font-size: 24px;
+        letter-spacing: 0;
+        line-height: 1.2;
+        margin: 0 0 10px;
+      }
+
+      p {
+        color: var(--muted);
+        font-size: 15px;
+        margin: 0 0 18px;
+      }
+
+      .actions {
+        display: grid;
+        gap: 10px;
+      }
+
+      a {
+        align-items: center;
+        border-radius: 8px;
+        display: inline-flex;
+        font-size: 14px;
+        font-weight: 800;
+        justify-content: center;
+        min-height: 46px;
+        padding: 11px 14px;
+        text-decoration: none;
+      }
+
+      .primary {
+        background: var(--navy);
+        color: #ffffff;
+      }
+
+      .secondary {
+        background: #ffffff;
+        border: 1px solid var(--border);
+        color: var(--navy);
+      }
+
+      .small {
+        color: #98a2b3;
+        font-size: 12px;
+        margin: 16px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="card" data-state="success">
+      <div id="mark" class="mark">OK</div>
+      <h1 id="title">Email verified successfully</h1>
+      <p id="copy">Your account has been verified successfully. You can now continue to Verifact.</p>
+      <div class="actions">
+        <a id="open-app" class="primary" href="verifact://auth/callback">Open App</a>
+        <a id="login" class="secondary" href="verifact://auth">Continue to Login</a>
+      </div>
+      <p id="small" class="small">If Verifact does not open automatically, use the button above.</p>
+    </main>
+    <script>
+      const search = window.location.search || "";
+      const hash = window.location.hash || "";
+      const deepLink = `verifact://auth/callback${search}${hash}`;
+      const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
+      const searchParams = new URLSearchParams(search.replace(/^\\?/, ""));
+      const error =
+        hashParams.get("error_description") ||
+        searchParams.get("error_description") ||
+        hashParams.get("error") ||
+        searchParams.get("error") ||
+        "";
+      const card = document.getElementById("card");
+      const mark = document.getElementById("mark");
+      const title = document.getElementById("title");
+      const copy = document.getElementById("copy");
+      const openApp = document.getElementById("open-app");
+      const login = document.getElementById("login");
+
+      openApp.href = deepLink;
+
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", error ? "/auth/callback" : "/auth/confirmed");
+      }
+
+      if (error) {
+        card.dataset.state = "error";
+        mark.textContent = "!";
+        title.textContent = "Verification link problem";
+        copy.textContent = "This verification link could not be used. Request a new verification email from the Verifact app and try again.";
+      } else {
+        window.setTimeout(() => {
+          window.location.href = deepLink;
+        }, 900);
+      }
+
+      login.href = "verifact://auth";
+    </script>
+  </body>
+</html>
+"""
 
 # PHASE 4 STEP 20
 # PHASE 4 STEP 20C
@@ -264,6 +435,16 @@ def home():
 def health():
     # PHASE 4 STEP 21B
     return {"ok": True, "service": "Verifact backend", "version": "phase-4-step-21b"}
+
+
+@app.get("/auth/callback", response_class=HTMLResponse)
+def auth_callback_page():
+    return HTMLResponse(content=AUTH_CALLBACK_HTML, status_code=200)
+
+
+@app.get("/auth/confirmed", response_class=HTMLResponse)
+def auth_confirmed_page():
+    return HTMLResponse(content=AUTH_CALLBACK_HTML, status_code=200)
 
 
 # PHASE 5 STEP 1B
@@ -693,14 +874,34 @@ def fetch_evidence_rows(claim_id: str) -> list[dict]:
     return evidence_rows
 
 
-def get_supabase_client() -> Client:
+def get_supabase_create_client():
+    repo_root = str(Path(__file__).resolve().parents[1])
+    removed_paths: list[str] = []
+
+    for candidate_path in ("", repo_root):
+        if candidate_path in sys.path:
+            sys.path.remove(candidate_path)
+            removed_paths.append(candidate_path)
+
+    try:
+        from supabase import create_client
+    except ImportError as error:
+        raise RuntimeError("Supabase Python client is not installed on backend.") from error
+    finally:
+        for candidate_path in reversed(removed_paths):
+            sys.path.insert(0, candidate_path)
+
+    return create_client
+
+
+def get_supabase_client() -> Any:
     supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
     if not supabase_url or not service_role_key:
         raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY on backend.")
 
-    return create_client(supabase_url, service_role_key)
+    return get_supabase_create_client()(supabase_url, service_role_key)
 
 
 # PHASE 4 STEP 5B

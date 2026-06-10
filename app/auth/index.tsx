@@ -50,7 +50,10 @@ export default function AuthScreen() {
     }
 
     if (signingUp) {
-      setMessage(result.message ?? "Check your email to verify your account.");
+      router.replace({
+        pathname: "/auth/verify-email",
+        params: { email: email.trim().toLowerCase() },
+      });
       return;
     }
 

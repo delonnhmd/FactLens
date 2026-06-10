@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { theme } from "../../constants/theme";
@@ -51,6 +52,33 @@ function readUrlParams(url: string): AuthCallbackParams {
   } catch {
     return { code: "", accessToken: "", refreshToken: "", error: "" };
   }
+}
+
+function clearSensitiveWebUrl(status: CallbackStatus) {
+  if (Platform.OS !== "web" || typeof window === "undefined" || !window.history?.replaceState) {
+    return;
+  }
+
+  const nextPath = status === "success" ? "/auth/confirmed" : "/auth/callback";
+  window.history.replaceState(null, "", nextPath);
+}
+
+function getFriendlyCallbackError(message: string): string {
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes("expired")) {
+    return "This verification link has expired. Request a new verification email and try again.";
+  }
+
+  if (normalizedMessage.includes("invalid") || normalizedMessage.includes("token")) {
+    return "This verification link is no longer valid. Request a new verification email and try again.";
+  }
+
+  if (normalizedMessage.includes("already")) {
+    return "This email may already be verified. Continue to login to access Verifact.";
+  }
+
+  return "Could not verify this email link. Request a new verification email and try again.";
 }
 
 export default function AuthCallbackScreen() {
@@ -108,8 +136,9 @@ export default function AuthCallbackScreen() {
 
           if (!data.session) {
             if (mounted) {
+              clearSensitiveWebUrl("success");
               setStatus("success");
-              setMessage("Email verified. You can return to Verifact.");
+              setMessage("Your account has been verified successfully. You can now continue to Verifact.");
             }
             return;
           }
@@ -121,18 +150,17 @@ export default function AuthCallbackScreen() {
           return;
         }
 
+        clearSensitiveWebUrl("success");
         setStatus("success");
-        setMessage("Email verified. Opening Verifact...");
-        setTimeout(() => {
-          router.replace("/");
-        }, 700);
-      } catch {
+        setMessage("Your account has been verified successfully. You can now continue to Verifact.");
+      } catch (error) {
         if (!mounted) {
           return;
         }
 
+        clearSensitiveWebUrl("error");
         setStatus("error");
-        setMessage("Could not verify this email link. Open Verifact and try logging in again.");
+        setMessage(getFriendlyCallbackError(error instanceof Error ? error.message : ""));
       }
     }
 
@@ -141,17 +169,36 @@ export default function AuthCallbackScreen() {
     return () => {
       mounted = false;
     };
-  }, [authParams.accessToken, authParams.code, authParams.error, authParams.refreshToken, refreshUser, router]);
+  }, [authParams.accessToken, authParams.code, authParams.error, authParams.refreshToken, refreshUser]);
+
+  const title =
+    status === "loading" ? "Verifying your email..." : status === "success" ? "Email verified successfully" : "Verification link problem";
+  const iconName = status === "success" ? "checkmark-circle-outline" : status === "error" ? "alert-circle-outline" : "shield-checkmark-outline";
+  const iconColor = status === "error" ? theme.colors.danger : theme.colors.primary;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.card}>
-        {status === "loading" ? <ActivityIndicator color={theme.colors.primary} /> : null}
-        <Text style={styles.title}>{status === "loading" ? "Verifying your email..." : message}</Text>
+        <View style={[styles.iconWrap, status === "error" && styles.iconWrapError]}>
+          {status === "loading" ? (
+            <ActivityIndicator color={theme.colors.primary} />
+          ) : (
+            <Ionicons name={iconName} size={36} color={iconColor} />
+          )}
+        </View>
+
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.body}>{message}</Text>
+
         {status !== "loading" ? (
-          <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={() => router.replace("/")}>
-            <Text style={styles.buttonText}>Open Verifact</Text>
-          </TouchableOpacity>
+          <View style={styles.actions}>
+            <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={() => router.replace("/")}>
+              <Text style={styles.buttonText}>Open App</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85} onPress={() => router.replace("/auth")}>
+              <Text style={styles.secondaryButtonText}>Continue to Login</Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
       </View>
     </SafeAreaView>
@@ -164,36 +211,77 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     flex: 1,
     justifyContent: "center",
-    padding: 20,
+    padding: theme.spacing.lg,
   },
   card: {
     alignItems: "center",
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
-    borderRadius: theme.radius.md,
-    borderWidth: 0.5,
-    gap: 14,
-    maxWidth: 420,
-    padding: 20,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    maxWidth: 440,
+    padding: theme.spacing.lg,
     width: "100%",
+    ...theme.shadows.light,
+  },
+  iconWrap: {
+    alignItems: "center",
+    backgroundColor: theme.colors.sourceBg,
+    borderRadius: 999,
+    height: 70,
+    justifyContent: "center",
+    marginBottom: theme.spacing.md,
+    width: 70,
+  },
+  iconWrapError: {
+    backgroundColor: theme.colors.dangerBg,
   },
   title: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: theme.typography.title.fontSize,
     fontWeight: "500",
-    lineHeight: 22,
+    lineHeight: theme.typography.title.lineHeight,
+    marginBottom: theme.spacing.sm,
     textAlign: "center",
+  },
+  body: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.body.fontSize,
+    lineHeight: theme.typography.body.lineHeight,
+    marginBottom: theme.spacing.lg,
+    textAlign: "center",
+  },
+  actions: {
+    alignSelf: "stretch",
+    gap: theme.spacing.sm,
   },
   button: {
     alignItems: "center",
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   buttonText: {
     color: theme.colors.background,
-    fontSize: 14,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "500",
+  },
+  secondaryButton: {
+    alignItems: "center",
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  secondaryButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
 });
