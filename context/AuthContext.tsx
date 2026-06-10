@@ -36,7 +36,21 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const CONFIG_UNAVAILABLE_MESSAGE = "Verifact account services are temporarily unavailable.";
+const CONFIG_UNAVAILABLE_MESSAGE = "Unable to connect to account services right now. Please try again shortly.";
+
+function getSessionDebugInfo(nextSession: Session | null) {
+  if (!nextSession) {
+    return null;
+  }
+
+  return {
+    userId: nextSession.user?.id ?? null,
+    emailConfirmed: Boolean(nextSession.user?.email_confirmed_at),
+    expiresAt: nextSession.expires_at ?? null,
+    hasAccessToken: Boolean(nextSession.access_token),
+    hasRefreshToken: Boolean(nextSession.refresh_token),
+  };
+}
 
 function getAuthErrorMessage(message: string, action: "sign-in" | "sign-up" | "sign-out" | "refresh" = "refresh"): string {
   const normalizedMessage = message.toLowerCase();
@@ -204,14 +218,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // PHASE 3 STEP 18C
     supabase.auth
       .getSession()
-      .then(async ({ data }) => {
+      .then(async ({ data, error }) => {
         if (!mounted) {
+          return;
+        }
+
+        console.log("SESSION", getSessionDebugInfo(data.session));
+
+        if (error) {
+          console.log("SESSION_ERROR", error);
+          setProfileError(getAuthErrorMessage(error.message, "refresh"));
           return;
         }
 
         await applySession(data.session);
       })
-      .catch(() => {
+      .catch((error) => {
+        console.log("SESSION_ERROR", error);
         if (mounted) {
           setProfileError("Could not load your session right now.");
         }
@@ -225,6 +248,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      console.log("SESSION", getSessionDebugInfo(nextSession));
+
       if (event === "SIGNED_OUT") {
         setSession(null);
         setCurrentUser(null);
@@ -267,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const { data: sessionData } = await supabase.auth.getSession();
+    console.log("SESSION", getSessionDebugInfo(sessionData.session));
     setSession(sessionData.session);
     setCurrentUser(data.user);
     await loadProfile(data.user);

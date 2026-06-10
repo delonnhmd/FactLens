@@ -21,6 +21,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { ClaimListSkeleton } from "../../components/Skeleton";
 import { claimCategories } from "../../constants/claimCategories";
 import { theme } from "../../constants/theme";
+import { CLAIMS_LOAD_ERROR_MESSAGE } from "../../services/claimService";
 import { useClaims } from "../../context/ClaimsContext";
 import { useDebounce } from "../../hooks/useDebounce";
 import type { Claim } from "../../types/claim";
@@ -127,7 +128,7 @@ export default function HomeScreen() {
           setFeedOffset(0);
         }
 
-        setFeedError("Could not connect. Check your connection and try again.");
+        setFeedError(CLAIMS_LOAD_ERROR_MESSAGE);
       } finally {
         setFeedLoading(false);
         setFeedLoadingMore(false);
@@ -163,7 +164,7 @@ export default function HomeScreen() {
         await refreshClaims();
       }
     } catch (loadError) {
-      setFeedError("Could not connect. Check your connection and try again.");
+      setFeedError(CLAIMS_LOAD_ERROR_MESSAGE);
     } finally {
       setRefreshing(false);
     }
@@ -268,9 +269,9 @@ export default function HomeScreen() {
       ) : null}
       {displayError ? (
         <View style={styles.errorPanel}>
-          <Text style={styles.errorTitle}>Could not load claims.</Text>
+          <Text style={styles.errorTitle}>Unable to load claims right now.</Text>
           {/* PHASE 4 STEP 24 */}
-          <Text style={styles.errorText}>Check your connection and try again.</Text>
+          <Text style={styles.errorText}>Please pull to refresh or try again shortly.</Text>
           <TouchableOpacity
             style={styles.retryButton}
             activeOpacity={0.8}

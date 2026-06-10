@@ -251,6 +251,8 @@ export interface ClaimsResult {
 }
 
 const DEFAULT_CLAIM_LIMIT = 50;
+export const CLAIMS_LOAD_ERROR_MESSAGE =
+  "Unable to load claims right now. Please pull to refresh or try again shortly.";
 // PHASE 3 STEP 11
 export const DEFAULT_CLAIMS_PAGE_SIZE = 20;
 const CLAIM_PROFILE_SELECT =
@@ -324,7 +326,7 @@ function getClaimsErrorResult(error: unknown, prefix = "Could not load claims"):
     ok: false,
     claims: [],
     // PHASE 4 STEP 24
-    error: "Could not load claims.",
+    error: CLAIMS_LOAD_ERROR_MESSAGE,
     errorMessage: message,
     errorCode: parts.code,
     errorDetails: parts.details,
@@ -510,10 +512,10 @@ function getClaimServiceErrorMessage(message: string, action: "load" | "save" | 
 
   if (VERIFICATION_MODE === "test" || process.env.NODE_ENV !== "production") {
     console.log("[claims load friendly error]", message);
-    return "Could not load claims.";
+    return CLAIMS_LOAD_ERROR_MESSAGE;
   }
 
-  return "Could not load claims.";
+  return CLAIMS_LOAD_ERROR_MESSAGE;
 }
 
 function mapStatus(status: string | null): ClaimStatus {
@@ -1242,11 +1244,22 @@ export async function fetchLatestClaimsPage(
   // PHASE 4 STEP 12
   // PHASE 3 STEP 27
   try {
-    const { data, error } = await supabase
+    console.log("CLAIMS_FETCH_START", { limit, offset });
+
+    const { data, error, status, statusText } = await supabase
       .from("claims")
       .select("*")
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
+
+    console.log("CLAIMS_RESPONSE", data);
+    console.log("CLAIMS_RESPONSE_META", {
+      status,
+      statusText,
+      count: data?.length ?? 0,
+      firstClaimId: data?.[0]?.id ?? null,
+    });
+    console.log("CLAIMS_ERROR", error);
 
     if (error) {
       return getClaimsErrorResult(error);

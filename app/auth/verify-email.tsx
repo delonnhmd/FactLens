@@ -55,7 +55,7 @@ export default function VerifyEmailScreen() {
     setMessage("");
 
     if (supabaseConfigError) {
-      setError("Verifact account services are temporarily unavailable.");
+      setError("Unable to connect to account services right now. Please try again shortly.");
       return;
     }
 

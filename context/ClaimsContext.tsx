@@ -28,6 +28,7 @@ import {
   refreshClaimVerdict as refreshRemoteClaimVerdict,
   searchClaims as searchRemoteClaims,
   searchClaimsPage as searchRemoteClaimsPage,
+  CLAIMS_LOAD_ERROR_MESSAGE,
   DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
 import type { ClaimSearchFilters, ClaimsResult } from "../services/claimService";
@@ -418,15 +419,21 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setClaimsErrorFromResult = useCallback((result: Partial<ClaimsResult>) => {
-    void result;
+    console.log("CLAIMS_CONTEXT_ERROR", {
+      error: result.error,
+      errorMessage: result.errorMessage,
+      errorCode: result.errorCode,
+      errorDetails: result.errorDetails,
+      errorHint: result.errorHint,
+    });
     // PHASE 4 STEP 24
-    setError("Could not load claims.");
+    setError(CLAIMS_LOAD_ERROR_MESSAGE);
   }, []);
 
   const setClaimsErrorFromUnknown = useCallback((loadError: unknown) => {
-    void loadError;
+    console.log("CLAIMS_CONTEXT_ERROR", loadError);
     // PHASE 4 STEP 24
-    setError("Could not load claims.");
+    setError(CLAIMS_LOAD_ERROR_MESSAGE);
   }, []);
 
   // PHASE 3 STEP 20E
@@ -485,7 +492,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     async (result: ClaimsResult, replace = false) => {
       if (result.ok === false || result.error) {
         setClaimsErrorFromResult(result);
-        throw new Error(result.error ?? result.errorMessage ?? "Could not load claims.");
+        throw new Error(result.error ?? result.errorMessage ?? CLAIMS_LOAD_ERROR_MESSAGE);
       }
 
       clearClaimsError();
