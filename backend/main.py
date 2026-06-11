@@ -361,6 +361,7 @@ def build_legal_page(title: str, description: str, content: str) -> str:
         <a class="brand" href="/">Verifact</a>
         <nav aria-label="Legal pages">
           <a href="/privacy">Privacy</a>
+          <a href="/personal-privacy">Personal Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/copyright">Copyright</a>
           <a href="/community-guidelines">Guidelines</a>
@@ -417,6 +418,31 @@ PRIVACY_POLICY_HTML = build_legal_page(
 
         <h2>Contact</h2>
         <p>For privacy questions, support, or account deletion requests, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+    """,
+)
+
+PERSONAL_PRIVACY_HTML = build_legal_page(
+    "Verifact Personal Privacy",
+    "Personal privacy promise for Verifact by PennyFloat.",
+    """
+        <h1>Personal Privacy</h1>
+        <p class="updated">Effective June 11, 2026</p>
+        <p>Verifact and PennyFloat take personal user privacy seriously. We do not sell, rent, trade, or voluntarily provide personal user information to unrelated third parties for marketing, advertising, data brokerage, or commercial resale.</p>
+
+        <h2>Our Privacy Promise</h2>
+        <p>We will not provide personal user information to a third party unless a limited exception applies. Limited exceptions include a valid court order, subpoena, warrant, legally binding government request, regulatory requirement, user consent, or a situation where disclosure is necessary to protect users, investigate abuse, prevent fraud, secure the service, or comply with applicable law.</p>
+
+        <h2>Service Providers</h2>
+        <p>Verifact may use trusted service providers such as hosting, authentication, storage, analytics, security, email, and app delivery providers to operate the service. These providers may process limited information only as needed to provide services to Verifact. They are not allowed to use personal user information for their own marketing or resale.</p>
+
+        <h2>Legal Requests</h2>
+        <p>If PennyFloat receives a legal demand for user information, we review the request before responding. Where allowed by law and practical under the circumstances, we may narrow, challenge, or reject requests that appear invalid, overbroad, or inconsistent with user privacy.</p>
+
+        <h2>Public Content</h2>
+        <p>Claims, evidence, votes, reports, usernames, profile details, and reputation signals may be visible inside Verifact when users submit them to public or community-facing features. This page does not make public submissions private.</p>
+
+        <h2>Contact</h2>
+        <p>Questions about personal privacy may be sent to <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
     """,
 )
 
@@ -738,6 +764,11 @@ def home():
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy_page():
     return HTMLResponse(content=PRIVACY_POLICY_HTML, status_code=200)
+
+
+@app.get("/personal-privacy", response_class=HTMLResponse)
+def personal_privacy_page():
+    return HTMLResponse(content=PERSONAL_PRIVACY_HTML, status_code=200)
 
 
 @app.get("/terms", response_class=HTMLResponse)
