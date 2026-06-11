@@ -20,7 +20,9 @@ import { useClaims } from "../../context/ClaimsContext";
 import { isVotingOpen } from "../../services/claimVoting";
 import { calculateTrendingScore } from "../../services/trending";
 import type { Claim } from "../../types/claim";
-import { theme } from "../../constants/theme";
+import { useAppTheme } from "../../hooks/useTheme";
+import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
+import type { AppTheme } from "../../context/DisplaySettingsContext";
 
 // PHASE 2 STEP 7
 type TrendingFilter =
@@ -67,6 +69,9 @@ function claimMatchesFilter(claim: Claim, filter: TrendingFilter): boolean {
 
 export default function TrendingScreen() {
   const router = useRouter();
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const { handleScroll } = useScrollAwareTabBar();
   // PHASE 3 STEP 11
   const { claims, fetchTrendingClaimsPage, voteOnClaim, reportClaim } = useClaims();
   const [activeFilter, setActiveFilter] = useState<TrendingFilter>("ALL");
@@ -184,6 +189,8 @@ export default function TrendingScreen() {
         renderItem={renderTrendingClaim}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={
@@ -202,7 +209,8 @@ export default function TrendingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.card,
@@ -210,7 +218,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 92,
   },
   filterRow: {
     gap: theme.spacing.sm,
@@ -218,24 +226,24 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.lg,
   },
   filterButton: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.chipInactiveBg,
     borderColor: theme.colors.border,
     borderRadius: 999,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   filterButtonSelected: {
-    backgroundColor: theme.colors.tagBg,
-    borderColor: theme.colors.tagBg,
+    backgroundColor: theme.colors.chipActiveBg,
+    borderColor: theme.colors.chipActiveBg,
   },
   filterText: {
-    color: theme.colors.subtext,
+    color: theme.colors.chipInactiveText,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
   filterTextSelected: {
-    color: theme.colors.tagText,
+    color: theme.colors.chipActiveText,
   },
   trendingItem: {
     marginBottom: theme.spacing.md,
@@ -275,4 +283,5 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
-});
+  });
+}

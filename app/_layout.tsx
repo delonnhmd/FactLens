@@ -6,10 +6,12 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { View, StyleSheet } from "react-native";
+import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "../context/AuthContext";
 import { ClaimsProvider } from "../context/ClaimsContext";
+import { DisplaySettingsProvider } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 import { setupAndroidNavigationBar } from "../utils/androidNavigationBar";
 
 export default function Layout() {
@@ -31,21 +33,24 @@ export default function Layout() {
   // PHASE 3 STEP 23
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <ClaimsProvider>
-          <View style={styles.root}>
-            <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShown: false }} />
-          </View>
-        </ClaimsProvider>
-      </AuthProvider>
+      <DisplaySettingsProvider>
+        <AuthProvider>
+          <ClaimsProvider>
+            <RootStack />
+          </ClaimsProvider>
+        </AuthProvider>
+      </DisplaySettingsProvider>
     </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-});
+function RootStack() {
+  const appTheme = useAppTheme();
+
+  return (
+    <View style={{ flex: 1, backgroundColor: appTheme.colors.card }}>
+      <StatusBar style={appTheme.isDark ? "light" : "dark"} />
+      <Stack screenOptions={{ headerShown: false }} />
+    </View>
+  );
+}

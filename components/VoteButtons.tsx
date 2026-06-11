@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     marginLeft: theme.spacing.sm,
   },
   label: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontWeight: "500",
     fontSize: 14,
   },
@@ -117,11 +117,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.warning,
   },
   disabled: {
-    backgroundColor: theme.colors.lightBorder,
-    borderColor: theme.colors.border,
+    backgroundColor: "#475569",
+    borderColor: "#475569",
   },
   disabledLabel: {
-    color: theme.colors.muted,
+    color: "#CBD5E1",
   },
   selected: {
     borderColor: theme.colors.text,

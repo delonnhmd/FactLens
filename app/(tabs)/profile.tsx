@@ -4,13 +4,15 @@
 // PHASE 4 STEP 27
 // PHASE 5 STEP 4
 // PHASE 5 STEP 6
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
-import { theme } from "../../constants/theme";
 import { PUBLIC_SITE_URL, SUPPORT_EMAIL } from "../../constants/launchConfig";
 import { useAuth } from "../../context/AuthContext";
+import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
+import type { AppTheme } from "../../context/DisplaySettingsContext";
+import { useAppTheme } from "../../hooks/useTheme";
 import { getAuthProfile } from "../../services/authProfile";
 import { deleteCurrentAccount } from "../../services/accountService";
 import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
@@ -27,6 +29,9 @@ import {
 export default function ProfileScreen() {
   // PHASE 3 STEP 2
   const router = useRouter();
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const { handleScroll } = useScrollAwareTabBar();
   const {
     currentUser,
     profile,
@@ -313,8 +318,20 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Profile" subtitle="Your account overview" />
-      <ScrollView contentContainerStyle={styles.content}>
+      <Header
+        title="Profile"
+        subtitle="Your account overview"
+        rightIcon="settings-outline"
+        onRightIconPress={() => router.push("/settings")}
+        rightAccessibilityLabel="Open Settings"
+        rightAccessibilityHint="Opens appearance, accessibility, notification, and account settings"
+      />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      >
         {loading ? (
           <View style={styles.card}>
             <Text style={styles.title}>Loading account...</Text>
@@ -463,7 +480,7 @@ export default function ProfileScreen() {
                   value={usernameDraft}
                   onChangeText={setUsernameDraft}
                   placeholder="New username"
-                  placeholderTextColor={theme.colors.muted}
+                  placeholderTextColor={appTheme.colors.muted}
                   autoCapitalize="none"
                   autoCorrect={false}
                   style={styles.usernameInput}
@@ -628,19 +645,21 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.card,
   },
   content: {
     padding: 10,
+    paddingBottom: 92,
   },
   card: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
     padding: 14,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     borderColor: theme.colors.lightBorder,
   },
   title: {
@@ -778,7 +797,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   smallButtonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -831,7 +850,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   rankIconText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "500",
   },
@@ -1000,7 +1019,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   buttonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -1058,4 +1077,5 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
-});
+  });
+}

@@ -944,10 +944,10 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   buttonDisabled: {
-    backgroundColor: theme.colors.muted,
+    backgroundColor: "#475569",
   },
   buttonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },

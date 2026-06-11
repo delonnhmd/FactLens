@@ -7,6 +7,8 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TabBarVisibilityProvider, useScrollAwareTabBar } from '../../context/TabBarVisibilityContext';
+import { useAppTheme } from '../../hooks/useTheme';
 
 type IoniconName =
   | 'home-outline'
@@ -29,30 +31,45 @@ function TabIcon({
 }
 
 export default function TabLayout() {
+  return (
+    <TabBarVisibilityProvider>
+      <VisibleTabs />
+    </TabBarVisibilityProvider>
+  );
+}
+
+function VisibleTabs() {
   // PHASE 3 STEP 20
   // PHASE 3 STEP 21
   // PHASE 3 STEP 23
   const insets = useSafeAreaInsets();
+  const appTheme = useAppTheme();
+  const { showTabBar, tabBarAnimatedStyle } = useScrollAwareTabBar();
   const tabBarBottomInset = Platform.OS === 'ios' ? insets.bottom : 0;
+  const tabBarBaseStyle = {
+    height: 56 + tabBarBottomInset,
+    paddingBottom: Math.max(tabBarBottomInset, 6),
+    paddingTop: 5,
+    borderTopWidth: appTheme.borderWidth,
+    borderTopColor: 'rgba(148,163,184,0.2)',
+    backgroundColor: appTheme.colors.tabBar,
+    elevation: 0,
+    shadowOpacity: 0,
+  };
 
   return (
     <Tabs
+      screenListeners={{
+        focus: showTabBar,
+        tabPress: showTabBar,
+      }}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#6B7280',
-        tabBarStyle: {
-          height: 52 + tabBarBottomInset,
-          paddingBottom: Math.max(tabBarBottomInset, 6),
-          paddingTop: 3,
-          borderTopWidth: 0.5,
-          borderTopColor: '#E5E7EB',
-          backgroundColor: '#FFFFFF',
-          elevation: 0,
-          shadowOpacity: 0,
-        },
+        tabBarActiveTintColor: appTheme.colors.primary,
+        tabBarInactiveTintColor: appTheme.colors.tabInactive,
+        tabBarStyle: [tabBarBaseStyle, tabBarAnimatedStyle] as any,
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '500',
           marginBottom: 1,
         },
@@ -129,6 +146,13 @@ export default function TabLayout() {
 
       <Tabs.Screen
         name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="claim/[id]"
         options={{
           href: null,
         }}

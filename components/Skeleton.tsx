@@ -1,8 +1,12 @@
 // PHASE 5 STEP 5 PRE-LAUNCH
 import { StyleSheet, View } from "react-native";
-import { theme } from "../constants/theme";
+import { useAppTheme } from "../hooks/useTheme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
 
 export function ClaimCardSkeleton() {
+  const appTheme = useAppTheme();
+  const styles = createStyles(appTheme);
+
   return (
     <View style={styles.card}>
       <View style={styles.row}>
@@ -22,6 +26,9 @@ export function ClaimCardSkeleton() {
 }
 
 export function ClaimListSkeleton({ count = 3 }: { count?: number }) {
+  const appTheme = useAppTheme();
+  const styles = createStyles(appTheme);
+
   return (
     <View style={styles.stack}>
       {Array.from({ length: count }).map((_, index) => (
@@ -32,6 +39,9 @@ export function ClaimListSkeleton({ count = 3 }: { count?: number }) {
 }
 
 export function LeaderboardSkeleton({ count = 6 }: { count?: number }) {
+  const appTheme = useAppTheme();
+  const styles = createStyles(appTheme);
+
   return (
     <View style={styles.card}>
       {Array.from({ length: count }).map((_, index) => (
@@ -46,7 +56,8 @@ export function LeaderboardSkeleton({ count = 6 }: { count?: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   stack: {
     gap: 10,
   },
@@ -54,7 +65,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     gap: 10,
     marginBottom: 10,
     padding: 14,
@@ -105,14 +116,15 @@ const styles = StyleSheet.create({
   },
   divider: {
     backgroundColor: theme.colors.lightBorder,
-    height: 0.5,
+    height: theme.borderWidth,
   },
   leaderRow: {
     alignItems: "center",
     borderBottomColor: theme.colors.lightBorder,
-    borderBottomWidth: 0.5,
+    borderBottomWidth: theme.borderWidth,
     flexDirection: "row",
     gap: 10,
     paddingVertical: 8,
   },
-});
+  });
+}

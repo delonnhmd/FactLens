@@ -17,17 +17,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { EmptyState } from "../../components/EmptyState";
-import { SourceQualityBadge } from "../../components/SourceQualityBadge";
-import { StatusBadge } from "../../components/StatusBadge";
-import { VoteButtons, getVoteOptionLabel } from "../../components/VoteButtons";
-import { AiCheckBadge } from "../../components/AiCheckBadge";
-import { PhaseStatusRow } from "../../components/PhaseStatusRow";
-import { VerdictBanner } from "../../components/VerdictBanner";
-import { VoteBreakdownBars } from "../../components/VoteBreakdownBars";
-import { useAuth } from "../../context/AuthContext";
-import { useClaims } from "../../context/ClaimsContext";
-import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../services/claimVoting";
+import { EmptyState } from "../../../components/EmptyState";
+import { SourceQualityBadge } from "../../../components/SourceQualityBadge";
+import { StatusBadge } from "../../../components/StatusBadge";
+import { VoteButtons, getVoteOptionLabel } from "../../../components/VoteButtons";
+import { AiCheckBadge } from "../../../components/AiCheckBadge";
+import { PhaseStatusRow } from "../../../components/PhaseStatusRow";
+import { VerdictBanner } from "../../../components/VerdictBanner";
+import { VoteBreakdownBars } from "../../../components/VoteBreakdownBars";
+import { useAuth } from "../../../context/AuthContext";
+import { useClaims } from "../../../context/ClaimsContext";
+import { useScrollAwareTabBar } from "../../../context/TabBarVisibilityContext";
+import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../../services/claimVoting";
 import {
   formatSourceCredibilityScore,
   getSourceMessage,
@@ -35,26 +36,26 @@ import {
   getSourceTrustLabel,
   type SourceMessageColor,
   type SourceQuality,
-} from "../../services/sourceQuality";
-import { getScoreLockAt, getVoteAcceptUntil } from "../../utils/verificationTiming";
+} from "../../../services/sourceQuality";
+import { getScoreLockAt, getVoteAcceptUntil } from "../../../utils/verificationTiming";
 import {
   subscribeToClaimById,
   subscribeToEvidenceForClaim,
   subscribeToReportsForClaim,
   subscribeToVotesForClaim,
   unsubscribe,
-} from "../../services/realtimeService";
-import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../types/claim";
-import { theme } from "../../constants/theme";
-import { normalizeUrl } from "../../utils/url";
-import { getTopBadges } from "../../utils/reputation";
-import { reportEvidence } from "../../services/reportService";
+} from "../../../services/realtimeService";
+import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../../types/claim";
+import { theme } from "../../../constants/theme";
+import { normalizeUrl } from "../../../utils/url";
+import { getTopBadges } from "../../../utils/reputation";
+import { reportEvidence } from "../../../services/reportService";
 import {
   formatImageSize,
   pickImageFromCamera,
   pickImageFromLibrary,
   type PickedOptimizedImage,
-} from "../../services/imageUploadService";
+} from "../../../services/imageUploadService";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
@@ -279,6 +280,7 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
+  const { showTabBar } = useScrollAwareTabBar();
   // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
@@ -341,6 +343,12 @@ export default function ClaimDetailScreen() {
   const claim = claimId ? getClaimById(claimId) : undefined;
   // PHASE 3 STEP 6
   const userReport = claim && currentUser ? claim.reports.find((report) => report.userId === currentUser.id) : undefined;
+
+  // PHASE 3 STEP 3
+  // PHASE 3 STEP 32
+  useEffect(() => {
+    showTabBar();
+  }, [showTabBar]);
 
   // PHASE 3 STEP 3
   // PHASE 3 STEP 32
@@ -1224,7 +1232,7 @@ export default function ClaimDetailScreen() {
                         resizeMode="cover"
                       />
                       <View style={styles.detailPlayOverlay}>
-                        <Ionicons name="play" size={24} color={theme.colors.background} />
+                        <Ionicons name="play" size={24} color="#FFFFFF" />
                       </View>
                     </View>
                   ) : null}
@@ -1293,7 +1301,7 @@ export default function ClaimDetailScreen() {
               <Ionicons
                 name="flag-outline"
                 size={14}
-                color={reportButtonActive ? theme.colors.background : "#6B7280"}
+                color={reportButtonActive ? "#FFFFFF" : "#6B7280"}
               />
             </TouchableOpacity>
           </View>
@@ -1651,7 +1659,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "500",
-    color: theme.colors.background,
+    color: "#FFFFFF",
   },
   headerSpacer: {
     width: 24,
@@ -1900,7 +1908,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   aiRetryButtonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "500",
   },
@@ -2118,7 +2126,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   copyButtonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -2348,7 +2356,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   submitReportButtonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -2380,7 +2388,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   addEvidenceButtonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },

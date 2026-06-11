@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   verdict: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     flex: 1,
     fontSize: 20,
     fontWeight: "500",
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
   },
   scoreValue: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "500",
   },

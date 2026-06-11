@@ -2,7 +2,8 @@
 // PHASE 5 STEP 5 PRE-LAUNCH
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../constants/theme";
+import { useAppTheme } from "../hooks/useTheme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
 
 interface EmptyStateProps {
   message?: string;
@@ -10,6 +11,7 @@ interface EmptyStateProps {
   actionLabel?: string;
   onActionPress?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  actionDisabled?: boolean;
 }
 
 export function EmptyState({
@@ -18,37 +20,44 @@ export function EmptyState({
   actionLabel,
   onActionPress,
   icon = "sparkles-outline",
+  actionDisabled = false,
 }: EmptyStateProps) {
+  const appTheme = useAppTheme();
+  const styles = createStyles(appTheme);
+
   return (
     <View style={styles.container}>
       <View style={styles.iconCircle}>
-        <Ionicons name={icon} size={22} color={theme.colors.ai} />
+        <Ionicons name={icon} size={22} color={appTheme.colors.ai} />
       </View>
       {title ? <Text style={styles.title}>{title}</Text> : null}
       <Text style={styles.message}>{message}</Text>
       {actionLabel && onActionPress ? (
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, actionDisabled && styles.buttonDisabled]}
           activeOpacity={0.85}
           onPress={onActionPress}
+          disabled={actionDisabled}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
           accessibilityHint={`Activates the ${actionLabel} action`}
+          accessibilityState={{ disabled: actionDisabled }}
         >
-          <Text style={styles.buttonText}>{actionLabel}</Text>
+          <Text style={[styles.buttonText, actionDisabled && styles.buttonTextDisabled]}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     alignItems: "center",
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     gap: 8,
     padding: theme.spacing.lg,
   },
@@ -62,7 +71,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
   message: {
@@ -71,15 +80,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
-    backgroundColor: theme.colors.navy,
-    borderRadius: theme.radius.sm,
+    backgroundColor: "#2563EB",
+    borderRadius: 10,
     marginTop: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  buttonDisabled: {
+    backgroundColor: "#475569",
   },
   buttonText: {
-    color: theme.colors.background,
-    fontSize: 13,
+    color: "#FFFFFF",
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
-});
+  buttonTextDisabled: {
+    color: "#CBD5E1",
+  },
+  });
+}

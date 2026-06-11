@@ -1,6 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import {
-  AccessibilityInfo,
   Alert,
   Animated,
   Easing,
@@ -13,8 +12,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
-import { theme } from "../constants/theme";
 import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
+import { useAppTheme, useDisplaySettings } from "../hooks/useTheme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
 
 // PHASE 4 STEP 18
 // Source trust label update
@@ -73,13 +73,9 @@ function isLiveClaim(createdAt: string): boolean {
 }
 
 // PHASE 5 election positioning UI
-function LiveBadge() {
+function LiveBadge({ styles }: { styles: ReturnType<typeof createStyles> }) {
   const pulseValue = useRef(new Animated.Value(0)).current;
-  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
-
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotionEnabled);
-  }, []);
+  const { reduceMotionEnabled } = useDisplaySettings();
 
   useEffect(() => {
     if (reduceMotionEnabled) {
@@ -172,7 +168,7 @@ function getAiSummary(claim: Claim): string {
   );
 }
 
-function getSourcePillStyle(score: number, label: string) {
+function getSourcePillStyle(score: number, label: string, styles: ReturnType<typeof createStyles>) {
   if (label === "Not verified") {
     return styles.sourcePillNeutral;
   }
@@ -193,6 +189,8 @@ function getSourcePillStyle(score: number, label: string) {
 }
 
 function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const sourceQuality = useMemo(() => getSourceQuality(claim.sourceUrl), [claim.sourceUrl]);
   const sourceDomain = getSourceDomain(claim.sourceUrl);
   // PHASE 4 STEP 18
@@ -248,10 +246,10 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
   const verdictIconColor =
     claim.status === "FINALIZED_TRUE" || claim.status === "COMMUNITY_TRUE"
-      ? theme.colors.success
+      ? appTheme.colors.success
       : claim.status === "FINALIZED_FAKE" || claim.status === "COMMUNITY_FAKE"
-      ? theme.colors.danger
-      : theme.colors.warning;
+      ? appTheme.colors.danger
+      : appTheme.colors.warning;
 
   const handleOptions = useCallback(() => {
     Alert.alert("Post options", undefined, [
@@ -278,7 +276,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     return (
       <View style={styles.card}>
         <View style={styles.hiddenContentBox}>
-          <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.subtext} />
+          <Ionicons name="shield-checkmark-outline" size={18} color={appTheme.colors.subtext} />
           <Text style={styles.hiddenContentTitle}>Content removed</Text>
           <Text style={styles.hiddenContentText}>
             This content was removed for violating community guidelines.
@@ -334,7 +332,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           ) : null}
 
           <View style={styles.badgeRow}>
-            {isLive ? <LiveBadge /> : null}
+            {isLive ? <LiveBadge styles={styles} /> : null}
             {claim.category ? <Text style={styles.categoryBadge}>{claim.category}</Text> : null}
             {claim.subCategory === "Election 2026" ? (
               <Text style={styles.electionBadge}>Election 2026</Text>
@@ -362,11 +360,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           </View>
 
           <View style={styles.sourceRow}>
-            <Ionicons name="link-outline" size={13} color={theme.colors.link} />
+            <Ionicons name="link-outline" size={13} color={appTheme.colors.link} />
             <Text style={styles.sourceDomain} numberOfLines={1}>
               {sourceDomain}
             </Text>
-            <Text style={[styles.sourcePill, getSourcePillStyle(sourceScore, sourceQualityLabel)]}>
+            <Text style={[styles.sourcePill, getSourcePillStyle(sourceScore, sourceQualityLabel, styles)]}>
               {sourceQualityLabel} {"\u00B7"} {sourceScore}/100
             </Text>
           </View>
@@ -389,11 +387,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
       <View style={styles.actionRow}>
         <TouchableOpacity style={styles.actionColumn} activeOpacity={0.8} onPress={() => handleVote("TRUE")}>
-          <Ionicons name="thumbs-up-outline" size={14} color={theme.colors.subtext} />
+          <Ionicons name="thumbs-up-outline" size={14} color={appTheme.colors.subtext} />
           <Text style={styles.actionText}>True</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionColumn, styles.actionDivider]} activeOpacity={0.8} onPress={() => handleVote("FAKE")}>
-          <Ionicons name="thumbs-down-outline" size={14} color={theme.colors.subtext} />
+          <Ionicons name="thumbs-down-outline" size={14} color={appTheme.colors.subtext} />
           <Text style={styles.actionText}>Fake</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -401,11 +399,11 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           activeOpacity={0.8}
           onPress={() => handleVote("NOT_SURE")}
         >
-          <Ionicons name="help-circle-outline" size={14} color={theme.colors.subtext} />
+          <Ionicons name="help-circle-outline" size={14} color={appTheme.colors.subtext} />
           <Text style={styles.actionText}>Not sure</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionColumn, styles.actionDivider]} activeOpacity={0.8} onPress={handleOptions}>
-          <Ionicons name="ellipsis-horizontal" size={14} color={theme.colors.subtext} />
+          <Ionicons name="ellipsis-horizontal" size={14} color={appTheme.colors.subtext} />
           <Text style={styles.actionText}>...</Text>
         </TouchableOpacity>
       </View>
@@ -415,12 +413,13 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
 
 export const ClaimCard = memo(ClaimCardComponent);
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   card: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     marginBottom: 10,
     overflow: "hidden",
   },
@@ -436,35 +435,35 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: "#EAF3DE",
+    backgroundColor: theme.colors.leaderboardAvatar,
     borderRadius: 12,
     height: 28,
     justifyContent: "center",
     width: 28,
   },
   avatarText: {
-    color: "#27500A",
-    fontSize: 11,
+    color: theme.colors.leaderboardAvatarText,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
   authorMeta: {
     color: theme.colors.subtext,
     flex: 1,
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
     fontWeight: "400",
   },
   title: {
     color: theme.colors.text,
-    fontSize: 15,
+    fontSize: Math.round(15 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
-    lineHeight: 20,
+    lineHeight: Math.round(20 * (theme.typography.body.fontSize / 16)),
     flexShrink: 1,
   },
   description: {
     color: theme.colors.subtext,
-    fontSize: 13,
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
     fontWeight: "400",
-    lineHeight: 18,
+    lineHeight: Math.round(18 * (theme.typography.body.fontSize / 16)),
     flexShrink: 1,
   },
   // PHASE 5 STEP 6
@@ -481,10 +480,10 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   categoryBadge: {
-    backgroundColor: "#EAF3DE",
+    backgroundColor: theme.colors.chipInactiveBg,
     borderRadius: 999,
-    color: "#27500A",
-    fontSize: 11,
+    color: theme.colors.chipInactiveText,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 4,
@@ -511,19 +510,19 @@ const styles = StyleSheet.create({
     width: 7,
   },
   electionBadge: {
-    backgroundColor: "#EEF2FF",
+    backgroundColor: theme.colors.chipActiveBg,
     borderRadius: 999,
-    color: "#0D1B3E",
-    fontSize: 11,
+    color: theme.colors.chipActiveText,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
   opinionBadge: {
-    backgroundColor: "#F1EFE8",
+    backgroundColor: theme.colors.secondarySurface,
     borderRadius: 999,
-    color: "#444441",
-    fontSize: 11,
+    color: theme.colors.subtext,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 4,
@@ -537,7 +536,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   verdictBadgeText: {
-    fontSize: 11,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
   verdictEvidence: {
@@ -560,12 +559,12 @@ const styles = StyleSheet.create({
   sourceDomain: {
     color: theme.colors.link,
     flexShrink: 1,
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
   sourcePill: {
     borderRadius: 999,
-    fontSize: 11,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
     overflow: "hidden",
     paddingHorizontal: 8,
@@ -593,14 +592,14 @@ const styles = StyleSheet.create({
   },
   evidenceText: {
     color: theme.colors.subtext,
-    fontSize: 11,
+    fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
   aiStrip: {
     alignItems: "center",
     backgroundColor: theme.colors.secondarySurface,
     borderTopColor: theme.colors.lightBorder,
-    borderTopWidth: 0.5,
+    borderTopWidth: theme.borderWidth,
     flexDirection: "row",
     gap: 8,
     paddingHorizontal: 14,
@@ -614,19 +613,19 @@ const styles = StyleSheet.create({
   aiSummary: {
     color: theme.colors.subtext,
     flex: 1,
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
     fontWeight: "400",
   },
   aiConfidence: {
     color: theme.colors.text,
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
     fontVariant: ["tabular-nums"],
     fontWeight: "500",
   },
   actionRow: {
     alignItems: "center",
     borderTopColor: theme.colors.lightBorder,
-    borderTopWidth: 0.5,
+    borderTopWidth: theme.borderWidth,
     flexDirection: "row",
     minHeight: 44,
   },
@@ -639,11 +638,11 @@ const styles = StyleSheet.create({
   },
   actionDivider: {
     borderLeftColor: theme.colors.lightBorder,
-    borderLeftWidth: 0.5,
+    borderLeftWidth: theme.borderWidth,
   },
   actionText: {
     color: theme.colors.subtext,
-    fontSize: 12,
+    fontSize: theme.typography.small.fontSize,
     fontWeight: "400",
   },
   // PHASE 5 STEP 3
@@ -654,13 +653,14 @@ const styles = StyleSheet.create({
   },
   hiddenContentTitle: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: Math.round(14 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
   hiddenContentText: {
     color: theme.colors.subtext,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
+    lineHeight: Math.round(18 * (theme.typography.body.fontSize / 16)),
     textAlign: "center",
   },
-});
+  });
+}

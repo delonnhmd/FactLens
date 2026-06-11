@@ -7,8 +7,10 @@ import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { EmptyState } from "../../components/EmptyState";
 import { LeaderboardSkeleton } from "../../components/Skeleton";
-import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
+import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
+import type { AppTheme } from "../../context/DisplaySettingsContext";
+import { useAppTheme } from "../../hooks/useTheme";
 import {
   fetchLeaderboard,
   type LeaderboardScope,
@@ -24,6 +26,9 @@ const tabs: Array<{ label: string; value: LeaderboardScope }> = [
 export default function LeaderboardScreen() {
   // PHASE 5 STEP 1E
   const router = useRouter();
+  const appTheme = useAppTheme();
+  const styles = createStyles(appTheme);
+  const { handleScroll } = useScrollAwareTabBar();
   const { currentUser } = useAuth();
   const [scope, setScope] = useState<LeaderboardScope>("monthly");
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
@@ -85,6 +90,9 @@ export default function LeaderboardScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadLeaderboard(true)} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.tabRow}>
           {tabs.map((tab) => {
@@ -126,21 +134,23 @@ export default function LeaderboardScreen() {
                 key={user.id}
                 style={[
                   styles.row,
-                  index === 0 && styles.rowGold,
-                  index === 1 && styles.rowSilver,
-                  index === 2 && styles.rowBronze,
                   currentUser?.id === user.id && styles.currentUserRow,
                 ]}
                 activeOpacity={0.85}
                 onPress={() => router.push(`/profile/${user.username}`)}
               >
-                <View style={styles.position}>
+                <View
+                  style={[
+                    styles.position,
+                    index === 0 && styles.positionGold,
+                    index === 1 && styles.positionSilver,
+                    index === 2 && styles.positionBronze,
+                  ]}
+                >
                   <Text
                     style={[
                       styles.positionText,
-                      index === 0 && styles.positionGold,
-                      index === 1 && styles.positionSilver,
-                      index === 2 && styles.positionBronze,
+                      index === 0 && styles.positionTextGold,
                     ]}
                   >
                     {index + 1}
@@ -165,7 +175,7 @@ export default function LeaderboardScreen() {
                   </View>
                 </View>
                 <View style={styles.pointsBox}>
-                  <Ionicons name="sparkles-outline" size={14} color={theme.colors.ai} />
+                  <Ionicons name="sparkles-outline" size={14} color="#94A3B8" />
                   <Text style={styles.points}>{formatPoints(user.points)}</Text>
                 </View>
               </TouchableOpacity>
@@ -177,20 +187,21 @@ export default function LeaderboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     backgroundColor: theme.colors.card,
     flex: 1,
   },
   content: {
     padding: 10,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 92,
   },
   tabRow: {
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     flexDirection: "row",
     gap: theme.spacing.sm,
     marginBottom: 10,
@@ -203,7 +214,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   tabButtonSelected: {
-    backgroundColor: theme.colors.navy,
+    backgroundColor: theme.colors.primary,
   },
   tabText: {
     color: theme.colors.subtext,
@@ -211,13 +222,13 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   tabTextSelected: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
   },
   card: {
-    backgroundColor: theme.colors.background,
-    borderColor: theme.colors.lightBorder,
+    backgroundColor: "#111827",
+    borderColor: "#334155",
     borderRadius: theme.radius.md,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     overflow: "hidden",
   },
   resetText: {
@@ -229,58 +240,59 @@ const styles = StyleSheet.create({
   },
   row: {
     alignItems: "center",
-    borderBottomColor: theme.colors.lightBorder,
-    borderBottomWidth: 0.5,
+    backgroundColor: "#111827",
+    borderBottomColor: "#334155",
+    borderBottomWidth: theme.borderWidth,
     flexDirection: "row",
     gap: theme.spacing.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
   currentUserRow: {
-    borderLeftColor: theme.colors.navy,
+    borderLeftColor: "#2563EB",
     borderLeftWidth: 3,
-  },
-  rowGold: {
-    backgroundColor: "#FFF8E8",
-  },
-  rowSilver: {
-    backgroundColor: "#F7F8FA",
-  },
-  rowBronze: {
-    backgroundColor: "#FFF2E8",
   },
   position: {
     alignItems: "center",
-    backgroundColor: theme.colors.phaseBg,
+    backgroundColor: "#1E293B",
+    borderColor: "#334155",
+    borderWidth: theme.borderWidth,
     borderRadius: 16,
     height: 32,
     justifyContent: "center",
     width: 32,
   },
   positionText: {
-    color: theme.colors.ai,
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "500",
   },
   positionGold: {
-    color: "#9A6400",
+    backgroundColor: "#EF9F27",
+    borderColor: "#F8C46B",
+    borderWidth: 2,
   },
   positionSilver: {
-    color: "#5E6673",
+    borderColor: "#CBD5E1",
+    borderWidth: 2,
   },
   positionBronze: {
-    color: "#9A4F17",
+    borderColor: "#C47C35",
+    borderWidth: 2,
+  },
+  positionTextGold: {
+    color: "#1A1300",
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: theme.colors.tagBg,
+    backgroundColor: "#1E293B",
     borderRadius: 15,
     height: 30,
     justifyContent: "center",
     width: 30,
   },
   avatarText: {
-    color: theme.colors.tagText,
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "500",
   },
@@ -288,8 +300,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   username: {
-    color: theme.colors.text,
-    fontSize: 15,
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "500",
   },
   metaRow: {
@@ -300,7 +312,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   rankTitle: {
-    color: theme.colors.subtext,
+    color: "#94A3B8",
     fontSize: 12,
     fontWeight: "400",
   },
@@ -318,7 +330,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   points: {
-    color: theme.colors.text,
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -333,4 +345,5 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     padding: theme.spacing.md,
   },
-});
+  });
+}

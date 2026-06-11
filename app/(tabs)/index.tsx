@@ -20,10 +20,12 @@ import { ClaimCard } from "../../components/ClaimCard";
 import { EmptyState } from "../../components/EmptyState";
 import { ClaimListSkeleton } from "../../components/Skeleton";
 import { claimCategories } from "../../constants/claimCategories";
-import { theme } from "../../constants/theme";
 import { CLAIMS_LOAD_ERROR_MESSAGE } from "../../services/claimService";
 import { useClaims } from "../../context/ClaimsContext";
 import { useDebounce } from "../../hooks/useDebounce";
+import { useAppTheme } from "../../hooks/useTheme";
+import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
+import type { AppTheme } from "../../context/DisplaySettingsContext";
 import type { Claim } from "../../types/claim";
 
 // PHASE 3 STEP 9
@@ -45,6 +47,9 @@ function mergeClaimsById(currentClaims: Claim[], incomingClaims: Claim[]): Claim
 
 export default function HomeScreen() {
   const router = useRouter();
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const { handleScroll } = useScrollAwareTabBar();
   const { claimPosted } = useLocalSearchParams<{ claimPosted?: string }>();
   const {
     claims,
@@ -215,14 +220,14 @@ export default function HomeScreen() {
     <View>
       {/* PHASE 5 election positioning UI */}
       <View style={styles.midtermsBanner}>
-        <Text style={styles.midtermsBannerTitle}>2026 midterms watch</Text>
+        <Text style={styles.midtermsBannerTitle}>2026 Midterms Watch</Text>
         <Text style={styles.midtermsBannerSubtitle}>The red. The blue. The truth.</Text>
       </View>
       <TextInput
         value={query}
         onChangeText={setQuery}
         placeholder="Search claims, sources, topics..."
-        placeholderTextColor={theme.colors.muted}
+        placeholderTextColor={appTheme.colors.muted}
         style={styles.searchInput}
         autoCapitalize="none"
         autoCorrect={false}
@@ -301,6 +306,8 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.45}
         ListHeaderComponent={listHeader}
@@ -331,7 +338,8 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.card,
@@ -339,7 +347,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: theme.spacing.xl,
+    paddingBottom: 92,
   },
   successBanner: {
     backgroundColor: theme.colors.successBg,
@@ -359,7 +367,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     color: theme.colors.text,
     fontSize: theme.typography.body.fontSize,
     marginBottom: theme.spacing.md,
@@ -368,25 +376,25 @@ const styles = StyleSheet.create({
   },
   // PHASE 5 election positioning UI
   midtermsBanner: {
-    backgroundColor: "#0D1B3E",
+    backgroundColor: theme.colors.banner,
     borderRadius: theme.radius.sm,
     justifyContent: "center",
     marginBottom: theme.spacing.md,
-    minHeight: 44,
+    minHeight: 62,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   midtermsBannerTitle: {
-    color: theme.colors.background,
-    fontSize: 13,
+    color: "#FFFFFF",
+    fontSize: Math.round(19 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
-    lineHeight: 17,
+    lineHeight: Math.round(24 * (theme.typography.body.fontSize / 16)),
   },
   midtermsBannerSubtitle: {
-    color: "rgba(255, 255, 255, 0.72)",
-    fontSize: 12,
+    color: "#EAF0FF",
+    fontSize: Math.round(15 * (theme.typography.body.fontSize / 16)),
     fontWeight: "400",
-    lineHeight: 16,
+    lineHeight: Math.round(20 * (theme.typography.body.fontSize / 16)),
   },
   // PHASE 3 STEP 12
   liveText: {
@@ -422,24 +430,24 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.lg,
   },
   categoryChip: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.chipInactiveBg,
     borderColor: theme.colors.border,
     borderRadius: 999,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   categoryChipSelected: {
-    backgroundColor: theme.colors.tagBg,
-    borderColor: theme.colors.tagBg,
+    backgroundColor: theme.colors.chipActiveBg,
+    borderColor: theme.colors.chipActiveBg,
   },
   categoryChipText: {
-    color: theme.colors.subtext,
+    color: theme.colors.chipInactiveText,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
   categoryChipTextSelected: {
-    color: theme.colors.tagText,
+    color: theme.colors.chipActiveText,
   },
   statePanel: {
     alignItems: "center",
@@ -487,7 +495,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   retryButtonText: {
-    color: theme.colors.background,
+    color: "#FFFFFF",
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
@@ -495,4 +503,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: theme.spacing.lg,
   },
-});
+  });
+}

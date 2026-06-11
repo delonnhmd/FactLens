@@ -3,16 +3,29 @@
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../constants/theme";
+import { useAppTheme } from "../hooks/useTheme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
   rightIcon?: ComponentProps<typeof Ionicons>["name"];
   onRightIconPress?: () => void;
+  rightAccessibilityLabel?: string;
+  rightAccessibilityHint?: string;
 }
 
-export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderProps) {
+export function Header({
+  title,
+  subtitle,
+  rightIcon,
+  onRightIconPress,
+  rightAccessibilityLabel = "Header action",
+  rightAccessibilityHint = "Tap to activate the header action",
+}: HeaderProps) {
+  const appTheme = useAppTheme();
+  const styles = createStyles(appTheme);
+
   return (
     <View style={styles.container}>
       <View style={styles.actionSlot} />
@@ -26,10 +39,10 @@ export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderP
           activeOpacity={0.75}
           onPress={onRightIconPress}
           accessibilityRole="button"
-          accessibilityLabel="Header action"
-          accessibilityHint="Tap to activate the header action"
+          accessibilityLabel={rightAccessibilityLabel}
+          accessibilityHint={rightAccessibilityHint}
         >
-          <Ionicons name={rightIcon} size={22} color="rgba(255, 255, 255, 0.7)" />
+          <Ionicons name={rightIcon} size={22} color="#FFFFFF" />
         </TouchableOpacity>
       ) : (
         <View style={styles.actionSlot} />
@@ -38,7 +51,8 @@ export function Header({ title, subtitle, rightIcon, onRightIconPress }: HeaderP
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     paddingHorizontal: theme.spacing.lg,
     // PHASE 5 STEP 6
@@ -55,20 +69,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    fontSize: 16,
+    fontSize: Math.max(16, Math.round(16 * (theme.typography.body.fontSize / 16))),
     fontWeight: "500",
-    color: theme.colors.background,
+    color: "#FFFFFF",
     textAlign: "center",
   },
   subtitle: {
     marginTop: theme.spacing.xs,
-    fontSize: 11,
-    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: Math.max(11, Math.round(11 * (theme.typography.body.fontSize / 16))),
+    color: "#EAF0FF",
   },
   actionSlot: {
     alignItems: "flex-end",
     justifyContent: "center",
     minWidth: 32,
   },
-});
-
+  });
+}
