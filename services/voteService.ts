@@ -265,6 +265,13 @@ export async function voteOnClaim(
   voteType: VoteTypeInput,
   profile?: Profile | null,
 ): Promise<ClaimVoteResult> {
+  if (profile?.is_suspended) {
+    return {
+      claim: null,
+      error: profile.suspension_reason || "This account is suspended from voting.",
+    };
+  }
+
   const claimResult = await fetchClaimById(claimId);
 
   if (claimResult.error || !claimResult.claim) {

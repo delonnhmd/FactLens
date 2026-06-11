@@ -4,8 +4,10 @@
 // PHASE 4 STEP 6
 // PHASE 4 STEP 7
 import { View, Text, StyleSheet } from "react-native";
+import { useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../constants/theme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 import type { AiCheck } from "../types/claim";
 
 const aiCheckLabels: Record<AiCheck["status"], string> = {
@@ -20,50 +22,14 @@ const aiCheckLabels: Record<AiCheck["status"], string> = {
   ERROR: "Error",
 };
 
-const stateColors: Record<AiCheck["status"], { backgroundColor: string; color: string }> = {
-  PENDING: {
-    backgroundColor: theme.colors.warningBg,
-    color: theme.colors.warning,
-  },
-  LOW_RISK: {
-    backgroundColor: theme.colors.aiBg,
-    color: theme.colors.ai,
-  },
-  MEDIUM_RISK: {
-    backgroundColor: theme.colors.warningBg,
-    color: theme.colors.warning,
-  },
-  HIGH_RISK: {
-    backgroundColor: theme.colors.dangerBg,
-    color: theme.colors.danger,
-  },
-  LIKELY_TRUE: {
-    backgroundColor: theme.colors.aiBg,
-    color: theme.colors.ai,
-  },
-  LIKELY_FAKE: {
-    backgroundColor: theme.colors.aiBg,
-    color: theme.colors.ai,
-  },
-  NEEDS_MORE_EVIDENCE: {
-    backgroundColor: theme.colors.dangerBg,
-    color: theme.colors.danger,
-  },
-  NOT_FACT_CHECKABLE: {
-    backgroundColor: theme.colors.warningBg,
-    color: theme.colors.warning,
-  },
-  ERROR: {
-    backgroundColor: theme.colors.dangerBg,
-    color: theme.colors.danger,
-  },
-};
-
 interface AiCheckBadgeProps {
   status: AiCheck["status"];
 }
 
 export function AiCheckBadge({ status }: AiCheckBadgeProps) {
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(), []);
+  const stateColors = getStateColors(appTheme);
   const colors = stateColors[status];
 
   return (
@@ -74,7 +40,49 @@ export function AiCheckBadge({ status }: AiCheckBadgeProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function getStateColors(theme: AppTheme): Record<AiCheck["status"], { backgroundColor: string; color: string }> {
+  return {
+    PENDING: {
+      backgroundColor: theme.colors.warningBg,
+      color: theme.colors.warningText,
+    },
+    LOW_RISK: {
+      backgroundColor: theme.colors.aiBg,
+      color: theme.colors.ai,
+    },
+    MEDIUM_RISK: {
+      backgroundColor: theme.colors.warningBg,
+      color: theme.colors.warningText,
+    },
+    HIGH_RISK: {
+      backgroundColor: theme.colors.dangerBg,
+      color: theme.colors.danger,
+    },
+    LIKELY_TRUE: {
+      backgroundColor: theme.colors.aiBg,
+      color: theme.colors.ai,
+    },
+    LIKELY_FAKE: {
+      backgroundColor: theme.colors.aiBg,
+      color: theme.colors.ai,
+    },
+    NEEDS_MORE_EVIDENCE: {
+      backgroundColor: theme.colors.dangerBg,
+      color: theme.colors.danger,
+    },
+    NOT_FACT_CHECKABLE: {
+      backgroundColor: theme.colors.warningBg,
+      color: theme.colors.warningText,
+    },
+    ERROR: {
+      backgroundColor: theme.colors.dangerBg,
+      color: theme.colors.danger,
+    },
+  };
+}
+
+function createStyles() {
+  return StyleSheet.create({
   badge: {
     alignItems: "center",
     alignSelf: "flex-start",
@@ -88,4 +96,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
-});
+  });
+}

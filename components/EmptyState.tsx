@@ -80,22 +80,22 @@ function createStyles(theme: AppTheme) {
     textAlign: "center",
   },
   button: {
-    backgroundColor: "#2563EB",
+    backgroundColor: theme.colors.primary,
     borderRadius: 10,
     marginTop: 4,
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
   buttonDisabled: {
-    backgroundColor: "#475569",
+    backgroundColor: theme.colors.disabledBg,
   },
   buttonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
   buttonTextDisabled: {
-    color: "#CBD5E1",
+    color: theme.colors.disabledText,
   },
   });
 }

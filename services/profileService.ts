@@ -50,6 +50,11 @@ export interface Profile {
   highest_rank_achieved: string;
   monthly_reputation_points: number;
   monthly_reset_at: string | null;
+  is_admin: boolean;
+  is_suspended: boolean;
+  suspended_at: string | null;
+  suspended_by: string | null;
+  suspension_reason: string | null;
   is_deleted: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -86,6 +91,11 @@ type ProfileRow = {
   highest_rank_achieved?: string | null;
   monthly_reputation_points?: number | null;
   monthly_reset_at?: string | null;
+  is_admin?: boolean | null;
+  is_suspended?: boolean | null;
+  suspended_at?: string | null;
+  suspended_by?: string | null;
+  suspension_reason?: string | null;
   is_deleted?: boolean | null;
   deleted_at?: string | null;
   created_at?: string | null;
@@ -178,6 +188,11 @@ function mapProfileRowToProfile(row: ProfileRow): Profile {
     highest_rank_achieved: row.highest_rank_achieved ?? row.rank_title ?? "Claim Checker",
     monthly_reputation_points: row.monthly_reputation_points ?? 0,
     monthly_reset_at: row.monthly_reset_at ?? null,
+    is_admin: Boolean(row.is_admin),
+    is_suspended: Boolean(row.is_suspended),
+    suspended_at: row.suspended_at ?? null,
+    suspended_by: row.suspended_by ?? null,
+    suspension_reason: row.suspension_reason ?? null,
     is_deleted: isDeleted,
     deleted_at: row.deleted_at ?? null,
     created_at: row.created_at ?? "",

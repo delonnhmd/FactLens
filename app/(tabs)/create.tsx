@@ -8,9 +8,10 @@ import { useRouter } from "expo-router";
 import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
 import { claimCategories } from "../../constants/claimCategories";
-import { theme } from "../../constants/theme";
+import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
+import { useAppTheme } from "../../hooks/useTheme";
 import {
   formatImageSize,
   pickImageFromCamera,
@@ -35,6 +36,8 @@ type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
 
 export default function CreateScreen() {
   const router = useRouter();
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   // PHASE 3 STEP 2
   const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
   const { createClaim } = useClaims();
@@ -94,11 +97,11 @@ export default function CreateScreen() {
 
   const titleCounterStyle = useMemo(
     () => [styles.counterText, titleOverLimit && styles.counterTextError],
-    [titleOverLimit],
+    [styles, titleOverLimit],
   );
   const descriptionCounterStyle = useMemo(
     () => [styles.counterText, descriptionOverLimit && styles.counterTextError],
-    [descriptionOverLimit],
+    [descriptionOverLimit, styles],
   );
 
   const updateField = (field: FieldName, value: string) => {
@@ -382,6 +385,22 @@ export default function CreateScreen() {
     );
   }
 
+  if (profile.is_suspended) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header title="Create Claim" subtitle="Draft a new news claim" />
+        <View style={styles.content}>
+          <View style={styles.gateCard}>
+            <Text style={styles.gateTitle}>Posting is locked.</Text>
+            <Text style={styles.gateText}>
+              {profile.suspension_reason || "This account is suspended from posting claims."}
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const username = profile.username;
   const displayName = profile.display_name || profile.username;
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
@@ -420,7 +439,7 @@ export default function CreateScreen() {
               onChangeText={(value) => updateField("title", value)}
               placeholder="What claim should the community verify?"
               style={[styles.titleInput, (errors.title || titleOverLimit) && styles.inputError]}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={appTheme.colors.muted}
               editable={!isSubmitting}
               multiline
             />
@@ -442,7 +461,7 @@ export default function CreateScreen() {
               onChangeText={(value) => updateField("description", value)}
               placeholder="Add context, what was said, and why it matters."
               style={[styles.input, styles.textArea, (errors.description || descriptionOverLimit) && styles.inputError]}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={appTheme.colors.muted}
               editable={!isSubmitting}
               multiline
             />
@@ -472,7 +491,7 @@ export default function CreateScreen() {
               onChangeText={(value) => updateField("sourceUrl", value)}
               placeholder="apple.com/news"
               style={[styles.input, errors.sourceUrl && styles.inputError]}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={appTheme.colors.muted}
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
@@ -496,7 +515,7 @@ export default function CreateScreen() {
               onChangeText={(value) => updateField("videoUrl", value)}
               placeholder="youtube.com/watch, tiktok.com, x.com, or video link"
               style={[styles.input, errors.videoUrl && styles.inputError]}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={appTheme.colors.muted}
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
@@ -581,7 +600,7 @@ export default function CreateScreen() {
                 onChangeText={(value) => updateField("politicianTag", value)}
                 placeholder="Politician name"
                 style={[styles.input, errors.politicianTag && styles.inputError]}
-                placeholderTextColor={theme.colors.muted}
+                placeholderTextColor={appTheme.colors.muted}
                 autoCapitalize="words"
                 autoCorrect={false}
                 editable={!isSubmitting}
@@ -640,7 +659,7 @@ export default function CreateScreen() {
             accessibilityState={{ disabled: submitDisabled, busy: isSubmitting }}
           >
             <Text style={styles.buttonText}>{isSubmitting ? "Uploading..." : "Post Claim"}</Text>
-            {isSubmitting ? <ActivityIndicator size="small" color={theme.colors.background} /> : null}
+            {isSubmitting ? <ActivityIndicator size="small" color={appTheme.colors.background} /> : null}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -648,7 +667,8 @@ export default function CreateScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.card,
@@ -692,7 +712,7 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: "#E0E7FF",
+    backgroundColor: theme.colors.phaseBg,
     borderRadius: 24,
     height: 48,
     justifyContent: "center",
@@ -729,8 +749,8 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
   },
   verifiedBadge: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.success,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     color: theme.colors.success,
@@ -740,15 +760,15 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
   },
   warningPanel: {
-    backgroundColor: "#FEF3C7",
-    borderColor: "#FDE68A",
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
     padding: theme.spacing.sm,
   },
   warningText: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
@@ -855,7 +875,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   categoryButtonSelected: {
-    backgroundColor: "#E0E7FF",
+    backgroundColor: theme.colors.phaseBg,
     borderColor: theme.colors.primary,
   },
   categoryButtonText: {
@@ -945,10 +965,10 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   buttonDisabled: {
-    backgroundColor: "#475569",
+    backgroundColor: theme.colors.disabledBg,
   },
   buttonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -962,4 +982,5 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
-});
+  });
+}

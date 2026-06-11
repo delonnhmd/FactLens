@@ -178,6 +178,8 @@ export interface ClaimRow {
   hidden?: boolean | null;
   hidden_reason?: string | null;
   hidden_at?: string | null;
+  is_featured?: boolean | null;
+  featured_at?: string | null;
   red_flags?: unknown;
   ai_summary?: string | null;
   created_at?: string | null;
@@ -920,6 +922,8 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     hidden: Boolean(row.hidden),
     hiddenReason: row.hidden_reason ?? null,
     hiddenAt: row.hidden_at ?? null,
+    isFeatured: Boolean(row.is_featured),
+    featuredAt: row.featured_at ?? null,
     createdAt,
     // PHASE 3 STEP 22
     // PHASE 3 STEP 25
@@ -1053,6 +1057,8 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     hidden: Boolean(row.hidden),
     hiddenReason: row.hidden_reason ?? null,
     hiddenAt: row.hidden_at ?? null,
+    isFeatured: Boolean(row.is_featured),
+    featuredAt: row.featured_at ?? null,
     createdAt,
     expiresAt: row.expires_at ?? scoreLockAt,
     userVote: null,
@@ -1638,6 +1644,14 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   }
 
   const authorProfile = profileResult.profile;
+
+  if (authorProfile.is_suspended) {
+    return {
+      claim: null,
+      error: authorProfile.suspension_reason || "This account is suspended from posting.",
+    };
+  }
+
   const payload = mapClaimToInsert(input, user.id);
   const { data, error } = await supabase.from("claims").insert(payload).select("*").single();
   console.log("CREATE_CLAIM_DATA", data);

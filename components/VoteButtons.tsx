@@ -2,7 +2,9 @@
 // PHASE 3 STEP 20E
 // Verifact UI redesign
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import { theme } from "../constants/theme";
+import { useMemo } from "react";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 import type { VoteOption } from "../types/claim";
 
 // PHASE 2 STEP 1
@@ -45,6 +47,8 @@ export function VoteButtons({
   message,
   onVote,
 }: VoteButtonsProps) {
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const activeVote = selectedVote ?? userVote ?? null;
   const isLocked = disabled || Boolean(activeVote);
   // PHASE 4 STEP 24
@@ -86,7 +90,8 @@ export function VoteButtons({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -103,7 +108,7 @@ const styles = StyleSheet.create({
     marginLeft: theme.spacing.sm,
   },
   label: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontWeight: "500",
     fontSize: 14,
   },
@@ -117,11 +122,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.warning,
   },
   disabled: {
-    backgroundColor: "#475569",
-    borderColor: "#475569",
+    backgroundColor: theme.colors.disabledBg,
+    borderColor: theme.colors.disabledBg,
   },
   disabledLabel: {
-    color: "#CBD5E1",
+    color: theme.colors.disabledText,
   },
   selected: {
     borderColor: theme.colors.text,
@@ -135,4 +140,5 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: "500",
   },
-});
+  });
+}

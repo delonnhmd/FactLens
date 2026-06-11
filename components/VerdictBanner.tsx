@@ -1,10 +1,12 @@
 // Verifact UI redesign
 import { View, Text, StyleSheet } from "react-native";
+import { useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../constants/theme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 import type { ClaimStatus } from "../types/claim";
 
-function getVerdictConfig(status: ClaimStatus) {
+function getVerdictConfig(status: ClaimStatus, theme: AppTheme) {
   if (status === "FINALIZED_TRUE" || status === "COMMUNITY_TRUE") {
     return {
       label: "Finalized true",
@@ -27,8 +29,8 @@ function getVerdictConfig(status: ClaimStatus) {
     return {
       label: "Insufficient data",
       badge: "Insufficient",
-      badgeColor: theme.colors.warning,
-      badgeTextColor: theme.colors.warningBg,
+      badgeColor: theme.colors.warningBg,
+      badgeTextColor: theme.colors.warningText,
     };
   }
 
@@ -36,8 +38,8 @@ function getVerdictConfig(status: ClaimStatus) {
     return {
       label: "Needs more evidence",
       badge: "Unsure",
-      badgeColor: theme.colors.warning,
-      badgeTextColor: theme.colors.warningBg,
+      badgeColor: theme.colors.warningBg,
+      badgeTextColor: theme.colors.warningText,
     };
   }
 
@@ -45,8 +47,8 @@ function getVerdictConfig(status: ClaimStatus) {
     return {
       label: "Early verdict candidate",
       badge: "Early",
-      badgeColor: theme.colors.warning,
-      badgeTextColor: theme.colors.warningBg,
+      badgeColor: theme.colors.warningBg,
+      badgeTextColor: theme.colors.warningText,
     };
   }
 
@@ -62,8 +64,8 @@ function getVerdictConfig(status: ClaimStatus) {
   return {
     label: "Pending",
     badge: "Pending",
-    badgeColor: theme.colors.warning,
-    badgeTextColor: theme.colors.warningBg,
+    badgeColor: theme.colors.warningBg,
+    badgeTextColor: theme.colors.warningText,
   };
 }
 
@@ -85,7 +87,9 @@ export function VerdictBanner({
   minVotesLabel,
   earlyVerdictFired,
 }: VerdictBannerProps) {
-  const config = getVerdictConfig(status);
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const config = getVerdictConfig(status, appTheme);
   const verdictIconName =
     status === "FINALIZED_TRUE" || status === "COMMUNITY_TRUE"
       ? "checkmark-circle-outline"
@@ -126,7 +130,8 @@ export function VerdictBanner({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   banner: {
     backgroundColor: theme.colors.navy,
     borderTopLeftRadius: theme.radius.md,
@@ -135,7 +140,7 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
   kicker: {
-    color: "rgba(255, 255, 255, 0.6)",
+    color: theme.colors.bannerSubtitle,
     fontSize: 11,
     fontWeight: "500",
     letterSpacing: 0,
@@ -149,7 +154,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   verdict: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     flex: 1,
     fontSize: 20,
     fontWeight: "500",
@@ -164,7 +169,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   scoreGrid: {
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
+    borderTopColor: theme.colors.border,
     borderTopWidth: 0.5,
     flexDirection: "row",
     marginTop: 14,
@@ -174,19 +179,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   scoreDivider: {
-    borderLeftColor: "rgba(255, 255, 255, 0.1)",
+    borderLeftColor: theme.colors.border,
     borderLeftWidth: 0.5,
     paddingLeft: 12,
   },
   scoreValue: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: 18,
     fontWeight: "500",
   },
   scoreLabel: {
-    color: "rgba(255, 255, 255, 0.55)",
+    color: theme.colors.bannerSubtitle,
     fontSize: 10,
     fontWeight: "400",
     marginTop: 2,
   },
-});
+  });
+}

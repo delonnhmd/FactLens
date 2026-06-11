@@ -1,7 +1,9 @@
 // Verifact UI redesign
 import { View, Text, StyleSheet } from "react-native";
 import type { DimensionValue } from "react-native";
-import { theme } from "../constants/theme";
+import { useMemo } from "react";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 
 interface VoteBreakdownBarsProps {
   votesTrue: number;
@@ -10,13 +12,14 @@ interface VoteBreakdownBarsProps {
   totalVotes: number;
 }
 
-const barConfig = [
-  { key: "true", label: "True", color: theme.colors.success },
-  { key: "fake", label: "Fake", color: theme.colors.danger },
-  { key: "unsure", label: "Not sure", color: theme.colors.warning },
-] as const;
-
 export function VoteBreakdownBars({ votesTrue, votesFake, votesUnsure, totalVotes }: VoteBreakdownBarsProps) {
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const barConfig = [
+    { key: "true", label: "True", color: appTheme.colors.success },
+    { key: "fake", label: "Fake", color: appTheme.colors.danger },
+    { key: "unsure", label: "Not sure", color: appTheme.colors.warning },
+  ] as const;
   const values = {
     true: votesTrue,
     fake: votesFake,
@@ -44,7 +47,8 @@ export function VoteBreakdownBars({ votesTrue, votesFake, votesUnsure, totalVote
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     gap: 8,
     paddingHorizontal: 14,
@@ -84,4 +88,5 @@ const styles = StyleSheet.create({
     minWidth: 18,
     textAlign: "right",
   },
-});
+  });
+}

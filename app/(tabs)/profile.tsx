@@ -324,6 +324,7 @@ export default function ProfileScreen() {
         subtitle="Your account overview"
         rightIcon="settings-outline"
         onRightIconPress={() => router.push("/settings")}
+        onRightIconLongPress={profile?.is_admin ? () => router.push("/admin/moderation") : undefined}
         rightAccessibilityLabel="Open Settings"
         rightAccessibilityHint="Opens appearance, accessibility, notification, and account settings"
       />
@@ -657,7 +658,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
-    paddingBottom: 92,
+    paddingBottom: 12,
   },
   card: {
     backgroundColor: theme.colors.background,
@@ -801,7 +802,7 @@ function createStyles(theme: AppTheme) {
     paddingVertical: 9,
   },
   smallButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: 13,
     fontWeight: "500",
   },
@@ -833,7 +834,7 @@ function createStyles(theme: AppTheme) {
   // PHASE 5 STEP 1
   rankPanel: {
     backgroundColor: theme.colors.phaseBg,
-    borderColor: "#DCD8FF",
+    borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
@@ -854,7 +855,7 @@ function createStyles(theme: AppTheme) {
     width: 36,
   },
   rankIconText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: 11,
     fontWeight: "500",
   },
@@ -872,7 +873,7 @@ function createStyles(theme: AppTheme) {
     marginTop: 2,
   },
   progressTrack: {
-    backgroundColor: "rgba(83, 74, 183, 0.18)",
+    backgroundColor: theme.colors.secondarySurface,
     borderRadius: 999,
     height: 8,
     overflow: "hidden",
@@ -1001,7 +1002,7 @@ function createStyles(theme: AppTheme) {
     fontWeight: "500",
   },
   warningText: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontWeight: "500",
   },
   errorText: {
@@ -1023,7 +1024,7 @@ function createStyles(theme: AppTheme) {
     paddingVertical: theme.spacing.md,
   },
   buttonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },

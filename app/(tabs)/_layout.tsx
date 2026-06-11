@@ -12,11 +12,17 @@ import { useAppTheme } from '../../hooks/useTheme';
 
 type IoniconName =
   | 'home-outline'
+  | 'home'
   | 'search-outline'
+  | 'search'
   | 'add-circle-outline'
+  | 'add-circle'
   | 'flame-outline'
+  | 'flame'
   | 'trophy-outline'
-  | 'person-outline';
+  | 'trophy'
+  | 'person-outline'
+  | 'person';
 
 function TabIcon({
   name,
@@ -47,11 +53,15 @@ function VisibleTabs() {
   const { showTabBar, tabBarAnimatedStyle } = useScrollAwareTabBar();
   const tabBarBottomInset = Platform.OS === 'ios' ? insets.bottom : 0;
   const tabBarBaseStyle = {
-    height: 56 + tabBarBottomInset,
-    paddingBottom: Math.max(tabBarBottomInset, 6),
-    paddingTop: 5,
+    position: 'absolute' as const,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 54 + tabBarBottomInset,
+    paddingBottom: tabBarBottomInset,
+    paddingTop: 4,
     borderTopWidth: appTheme.borderWidth,
-    borderTopColor: 'rgba(148,163,184,0.2)',
+    borderTopColor: appTheme.colors.lightBorder,
     backgroundColor: appTheme.colors.tabBar,
     elevation: 0,
     shadowOpacity: 0,
@@ -68,13 +78,9 @@ function VisibleTabs() {
         tabBarActiveTintColor: appTheme.colors.primary,
         tabBarInactiveTintColor: appTheme.colors.tabInactive,
         tabBarStyle: [tabBarBaseStyle, tabBarAnimatedStyle] as any,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-          marginBottom: 1,
-        },
+        tabBarShowLabel: false,
         tabBarIconStyle: {
-          marginTop: 2,
+          marginTop: 0,
         },
       }}
     >
@@ -82,9 +88,8 @@ function VisibleTabs() {
         name="index"
         options={{
           title: 'Home',
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="home-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "home" : "home-outline"} color={color} size={25} />
           ),
         }}
       />
@@ -93,9 +98,8 @@ function VisibleTabs() {
         name="search"
         options={{
           title: 'Search',
-          tabBarLabel: 'Search',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="search-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "search" : "search-outline"} color={color} size={25} />
           ),
         }}
       />
@@ -104,9 +108,8 @@ function VisibleTabs() {
         name="create"
         options={{
           title: 'Create',
-          tabBarLabel: 'Create',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="add-circle-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "add-circle" : "add-circle-outline"} color={color} size={28} />
           ),
         }}
       />
@@ -115,9 +118,8 @@ function VisibleTabs() {
         name="trending"
         options={{
           title: 'Trending',
-          tabBarLabel: 'Trending',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="flame-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "flame" : "flame-outline"} color={color} size={25} />
           ),
         }}
       />
@@ -126,9 +128,8 @@ function VisibleTabs() {
         name="leaderboard"
         options={{
           title: 'Leaderboard',
-          tabBarLabel: 'Ranks',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="trophy-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "trophy" : "trophy-outline"} color={color} size={25} />
           ),
         }}
       />
@@ -137,9 +138,8 @@ function VisibleTabs() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <TabIcon name="person-outline" color={color} size={size} />
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "person" : "person-outline"} color={color} size={25} />
           ),
         }}
       />

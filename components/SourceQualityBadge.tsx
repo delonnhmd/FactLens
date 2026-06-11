@@ -3,11 +3,13 @@
 // PHASE 4 STEP 18
 // Source trust label update
 import { View, Text, StyleSheet } from "react-native";
+import { useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../constants/theme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 import type { SourceQuality, SourceQualityLabel } from "../services/sourceQuality";
 
-function getQualityColors(label: SourceQualityLabel) {
+function getQualityColors(label: SourceQualityLabel, theme: AppTheme) {
   if (label === "Highly Trusted") {
     return {
       backgroundColor: theme.colors.successBg,
@@ -27,8 +29,8 @@ function getQualityColors(label: SourceQualityLabel) {
   if (label === "Moderate" || label === "Use Caution") {
     return {
       backgroundColor: theme.colors.warningBg,
-      color: theme.colors.warning,
-      borderColor: theme.colors.warningBg,
+      color: theme.colors.warningText,
+      borderColor: theme.colors.warningBorder,
     };
   }
 
@@ -53,7 +55,9 @@ interface SourceQualityBadgeProps {
 }
 
 export function SourceQualityBadge({ quality, showScore = false }: SourceQualityBadgeProps) {
-  const colors = getQualityColors(quality.label);
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const colors = getQualityColors(quality.label, appTheme);
 
   return (
     <View
@@ -74,12 +78,13 @@ export function SourceQualityBadge({ quality, showScore = false }: SourceQuality
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   badge: {
     alignItems: "center",
     alignSelf: "flex-start",
     borderRadius: 999,
-    borderWidth: 0.5,
+    borderWidth: theme.borderWidth,
     flexDirection: "row",
     gap: 4,
     paddingHorizontal: 9,
@@ -89,4 +94,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
-});
+  });
+}

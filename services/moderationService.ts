@@ -15,27 +15,25 @@ export interface ModerationReport {
   target?: Record<string, unknown> | null;
 }
 
-async function getAdminHeaders(adminKey: string): Promise<Record<string, string> | null> {
+async function getAdminHeaders(): Promise<Record<string, string> | null> {
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;
 
-  if (!accessToken || !adminKey.trim()) {
+  if (!accessToken) {
     return null;
   }
 
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${accessToken}`,
-    "x-admin-key": adminKey.trim(),
   };
 }
 
 export async function fetchModerationReports(
-  adminKey: string,
   status = "OPEN",
 ): Promise<{ reports: ModerationReport[]; error?: string }> {
   const backendUrl = getBackendUrl();
-  const headers = await getAdminHeaders(adminKey);
+  const headers = await getAdminHeaders();
 
   if (!backendUrl || !headers) {
     return { reports: [], error: "Admin access required." };
@@ -62,12 +60,11 @@ export async function fetchModerationReports(
 }
 
 export async function resolveModerationReport(
-  adminKey: string,
   reportId: string,
   options: { status?: string; hideTarget?: boolean; adminNote?: string } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const backendUrl = getBackendUrl();
-  const headers = await getAdminHeaders(adminKey);
+  const headers = await getAdminHeaders();
 
   if (!backendUrl || !headers) {
     return { ok: false, error: "Admin access required." };
@@ -96,12 +93,11 @@ export async function resolveModerationReport(
 }
 
 export async function restoreModerationTarget(
-  adminKey: string,
   targetType: "CLAIM" | "EVIDENCE",
   targetId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const backendUrl = getBackendUrl();
-  const headers = await getAdminHeaders(adminKey);
+  const headers = await getAdminHeaders();
 
   if (!backendUrl || !headers) {
     return { ok: false, error: "Admin access required." };
@@ -123,4 +119,67 @@ export async function restoreModerationTarget(
   } catch {
     return { ok: false, error: "Could not restore content." };
   }
+}
+
+async function postAdminAction(path: string, body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  const backendUrl = getBackendUrl();
+  const headers = await getAdminHeaders();
+
+  if (!backendUrl || !headers) {
+    return { ok: false, error: "Admin access required." };
+  }
+
+  try {
+    const response = await fetch(`${backendUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    const json = (await response.json().catch(() => ({}))) as { ok?: boolean; detail?: string };
+
+    if (!response.ok || !json.ok) {
+      return { ok: false, error: json.detail || "Could not complete admin action." };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not complete admin action." };
+  }
+}
+
+export function hideClaim(claimId: string, reason: string) {
+  return postAdminAction("/admin/content/hide", {
+    target_type: "CLAIM",
+    target_id: claimId,
+    reason,
+  });
+}
+
+export function deleteClaimAsAdmin(claimId: string, reason: string) {
+  return postAdminAction("/admin/claims/delete", {
+    claim_id: claimId,
+    reason,
+  });
+}
+
+export function lockClaimVoting(claimId: string, reason: string) {
+  return postAdminAction("/admin/claims/lock-voting", {
+    claim_id: claimId,
+    reason,
+  });
+}
+
+export function markClaimFeatured(claimId: string, featured: boolean) {
+  return postAdminAction("/admin/claims/feature", {
+    claim_id: claimId,
+    featured,
+  });
+}
+
+export function suspendUser(userId: string, reason: string) {
+  return postAdminAction("/admin/users/suspend", {
+    user_id: userId,
+    reason,
+    suspended: true,
+  });
 }

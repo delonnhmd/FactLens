@@ -36,4 +36,8 @@ export interface User {
   // PHASE 5 STEP 4
   isDeleted?: boolean;
   deletedAt?: string | null;
+  isAdmin?: boolean;
+  isSuspended?: boolean;
+  suspendedAt?: string | null;
+  suspensionReason?: string | null;
 }

@@ -347,7 +347,7 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 92,
+    paddingBottom: 12,
   },
   successBanner: {
     backgroundColor: theme.colors.successBg,
@@ -385,13 +385,13 @@ function createStyles(theme: AppTheme) {
     paddingVertical: theme.spacing.sm,
   },
   midtermsBannerTitle: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: Math.round(19 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
     lineHeight: Math.round(24 * (theme.typography.body.fontSize / 16)),
   },
   midtermsBannerSubtitle: {
-    color: "#EAF0FF",
+    color: theme.colors.bannerSubtitle,
     fontSize: Math.round(15 * (theme.typography.body.fontSize / 16)),
     fontWeight: "400",
     lineHeight: Math.round(20 * (theme.typography.body.fontSize / 16)),
@@ -412,7 +412,7 @@ function createStyles(theme: AppTheme) {
   aiNoticeBanner: {
     alignSelf: "flex-start",
     backgroundColor: theme.colors.warningBg,
-    borderColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
     borderRadius: 999,
     borderWidth: 1,
     marginBottom: theme.spacing.md,
@@ -420,7 +420,7 @@ function createStyles(theme: AppTheme) {
     paddingVertical: theme.spacing.sm,
   },
   aiNoticeText: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontSize: 11,
     fontWeight: "500",
   },
@@ -495,7 +495,7 @@ function createStyles(theme: AppTheme) {
     paddingVertical: theme.spacing.sm,
   },
   retryButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },

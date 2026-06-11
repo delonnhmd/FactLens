@@ -218,7 +218,7 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 92,
+    paddingBottom: 12,
   },
   filterRow: {
     gap: theme.spacing.sm,

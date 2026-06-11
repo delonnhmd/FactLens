@@ -380,6 +380,13 @@ export async function addEvidence(
     };
   }
 
+  if (profileResult.profile.is_suspended) {
+    return {
+      evidence: null,
+      error: profileResult.profile.suspension_reason || "This account is suspended from adding evidence.",
+    };
+  }
+
   const normalizedUrl = normalizeUrl(input.url);
   const normalizedEvidenceType = normalizeEvidenceType(input.type);
   const sourceQuality = getSourceQuality(normalizedUrl);

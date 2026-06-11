@@ -1,7 +1,9 @@
 // Verifact UI redesign
 import { View, Text, StyleSheet } from "react-native";
+import { useMemo } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { theme } from "../constants/theme";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 
 interface PhaseStatusRowProps {
   timeLabel: string;
@@ -9,10 +11,13 @@ interface PhaseStatusRowProps {
 }
 
 export function PhaseStatusRow({ timeLabel, phaseLabel }: PhaseStatusRowProps) {
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+
   return (
     <View style={styles.row}>
       <View style={styles.left}>
-        <Ionicons name="time-outline" size={13} color={theme.colors.subtext} />
+        <Ionicons name="time-outline" size={13} color={appTheme.colors.subtext} />
         <Text style={styles.timeText}>{timeLabel}</Text>
       </View>
       <View style={styles.phasePill}>
@@ -22,7 +27,8 @@ export function PhaseStatusRow({ timeLabel, phaseLabel }: PhaseStatusRowProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   row: {
     alignItems: "center",
     backgroundColor: theme.colors.secondarySurface,
@@ -56,4 +62,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
-});
+  });
+}

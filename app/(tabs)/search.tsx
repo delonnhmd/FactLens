@@ -44,7 +44,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
-    paddingBottom: 92,
+    paddingBottom: 12,
   },
   searchBox: {
     borderWidth: theme.borderWidth,

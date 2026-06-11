@@ -43,6 +43,7 @@ export type AppTheme = {
   spacing: typeof spacing;
   radius: typeof radius;
   typography: ReturnType<typeof createTypography>;
+  shadows: typeof shadows;
 };
 
 type NotificationSettings = {
@@ -76,6 +77,12 @@ const radius = {
   xl: 24,
 };
 
+const shadows = {
+  light: {},
+  medium: {},
+  heavy: {},
+};
+
 const lightColors = {
   navy: "#0D1B3E",
   primary: "#2563EB",
@@ -83,8 +90,10 @@ const lightColors = {
   successBg: "#E1F5EE",
   danger: "#E24B4A",
   dangerBg: "#FCEBEB",
-  warning: "#EF9F27",
-  warningBg: "#FAEEDA",
+  warning: "#B45309",
+  warningBg: "#FFF4D6",
+  warningBorder: "#D97706",
+  warningText: "#5F370E",
   ai: "#534AB7",
   aiBg: "#EEEDFE",
   tagBg: "#EAF3DE",
@@ -124,8 +133,10 @@ const darkColors = {
   successBg: "#0F2F24",
   danger: "#FCA5A5",
   dangerBg: "#3F171E",
-  warning: "#FACC15",
-  warningBg: "#3F3E0E",
+  warning: "#FBBF24",
+  warningBg: "#3A2118",
+  warningBorder: "#9A6B32",
+  warningText: "#FFE8B5",
   ai: "#C7D2FE",
   aiBg: "#111827",
   tagBg: "#1E293B",
@@ -162,6 +173,7 @@ const highContrastDarkColors: typeof darkColors = {
   ...darkColors,
   subtext: "#E2E8F0",
   muted: "#E2E8F0",
+  warningText: "#FFF7D6",
   chipInactiveText: "#E2E8F0",
   tabInactive: "#E2E8F0",
 };
@@ -210,6 +222,7 @@ function createAppTheme({
     spacing,
     radius,
     typography: createTypography(textScale),
+    shadows,
   };
 }
 

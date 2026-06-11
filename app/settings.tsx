@@ -114,7 +114,7 @@ export default function SettingsScreen() {
           accessibilityLabel="Back"
           accessibilityHint="Returns to the previous screen"
         >
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={22} color={appTheme.colors.chipActiveText} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.headerButton} />
@@ -264,8 +264,8 @@ function SettingsToggle({
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: "#475569", true: "#2563EB" }}
-        thumbColor="#FFFFFF"
+        trackColor={{ false: styles.switchTrackOff.color, true: styles.switchTrackOn.color }}
+        thumbColor={styles.switchThumb.color}
         accessibilityLabel={label}
       />
     </View>
@@ -296,7 +296,7 @@ function SettingsLink({
       accessibilityState={{ disabled }}
     >
       <Text style={[styles.rowLabel, danger && styles.dangerText]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={17} color={danger ? "#E24B4A" : styles.iconColor.color} />
+      <Ionicons name="chevron-forward" size={17} color={danger ? styles.dangerText.color : styles.iconColor.color} />
     </TouchableOpacity>
   );
 }
@@ -322,7 +322,7 @@ function createStyles(theme: AppTheme) {
       width: 44,
     },
     headerTitle: {
-      color: "#FFFFFF",
+      color: theme.colors.chipActiveText,
       fontSize: Math.round(20 * (theme.typography.body.fontSize / 16)),
       fontWeight: "500",
     },
@@ -341,7 +341,7 @@ function createStyles(theme: AppTheme) {
       paddingHorizontal: 4,
     },
     sectionCard: {
-      backgroundColor: theme.isDark ? "#111827" : "#FFFFFF",
+      backgroundColor: theme.colors.background,
       borderColor: theme.colors.lightBorder,
       borderRadius: 12,
       borderWidth: theme.borderWidth,
@@ -372,7 +372,7 @@ function createStyles(theme: AppTheme) {
       paddingVertical: 9,
     },
     segmentSelected: {
-      backgroundColor: "#2563EB",
+      backgroundColor: theme.colors.primary,
     },
     segmentText: {
       color: theme.colors.subtext,
@@ -380,7 +380,7 @@ function createStyles(theme: AppTheme) {
       fontWeight: "500",
     },
     segmentTextSelected: {
-      color: "#FFFFFF",
+      color: theme.colors.chipActiveText,
     },
     row: {
       alignItems: "center",
@@ -415,10 +415,19 @@ function createStyles(theme: AppTheme) {
       fontWeight: "500",
     },
     dangerText: {
-      color: "#E24B4A",
+      color: theme.colors.danger,
     },
     iconColor: {
       color: theme.colors.subtext,
+    },
+    switchTrackOff: {
+      color: theme.colors.disabledBg,
+    },
+    switchTrackOn: {
+      color: theme.colors.primary,
+    },
+    switchThumb: {
+      color: theme.colors.chipActiveText,
     },
   });
 }

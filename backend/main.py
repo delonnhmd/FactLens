@@ -726,6 +726,18 @@ class AdminContentVisibilityRequest(BaseModel):
     reason: str = ""
 
 
+class AdminClaimActionRequest(BaseModel):
+    claim_id: str = ""
+    reason: str = ""
+    featured: bool = True
+
+
+class AdminUserActionRequest(BaseModel):
+    user_id: str = ""
+    reason: str = ""
+    suspended: bool = True
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -934,7 +946,7 @@ def delete_account(request: Request):
 # PHASE 5 STEP 2
 @app.get("/admin/reports")
 def admin_list_reports(request: Request, status: str = "OPEN", limit: int = 50):
-    require_admin_key(request)
+    require_admin_user(request)
     safe_limit = max(1, min(100, int(limit or 50)))
     report_status = status.strip().upper() if status else "OPEN"
     supabase = get_supabase_client()
@@ -957,13 +969,13 @@ def admin_list_reports(request: Request, status: str = "OPEN", limit: int = 50):
         target_type = report.get("target_type") or "CLAIM"
         target = None
         if target_type == "CLAIM" and report.get("claim_id"):
-            target_result = supabase.table("claims").select("id,title,hidden,hidden_reason,created_at").eq("id", report["claim_id"]).execute()
+            target_result = supabase.table("claims").select("id,title,author_id,hidden,hidden_reason,is_featured,created_at").eq("id", report["claim_id"]).execute()
             target = (target_result.data or [None])[0]
         elif target_type == "EVIDENCE" and report.get("evidence_id"):
-            target_result = supabase.table("evidence").select("id,note,url,hidden,hidden_reason,created_at").eq("id", report["evidence_id"]).execute()
+            target_result = supabase.table("evidence").select("id,note,url,user_id,hidden,hidden_reason,created_at").eq("id", report["evidence_id"]).execute()
             target = (target_result.data or [None])[0]
         elif target_type == "PROFILE" and report.get("profile_id"):
-            target_result = supabase.table("profiles").select("id,username,display_name,profile_visibility,created_at").eq("id", report["profile_id"]).execute()
+            target_result = supabase.table("profiles").select("id,username,display_name,profile_visibility,is_suspended,created_at").eq("id", report["profile_id"]).execute()
             target = (target_result.data or [None])[0]
 
         report["target"] = target
@@ -974,8 +986,7 @@ def admin_list_reports(request: Request, status: str = "OPEN", limit: int = 50):
 # PHASE 5 STEP 2
 @app.post("/admin/reports/{report_id}/resolve")
 def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, request: Request):
-    require_admin_key(request)
-    admin_user_id = get_authenticated_user_id(request)
+    admin_user_id = require_admin_user(request)
     supabase = get_supabase_client()
     next_status = payload.status.strip().upper() if payload.status else "RESOLVED"
 
@@ -1031,8 +1042,7 @@ def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, requ
 # PHASE 5 STEP 3
 @app.post("/admin/content/hide")
 def admin_hide_content(payload: AdminContentVisibilityRequest, request: Request):
-    require_admin_key(request)
-    admin_user_id = get_authenticated_user_id(request)
+    admin_user_id = require_admin_user(request)
     target_type = payload.target_type.strip().upper()
     target_id = payload.target_id.strip()
     reason = payload.reason.strip() or "Removed for violating community guidelines."
@@ -1061,8 +1071,7 @@ def admin_hide_content(payload: AdminContentVisibilityRequest, request: Request)
 # PHASE 5 STEP 3
 @app.post("/admin/content/restore")
 def admin_restore_content(payload: AdminContentVisibilityRequest, request: Request):
-    require_admin_key(request)
-    get_authenticated_user_id(request)
+    require_admin_user(request)
     target_type = payload.target_type.strip().upper()
     target_id = payload.target_id.strip()
     supabase = get_supabase_client()
@@ -1087,10 +1096,108 @@ def admin_restore_content(payload: AdminContentVisibilityRequest, request: Reque
     return {"ok": True, "target_type": target_type, "target_id": target_id, "updated": len(result.data or [])}
 
 
+@app.post("/admin/claims/delete")
+def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
+    require_admin_user(request)
+    claim_id = payload.claim_id.strip()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    supabase = get_supabase_client()
+    result = supabase.table("claims").delete().eq("id", claim_id).execute()
+
+    return {"ok": True, "claim_id": claim_id, "deleted": len(result.data or [])}
+
+
+@app.post("/admin/claims/lock-voting")
+def admin_lock_claim_voting(payload: AdminClaimActionRequest, request: Request):
+    require_admin_user(request)
+    claim_id = payload.claim_id.strip()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("claims")
+        .update({
+            "status": "LOCKED",
+            "phase4_locked": True,
+            "vote_accept_until": now_iso,
+            "score_lock_at": now_iso,
+            "verdict_reason": payload.reason.strip() or "Voting locked by admin.",
+            "updated_at": now_iso,
+        })
+        .eq("id", claim_id)
+        .execute()
+    )
+
+    return {"ok": True, "claim_id": claim_id, "updated": len(result.data or [])}
+
+
+@app.post("/admin/claims/feature")
+def admin_feature_claim(payload: AdminClaimActionRequest, request: Request):
+    admin_user_id = require_admin_user(request)
+    claim_id = payload.claim_id.strip()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    featured = bool(payload.featured)
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("claims")
+        .update({
+            "is_featured": featured,
+            "featured_at": now_iso if featured else None,
+            "featured_by": admin_user_id if featured else None,
+            "updated_at": now_iso,
+        })
+        .eq("id", claim_id)
+        .execute()
+    )
+
+    return {"ok": True, "claim_id": claim_id, "featured": featured, "updated": len(result.data or [])}
+
+
+@app.post("/admin/users/suspend")
+def admin_suspend_user(payload: AdminUserActionRequest, request: Request):
+    admin_user_id = require_admin_user(request)
+    target_user_id = payload.user_id.strip()
+
+    if not target_user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+
+    suspended = bool(payload.suspended)
+
+    if suspended and target_user_id == admin_user_id:
+        raise HTTPException(status_code=400, detail="Admins cannot suspend their own account.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("profiles")
+        .update({
+            "is_suspended": suspended,
+            "suspended_at": now_iso if suspended else None,
+            "suspended_by": admin_user_id if suspended else None,
+            "suspension_reason": payload.reason.strip() if suspended and payload.reason.strip() else None,
+            "updated_at": now_iso,
+        })
+        .eq("id", target_user_id)
+        .execute()
+    )
+
+    return {"ok": True, "user_id": target_user_id, "suspended": suspended, "updated": len(result.data or [])}
+
+
 # PHASE 5 STEP 1C
 @app.post("/admin/reputation/reset-monthly")
 def admin_reset_monthly_reputation(request: Request):
-    require_admin_key(request)
+    require_admin_user(request)
     supabase = get_supabase_client()
     now_iso = datetime.now(timezone.utc).isoformat()
     result = (
@@ -1114,7 +1221,7 @@ def admin_reset_monthly_reputation(request: Request):
 # PHASE 5 STEP 1B
 @app.post("/admin/claims/override")
 def admin_override_claim(payload: AdminOverrideRequest, request: Request):
-    require_admin_key(request)
+    require_admin_user(request)
     claim_id = payload.claim_id.strip()
     new_status = payload.new_status.strip().upper()
 
@@ -1296,16 +1403,25 @@ def get_authenticated_user_id(request: Request) -> str:
 
 
 # PHASE 5 STEP 1B
-def require_admin_key(request: Request) -> None:
-    expected_key = os.environ.get("FACTLENS_ADMIN_API_KEY", "")
+def require_admin_user(request: Request) -> str:
+    authenticated_user_id = get_authenticated_user_id(request)
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("profiles")
+        .select("id,is_admin,is_suspended,is_deleted")
+        .eq("id", authenticated_user_id)
+        .limit(1)
+        .execute()
+    )
+    profile = (result.data or [None])[0]
 
-    if not expected_key:
-        raise HTTPException(status_code=503, detail="Admin actions are not configured.")
-
-    provided_key = request.headers.get("x-admin-key", "")
-
-    if provided_key != expected_key:
+    if not profile or not profile.get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required.")
+
+    if profile.get("is_suspended") or profile.get("is_deleted"):
+        raise HTTPException(status_code=403, detail="Admin account is not active.")
+
+    return authenticated_user_id
 
 
 # PHASE 4 STEP 5B

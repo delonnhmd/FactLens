@@ -90,7 +90,7 @@ export function TabBarVisibilityProvider({ children }: { children: ReactNode }) 
         {
           translateY: visibility.interpolate({
             inputRange: [0, 1],
-            outputRange: [72, 0],
+            outputRange: [96, 0],
           }),
         },
       ],
@@ -125,7 +125,7 @@ export function useScrollAwareTabBar(): TabBarVisibilityContextValue {
           {
             translateY: visibility.interpolate({
               inputRange: [0, 1],
-              outputRange: [72, 0],
+              outputRange: [96, 0],
             }),
           },
         ],

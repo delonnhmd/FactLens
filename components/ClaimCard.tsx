@@ -147,16 +147,16 @@ function getSourceDomain(sourceUrl: string): string {
   }
 }
 
-function getAiDotColor(claim: Claim): string {
+function getAiDotColor(claim: Claim, theme: AppTheme): string {
   if (claim.isFlagged) {
-    return "#E24B4A";
+    return theme.colors.danger;
   }
 
   if (claim.aiCheck.status === "PENDING" || claim.claimType === "OPINION") {
-    return "#EF9F27";
+    return theme.colors.warning;
   }
 
-  return "#534AB7";
+  return theme.colors.ai;
 }
 
 function getAiSummary(claim: Claim): string {
@@ -381,7 +381,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       </TouchableOpacity>
 
       <View style={styles.aiStrip}>
-        <View style={[styles.aiDot, { backgroundColor: getAiDotColor(claim) }]} />
+        <View style={[styles.aiDot, { backgroundColor: getAiDotColor(claim, appTheme) }]} />
         <Text style={styles.aiSummary} numberOfLines={1}>
           {aiSummary}
         </Text>
@@ -494,7 +494,7 @@ function createStyles(theme: AppTheme) {
   // PHASE 5 election positioning UI
   liveBadge: {
     alignItems: "center",
-    backgroundColor: "#FCEBEB",
+    backgroundColor: theme.colors.dangerBg,
     borderRadius: 999,
     flexDirection: "row",
     gap: 5,
@@ -502,12 +502,12 @@ function createStyles(theme: AppTheme) {
     paddingVertical: 4,
   },
   liveBadgeText: {
-    color: "#E24B4A",
+    color: theme.colors.danger,
     fontSize: 11,
     fontWeight: "500",
   },
   liveDot: {
-    backgroundColor: "#E24B4A",
+    backgroundColor: theme.colors.danger,
     borderRadius: 4,
     height: 7,
     width: 7,
@@ -544,7 +544,7 @@ function createStyles(theme: AppTheme) {
   },
   verdictEvidence: {
     backgroundColor: theme.colors.warningBg,
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
   },
   verdictTrue: {
     backgroundColor: theme.colors.successBg,
@@ -583,7 +583,7 @@ function createStyles(theme: AppTheme) {
   },
   sourcePillAmber: {
     backgroundColor: theme.colors.warningBg,
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
   },
   sourcePillRed: {
     backgroundColor: theme.colors.dangerBg,

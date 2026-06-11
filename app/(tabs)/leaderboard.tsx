@@ -175,7 +175,7 @@ export default function LeaderboardScreen() {
                   </View>
                 </View>
                 <View style={styles.pointsBox}>
-                  <Ionicons name="sparkles-outline" size={14} color="#94A3B8" />
+                  <Ionicons name="sparkles-outline" size={14} color={appTheme.colors.subtext} />
                   <Text style={styles.points}>{formatPoints(user.points)}</Text>
                 </View>
               </TouchableOpacity>
@@ -195,7 +195,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
-    paddingBottom: 92,
+    paddingBottom: 12,
   },
   tabRow: {
     backgroundColor: theme.colors.background,
@@ -222,11 +222,11 @@ function createStyles(theme: AppTheme) {
     fontWeight: "500",
   },
   tabTextSelected: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
   },
   card: {
-    backgroundColor: "#111827",
-    borderColor: "#334155",
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
     borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth,
     overflow: "hidden",
@@ -240,8 +240,8 @@ function createStyles(theme: AppTheme) {
   },
   row: {
     alignItems: "center",
-    backgroundColor: "#111827",
-    borderBottomColor: "#334155",
+    backgroundColor: theme.colors.background,
+    borderBottomColor: theme.colors.lightBorder,
     borderBottomWidth: theme.borderWidth,
     flexDirection: "row",
     gap: theme.spacing.md,
@@ -249,13 +249,13 @@ function createStyles(theme: AppTheme) {
     paddingVertical: 12,
   },
   currentUserRow: {
-    borderLeftColor: "#2563EB",
+    borderLeftColor: theme.colors.primary,
     borderLeftWidth: 3,
   },
   position: {
     alignItems: "center",
-    backgroundColor: "#1E293B",
-    borderColor: "#334155",
+    backgroundColor: theme.colors.secondarySurface,
+    borderColor: theme.colors.lightBorder,
     borderWidth: theme.borderWidth,
     borderRadius: 16,
     height: 32,
@@ -263,36 +263,36 @@ function createStyles(theme: AppTheme) {
     width: 32,
   },
   positionText: {
-    color: "#FFFFFF",
+    color: theme.colors.text,
     fontSize: 13,
     fontWeight: "500",
   },
   positionGold: {
-    backgroundColor: "#EF9F27",
-    borderColor: "#F8C46B",
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
     borderWidth: 2,
   },
   positionSilver: {
-    borderColor: "#CBD5E1",
+    borderColor: theme.colors.subtext,
     borderWidth: 2,
   },
   positionBronze: {
-    borderColor: "#C47C35",
+    borderColor: theme.colors.warningBorder,
     borderWidth: 2,
   },
   positionTextGold: {
-    color: "#1A1300",
+    color: theme.colors.warningText,
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: "#1E293B",
+    backgroundColor: theme.colors.leaderboardAvatar,
     borderRadius: 15,
     height: 30,
     justifyContent: "center",
     width: 30,
   },
   avatarText: {
-    color: "#FFFFFF",
+    color: theme.colors.leaderboardAvatarText,
     fontSize: 12,
     fontWeight: "500",
   },
@@ -300,7 +300,7 @@ function createStyles(theme: AppTheme) {
     flex: 1,
   },
   username: {
-    color: "#FFFFFF",
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -312,7 +312,7 @@ function createStyles(theme: AppTheme) {
     marginTop: 4,
   },
   rankTitle: {
-    color: "#94A3B8",
+    color: theme.colors.subtext,
     fontSize: 12,
     fontWeight: "400",
   },
@@ -330,7 +330,7 @@ function createStyles(theme: AppTheme) {
     gap: 3,
   },
   points: {
-    color: "#FFFFFF",
+    color: theme.colors.text,
     fontSize: 13,
     fontWeight: "500",
   },

@@ -11,6 +11,7 @@ interface HeaderProps {
   subtitle?: string;
   rightIcon?: ComponentProps<typeof Ionicons>["name"];
   onRightIconPress?: () => void;
+  onRightIconLongPress?: () => void;
   rightAccessibilityLabel?: string;
   rightAccessibilityHint?: string;
 }
@@ -20,6 +21,7 @@ export function Header({
   subtitle,
   rightIcon,
   onRightIconPress,
+  onRightIconLongPress,
   rightAccessibilityLabel = "Header action",
   rightAccessibilityHint = "Tap to activate the header action",
 }: HeaderProps) {
@@ -38,11 +40,12 @@ export function Header({
           style={styles.actionSlot}
           activeOpacity={0.75}
           onPress={onRightIconPress}
+          onLongPress={onRightIconLongPress}
           accessibilityRole="button"
           accessibilityLabel={rightAccessibilityLabel}
           accessibilityHint={rightAccessibilityHint}
         >
-          <Ionicons name={rightIcon} size={22} color="#FFFFFF" />
+          <Ionicons name={rightIcon} size={22} color={appTheme.colors.chipActiveText} />
         </TouchableOpacity>
       ) : (
         <View style={styles.actionSlot} />
@@ -71,13 +74,13 @@ function createStyles(theme: AppTheme) {
   title: {
     fontSize: Math.max(16, Math.round(16 * (theme.typography.body.fontSize / 16))),
     fontWeight: "500",
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     textAlign: "center",
   },
   subtitle: {
     marginTop: theme.spacing.xs,
     fontSize: Math.max(11, Math.round(11 * (theme.typography.body.fontSize / 16))),
-    color: "#EAF0FF",
+    color: theme.colors.bannerSubtitle,
   },
   actionSlot: {
     alignItems: "center",

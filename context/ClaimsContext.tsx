@@ -906,6 +906,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    if (authorProfile?.is_suspended) {
+      throw new Error(authorProfile.suspension_reason || "This account is suspended from posting.");
+    }
+
     // PHASE 4 STEP 13
     // PHASE 4 STEP 13B
     let result = await createRemoteClaim({
@@ -1048,6 +1052,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       if (!votingProfile) {
         throw new Error("Profile missing.");
+      }
+
+      if (votingProfile.is_suspended) {
+        throw new Error(votingProfile.suspension_reason || "This account is suspended from voting.");
       }
 
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);
@@ -1241,6 +1249,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
           throw new Error("Profile required to add evidence.");
         }
 
+        if (evidenceProfile.is_suspended) {
+          throw new Error(evidenceProfile.suspension_reason || "This account is suspended from adding evidence.");
+        }
+
         const addResult = await addRemoteEvidence(claimId, currentUser.id, evidenceInput);
 
         if (addResult.error || !addResult.evidence) {
@@ -1334,6 +1346,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       if (!reportProfile) {
         throw new Error("Profile required to report claims.");
+      }
+
+      if (reportProfile.is_suspended) {
+        throw new Error(reportProfile.suspension_reason || "This account is suspended from reporting.");
       }
 
       const existingClaim = currentClaims.find((claim) => claim.id === claimId);

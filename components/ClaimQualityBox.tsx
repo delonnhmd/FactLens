@@ -1,7 +1,9 @@
 // PHASE 4 STEP 11
 // PHASE 4 STEP 11 REVISED
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { theme } from "../constants/theme";
+import { useMemo } from "react";
+import type { AppTheme } from "../context/DisplaySettingsContext";
+import { useAppTheme } from "../hooks/useTheme";
 import type { ClaimDraftAnalysis, ClaimDraftQualityLevel } from "../utils/claimQuality";
 
 type ClaimQualityBoxProps = {
@@ -16,6 +18,8 @@ const qualityCopy: Record<ClaimDraftQualityLevel, string> = {
 };
 
 export function ClaimQualityBox({ analysis, onUseSuggestedTitle }: ClaimQualityBoxProps) {
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const canUseSuggestedTitle = Boolean(analysis.rewrittenTitle && onUseSuggestedTitle);
 
   return (
@@ -54,7 +58,8 @@ export function ClaimQualityBox({ analysis, onUseSuggestedTitle }: ClaimQualityB
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     borderRadius: theme.radius.sm,
     borderWidth: 1,
@@ -67,8 +72,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.success,
   },
   soft_warning: {
-    backgroundColor: theme.colors.aiBg,
-    borderColor: theme.colors.lightBorder,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
   },
   blocked: {
     backgroundColor: theme.colors.dangerBg,
@@ -78,7 +83,7 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
   },
   soft_warningText: {
-    color: theme.colors.ai,
+    color: theme.colors.warningText,
   },
   blockedText: {
     color: theme.colors.danger,
@@ -128,4 +133,5 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
   },
-});
+  });
+}

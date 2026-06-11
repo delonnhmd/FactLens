@@ -204,6 +204,8 @@ export interface Claim {
   hidden: boolean;
   hiddenReason: string | null;
   hiddenAt: string | null;
+  isFeatured?: boolean;
+  featuredAt?: string | null;
   createdAt: string;
   expiresAt: string;
   userVote: VoteOption | null;

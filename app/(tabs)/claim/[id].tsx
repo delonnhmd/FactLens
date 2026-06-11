@@ -13,7 +13,7 @@
 // PHASE 4 STEP 23
 // PHASE 5 STEP 5 PRE-LAUNCH
 // PHASE 5 STEP 6
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,7 +27,9 @@ import { VerdictBanner } from "../../../components/VerdictBanner";
 import { VoteBreakdownBars } from "../../../components/VoteBreakdownBars";
 import { useAuth } from "../../../context/AuthContext";
 import { useClaims } from "../../../context/ClaimsContext";
+import type { AppTheme } from "../../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../../context/TabBarVisibilityContext";
+import { useAppTheme } from "../../../hooks/useTheme";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../../services/claimVoting";
 import {
   formatSourceCredibilityScore,
@@ -53,7 +55,6 @@ import {
   unsubscribe,
 } from "../../../services/realtimeService";
 import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../../types/claim";
-import { theme } from "../../../constants/theme";
 import { normalizeUrl } from "../../../utils/url";
 import { getTopBadges } from "../../../utils/reputation";
 import { reportEvidence } from "../../../services/reportService";
@@ -72,28 +73,30 @@ const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
 
 const evidenceTypeOptions: EvidenceType[] = ["SUPPORTS_TRUE", "SUPPORTS_FAKE", "ADDS_CONTEXT", "UNCLEAR"];
 
-const evidenceTypeConfig: Record<EvidenceType, { label: string; backgroundColor: string; color: string }> = {
-  SUPPORTS_TRUE: {
-    label: "Supports true",
-    backgroundColor: theme.colors.successBg,
-    color: theme.colors.success,
-  },
-  SUPPORTS_FAKE: {
-    label: "Supports fake",
-    backgroundColor: theme.colors.dangerBg,
-    color: theme.colors.danger,
-  },
-  ADDS_CONTEXT: {
-    label: "Adds context",
-    backgroundColor: theme.colors.sourceBg,
-    color: theme.colors.sourceText,
-  },
-  UNCLEAR: {
-    label: "Unclear",
-    backgroundColor: theme.colors.warningBg,
-    color: theme.colors.warning,
-  },
-};
+function getEvidenceTypeConfig(theme: AppTheme): Record<EvidenceType, { label: string; backgroundColor: string; color: string }> {
+  return {
+    SUPPORTS_TRUE: {
+      label: "Supports true",
+      backgroundColor: theme.colors.successBg,
+      color: theme.colors.success,
+    },
+    SUPPORTS_FAKE: {
+      label: "Supports fake",
+      backgroundColor: theme.colors.dangerBg,
+      color: theme.colors.danger,
+    },
+    ADDS_CONTEXT: {
+      label: "Adds context",
+      backgroundColor: theme.colors.sourceBg,
+      color: theme.colors.sourceText,
+    },
+    UNCLEAR: {
+      label: "Unclear",
+      backgroundColor: theme.colors.warningBg,
+      color: theme.colors.warningText,
+    },
+  };
+}
 
 // PHASE 3 STEP 10
 const verdictLabels = {
@@ -242,7 +245,7 @@ function getSourceSupportIcon(sourceSupportsClaim: boolean | null | undefined): 
 }
 
 // PHASE 4 STEP 22
-function getSourceSupportColor(sourceSupportsClaim: boolean | null | undefined): string {
+function getSourceSupportColor(sourceSupportsClaim: boolean | null | undefined, theme: AppTheme): string {
   if (sourceSupportsClaim === true) {
     return theme.colors.success;
   }
@@ -255,7 +258,10 @@ function getSourceSupportColor(sourceSupportsClaim: boolean | null | undefined):
 }
 
 // PHASE 4 STEP 22
-function getSourceSupportTextStyle(sourceSupportsClaim: boolean | null | undefined) {
+function getSourceSupportTextStyle(
+  sourceSupportsClaim: boolean | null | undefined,
+  styles: ReturnType<typeof createStyles>,
+) {
   if (sourceSupportsClaim === true) {
     return styles.sourceSupportPositive;
   }
@@ -267,7 +273,7 @@ function getSourceSupportTextStyle(sourceSupportsClaim: boolean | null | undefin
   return styles.sourceSupportNeutral;
 }
 
-function getSourceMessageStyle(color: SourceMessageColor) {
+function getSourceMessageStyle(color: SourceMessageColor, styles: ReturnType<typeof createStyles>) {
   if (color === "green") {
     return styles.sourceMessageGreen;
   }
@@ -287,6 +293,9 @@ export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
+  const appTheme = useAppTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const evidenceTypeConfig = useMemo(() => getEvidenceTypeConfig(appTheme), [appTheme]);
   const { showTabBar } = useScrollAwareTabBar();
   // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified } = useAuth();
@@ -861,7 +870,7 @@ export default function ClaimDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={24} color="rgba(255, 255, 255, 0.7)" />
+            <Ionicons name="arrow-back" size={24} color={appTheme.colors.bannerSubtitle} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Claim details</Text>
           <View style={styles.headerSpacer} />
@@ -959,8 +968,8 @@ export default function ClaimDetailScreen() {
   const sourceReadStatusLabel = getSourceReadStatusLabel(claim.sourceReadStatus);
   const sourceSupportLabel = getSourceSupportLabel(claim.sourceSupportsClaim);
   const sourceSupportIcon = getSourceSupportIcon(claim.sourceSupportsClaim);
-  const sourceSupportColor = getSourceSupportColor(claim.sourceSupportsClaim);
-  const sourceSupportTextStyle = getSourceSupportTextStyle(claim.sourceSupportsClaim);
+  const sourceSupportColor = getSourceSupportColor(claim.sourceSupportsClaim, appTheme);
+  const sourceSupportTextStyle = getSourceSupportTextStyle(claim.sourceSupportsClaim, styles);
   const sourcePageTitle = claim.sourcePageTitle?.trim();
   const sourceReviewUnavailable = claim.sourceReadStatus === "failed";
   const sourceSupportSummary = sourceReviewUnavailable
@@ -1011,13 +1020,13 @@ export default function ClaimDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-            <Ionicons name="arrow-back" size={24} color="rgba(255, 255, 255, 0.7)" />
+            <Ionicons name="arrow-back" size={24} color={appTheme.colors.bannerSubtitle} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Claim details</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.hiddenDetailCard}>
-          <Ionicons name="shield-checkmark-outline" size={26} color={theme.colors.subtext} />
+          <Ionicons name="shield-checkmark-outline" size={26} color={appTheme.colors.subtext} />
           <Text style={styles.hiddenDetailTitle}>Content removed</Text>
           <Text style={styles.hiddenDetailText}>
             This content was removed for violating community guidelines.
@@ -1031,11 +1040,11 @@ export default function ClaimDetailScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="arrow-back" size={24} color="rgba(255, 255, 255, 0.7)" />
+          <Ionicons name="arrow-back" size={24} color={appTheme.colors.bannerSubtitle} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Claim details</Text>
         <TouchableOpacity onPress={shareClaim} hitSlop={8}>
-          <Ionicons name="share-outline" size={22} color="rgba(255, 255, 255, 0.7)" />
+          <Ionicons name="share-outline" size={22} color={appTheme.colors.bannerSubtitle} />
         </TouchableOpacity>
       </View>
 
@@ -1076,7 +1085,7 @@ export default function ClaimDetailScreen() {
               </Text>
             ) : null}
             <View style={styles.sourceLinkRow}>
-              <Ionicons name="link-outline" size={13} color={theme.colors.link} />
+              <Ionicons name="link-outline" size={13} color={appTheme.colors.link} />
               <Text style={styles.sourceUrl} selectable numberOfLines={1}>
                 {claimSourceDomain}
               </Text>
@@ -1111,7 +1120,7 @@ export default function ClaimDetailScreen() {
                   <Text style={styles.aiDetailValue}>{formatClaimType(claim.claimType)}</Text>
                 </View>
               </View>
-              <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color)]}>{displayedSourceMessage.text}</Text>
+              <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color, styles)]}>{displayedSourceMessage.text}</Text>
               {/* PHASE 4 STEP 22 */}
               <View style={styles.sourceSupportPanel}>
                 <Text style={styles.sourceSupportKicker}>Source support signal</Text>
@@ -1119,7 +1128,7 @@ export default function ClaimDetailScreen() {
                   <Ionicons
                     name={claim.sourceReadStatus === "read" ? "document-text-outline" : "warning-outline"}
                     size={15}
-                    color={claim.sourceReadStatus === "read" ? theme.colors.success : theme.colors.warning}
+                    color={claim.sourceReadStatus === "read" ? appTheme.colors.success : appTheme.colors.warning}
                   />
                   <Text style={styles.sourceSupportText}>{sourceReadStatusLabel}</Text>
                 </View>
@@ -1258,7 +1267,7 @@ export default function ClaimDetailScreen() {
                         resizeMode="cover"
                       />
                       <View style={styles.detailPlayOverlay}>
-                        <Ionicons name="play" size={24} color="#FFFFFF" />
+                        <Ionicons name="play" size={24} color={appTheme.colors.chipActiveText} />
                       </View>
                     </View>
                   ) : null}
@@ -1327,7 +1336,7 @@ export default function ClaimDetailScreen() {
               <Ionicons
                 name="flag-outline"
                 size={14}
-                color={reportButtonActive ? "#FFFFFF" : "#6B7280"}
+                color={reportButtonActive ? appTheme.colors.chipActiveText : appTheme.colors.muted}
               />
             </TouchableOpacity>
           </View>
@@ -1357,7 +1366,7 @@ export default function ClaimDetailScreen() {
               onChangeText={(value) => updateEvidenceField("url", value)}
               placeholder="example.com/source"
               style={[styles.input, evidenceErrors.url && styles.inputError]}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={appTheme.colors.muted}
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
@@ -1372,7 +1381,7 @@ export default function ClaimDetailScreen() {
               onChangeText={(value) => updateEvidenceField("note", value)}
               placeholder="Explain what this source adds"
               style={[styles.input, styles.textArea, evidenceErrors.note && styles.inputError]}
-              placeholderTextColor={theme.colors.muted}
+              placeholderTextColor={appTheme.colors.muted}
               multiline
               maxLength={EVIDENCE_NOTE_MAX_LENGTH}
             />
@@ -1439,7 +1448,7 @@ export default function ClaimDetailScreen() {
               disabled={evidenceSubmitLoading}
             >
               <Text style={styles.openSourceButtonText}>Add Image</Text>
-              <Ionicons name="image-outline" size={13} color={theme.colors.link} />
+              <Ionicons name="image-outline" size={13} color={appTheme.colors.link} />
             </TouchableOpacity>
             {evidenceImageError ? <Text style={styles.errorText}>{evidenceImageError}</Text> : null}
           </View>
@@ -1470,7 +1479,7 @@ export default function ClaimDetailScreen() {
                   return (
                     <View key={item.id} style={styles.evidenceItem}>
                       <View style={styles.hiddenEvidenceBox}>
-                        <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.subtext} />
+                        <Ionicons name="shield-checkmark-outline" size={18} color={appTheme.colors.subtext} />
                         <Text style={styles.hiddenEvidenceText}>
                           This content was removed for violating community guidelines.
                         </Text>
@@ -1522,7 +1531,7 @@ export default function ClaimDetailScreen() {
                       activeOpacity={0.75}
                       onPress={() => handleOpenEvidenceSource(item.url)}
                     >
-                      <Ionicons name="link-outline" size={14} color={theme.colors.link} />
+                      <Ionicons name="link-outline" size={14} color={appTheme.colors.link} />
                       <Text style={styles.evidenceDomain} numberOfLines={1}>
                         {sourceDomain}
                       </Text>
@@ -1555,14 +1564,14 @@ export default function ClaimDetailScreen() {
                       onPress={() => handleOpenEvidenceSource(item.url)}
                     >
                       <Text style={styles.openSourceButtonText}>Open Source</Text>
-                      <Ionicons name="open-outline" size={13} color={theme.colors.link} />
+                      <Ionicons name="open-outline" size={13} color={appTheme.colors.link} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.reportEvidenceButton}
                       activeOpacity={0.8}
                       onPress={() => handleReportEvidence(item.id)}
                     >
-                      <Ionicons name="flag-outline" size={13} color={theme.colors.danger} />
+                      <Ionicons name="flag-outline" size={13} color={appTheme.colors.danger} />
                       <Text style={styles.reportEvidenceButtonText}>Report Evidence</Text>
                     </TouchableOpacity>
                   </View>
@@ -1668,7 +1677,8 @@ export default function ClaimDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.card,
@@ -1685,7 +1695,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "500",
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
   },
   headerSpacer: {
     width: 24,
@@ -1698,8 +1708,8 @@ const styles = StyleSheet.create({
   // PHASE 3 STEP 12
   liveText: {
     alignSelf: "flex-start",
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.success,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     color: theme.colors.success,
@@ -1825,8 +1835,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.xs,
   },
   verifiedBadge: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.success,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     color: theme.colors.success,
@@ -1934,7 +1944,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   aiRetryButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: 12,
     fontWeight: "500",
   },
@@ -1949,13 +1959,13 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   notFactCheckableWarning: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontSize: 12,
     fontWeight: "500",
     lineHeight: 17,
   },
   sourceWarning: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontSize: 12,
     fontWeight: "500",
     lineHeight: 17,
@@ -2000,9 +2010,9 @@ const styles = StyleSheet.create({
   // PHASE 5 election positioning UI
   electionBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#EEF2FF",
+    backgroundColor: theme.colors.phaseBg,
     borderRadius: 999,
-    color: "#0D1B3E",
+    color: theme.colors.phaseText,
     fontSize: 11,
     fontWeight: "500",
     paddingHorizontal: 9,
@@ -2024,7 +2034,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: theme.colors.warningBg,
     borderRadius: 999,
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontSize: 11,
     fontWeight: "500",
     paddingHorizontal: 9,
@@ -2087,7 +2097,7 @@ const styles = StyleSheet.create({
     color: theme.colors.sourceText,
   },
   sourceMessageAmber: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
   },
   sourceMessageRed: {
     color: theme.colors.danger,
@@ -2123,7 +2133,7 @@ const styles = StyleSheet.create({
     color: theme.colors.success,
   },
   sourceSupportWarning: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
   },
   sourceSupportNeutral: {
     color: theme.colors.subtext,
@@ -2152,7 +2162,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   copyButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -2181,7 +2191,7 @@ const styles = StyleSheet.create({
   },
   videoPlatformBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "#E0E7FF",
+    backgroundColor: theme.colors.phaseBg,
     borderColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
@@ -2237,8 +2247,8 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
   },
   reportCountBadge: {
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FECACA",
+    backgroundColor: theme.colors.dangerBg,
+    borderColor: theme.colors.danger,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
     color: theme.colors.danger,
@@ -2254,7 +2264,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   reportAlready: {
-    color: theme.colors.warning,
+    color: theme.colors.warningText,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
     marginBottom: theme.spacing.md,
@@ -2309,24 +2319,24 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
   },
   reasonButton: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E5E7EB",
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
     borderRadius: 999,
     borderWidth: 0.5,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
   reasonButtonSelected: {
-    backgroundColor: "#FEE2E2",
-    borderColor: "#EF4444",
+    backgroundColor: theme.colors.dangerBg,
+    borderColor: theme.colors.danger,
   },
   reasonButtonText: {
-    color: "#6B7280",
+    color: theme.colors.muted,
     fontSize: 11,
     fontWeight: "400",
   },
   reasonButtonTextSelected: {
-    color: "#DC2626",
+    color: theme.colors.danger,
   },
   reportRowCompact: {
     alignItems: "center",
@@ -2352,8 +2362,8 @@ const styles = StyleSheet.create({
   },
   reportIconButton: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E5E7EB",
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
     borderWidth: 0.5,
     borderRadius: 8,
     justifyContent: "center",
@@ -2361,8 +2371,8 @@ const styles = StyleSheet.create({
   },
   // PHASE 4 STEP 16
   reportIconButtonActive: {
-    backgroundColor: "#EF4444",
-    borderColor: "#EF4444",
+    backgroundColor: theme.colors.danger,
+    borderColor: theme.colors.danger,
   },
   reportMetaText: {
     color: theme.colors.subtext,
@@ -2382,7 +2392,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   submitReportButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -2414,7 +2424,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   addEvidenceButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.chipActiveText,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },
@@ -2705,4 +2715,5 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontStyle: "italic",
   },
-});
+  });
+}
