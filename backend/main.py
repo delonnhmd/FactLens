@@ -219,6 +219,310 @@ AUTH_CALLBACK_HTML = """
 </html>
 """
 
+LEGAL_PAGE_STYLE = """
+  :root {
+    --ink: #172033;
+    --muted: #667085;
+    --border: #e4e7ec;
+    --surface: #ffffff;
+    --soft: #f5f7fa;
+    --navy: #0d1b3e;
+    --blue: #185fa5;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--soft);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .page {
+    margin: 0 auto;
+    max-width: 850px;
+    min-height: 100vh;
+    padding: 28px 20px 44px;
+  }
+
+  header,
+  footer {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+  }
+
+  .brand {
+    color: var(--navy);
+    font-size: 20px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  a {
+    color: var(--blue);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  main {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    margin: 28px 0;
+    padding: 28px;
+  }
+
+  h1 {
+    color: var(--navy);
+    font-size: clamp(32px, 8vw, 48px);
+    letter-spacing: 0;
+    line-height: 1.05;
+    margin: 0 0 10px;
+  }
+
+  h2 {
+    color: var(--navy);
+    font-size: 20px;
+    margin: 30px 0 10px;
+  }
+
+  p,
+  li {
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  ul {
+    padding-left: 22px;
+  }
+
+  .updated {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+    margin-top: 0;
+  }
+
+  footer {
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  @media (max-width: 560px) {
+    .page {
+      padding: 20px 14px 36px;
+    }
+
+    main {
+      border-radius: 10px;
+      padding: 22px;
+    }
+
+    header,
+    footer {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+"""
+
+
+def build_legal_page(title: str, description: str, content: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="{description}" />
+    <title>{title} | Verifact</title>
+    <style>{LEGAL_PAGE_STYLE}</style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <a class="brand" href="/">Verifact</a>
+        <nav aria-label="Legal pages">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/copyright">Copyright</a>
+          <a href="/community-guidelines">Guidelines</a>
+        </nav>
+      </header>
+      <main>
+        {content}
+      </main>
+      <footer>
+        <span>&copy; 2026 PennyFloat</span>
+        <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>
+      </footer>
+    </div>
+  </body>
+</html>"""
+
+
+PRIVACY_POLICY_HTML = build_legal_page(
+    "Verifact Privacy Policy",
+    "Privacy Policy for Verifact by PennyFloat.",
+    """
+        <h1>Privacy Policy</h1>
+        <p class="updated">Effective June 10, 2026</p>
+        <p>Verifact is a community-powered claim verification app operated by PennyFloat. This policy explains how Verifact collects, uses, stores, and protects information for accounts, claims, evidence, voting, reports, moderation, and AI-assisted analysis.</p>
+        <p>Verifact does not sell personal data.</p>
+
+        <h2>Information We Collect</h2>
+        <ul>
+          <li>Account information such as email address, username, display name, authentication identifiers, profile details, and account status.</li>
+          <li>Uploaded images, image metadata, claim text, source URLs, evidence notes, votes, reports, and other user-generated submissions.</li>
+          <li>Moderation, safety, reputation, and trust signals such as report status, visibility status, vote history, badges, and account action records.</li>
+          <li>Technical information such as IP-derived network data, device or browser details, app version, diagnostics, cookies, local storage, and service logs.</li>
+        </ul>
+
+        <h2>How We Use Information</h2>
+        <ul>
+          <li>To create accounts, authenticate users, provide support, and process account deletion requests.</li>
+          <li>To publish and operate claims, evidence, images, votes, reports, and public contributor surfaces.</li>
+          <li>To run moderation systems, investigate abuse, enforce policies, prevent spam, and protect service integrity.</li>
+          <li>To operate analytics, diagnostics, reliability monitoring, security checks, and product improvements.</li>
+        </ul>
+
+        <h2>AI-Assisted Analysis</h2>
+        <p>Verifact may use AI-assisted systems to classify, summarize, and evaluate claims, source URLs, uploaded evidence, and related context. AI outputs are preliminary and may be wrong, incomplete, outdated, or biased. They do not guarantee that a claim is true or false.</p>
+
+        <h2>Third-Party Services</h2>
+        <p>Verifact may use Supabase for authentication, database, and storage services; Render for backend hosting; image storage for uploaded files; Expo, Apple, and Google for app delivery; and analytics, logging, email, security, and moderation tools as needed to operate the service.</p>
+
+        <h2>Public Content and Retention</h2>
+        <p>Claims, evidence, votes, reports, public profile details, and reputation signals may be visible to other users depending on the feature and moderation state. We retain information as needed to operate Verifact, comply with law, resolve disputes, enforce rules, prevent abuse, and maintain security.</p>
+
+        <h2>Account Deletion</h2>
+        <p>You may request account deletion from the app or by contacting support@pennyfloat.com from the email address associated with your account. Some records may be retained or anonymized when needed for safety, legal compliance, fraud prevention, dispute resolution, or verification history.</p>
+
+        <h2>Contact</h2>
+        <p>For privacy questions, support, or account deletion requests, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+    """,
+)
+
+TERMS_OF_SERVICE_HTML = build_legal_page(
+    "Verifact Terms of Service",
+    "Terms of Service for Verifact by PennyFloat.",
+    """
+        <h1>Terms of Service</h1>
+        <p class="updated">Effective June 10, 2026</p>
+        <p>These Terms govern your access to and use of Verifact, a claim and evidence review product operated by PennyFloat. Verifact is built around a simple standard: The red. The blue. The truth.</p>
+
+        <h2>Acceptable Use</h2>
+        <p>You may use Verifact only for lawful, honest, and respectful participation in claim review. You are responsible for claims, evidence, images, reports, votes, comments, profile information, and other content you submit.</p>
+
+        <h2>User-Generated Content</h2>
+        <p>You retain ownership of your content, subject to rights held by others. By submitting content, you grant PennyFloat a worldwide, non-exclusive, royalty-free license to host, store, reproduce, display, analyze, moderate, format, and distribute that content as needed to operate and protect Verifact.</p>
+
+        <h2>No Guarantee of Accuracy</h2>
+        <p>Verifact provides tools for reviewing claims and evidence, but it does not guarantee factual accuracy, completeness, neutrality, timeliness, or final truth. Content may be disputed, incomplete, outdated, misleading, or incorrect. Always verify important information independently.</p>
+
+        <h2>AI-Assisted Analysis</h2>
+        <p>AI-assisted analysis may help classify, summarize, or evaluate claims and evidence. AI outputs can be wrong, incomplete, biased, or misapplied, and they are not legal, medical, financial, election, safety, or other professional advice.</p>
+
+        <h2>Prohibited Behavior</h2>
+        <ul>
+          <li>Harassment, threats, bullying, doxxing, exploitation, or abuse.</li>
+          <li>Hate speech, explicit content, illegal content, or promotion of violence or self-harm.</li>
+          <li>Spam, scams, malicious links, coordinated manipulation, fake engagement, or deceptive behavior.</li>
+          <li>Impersonation of people, organizations, public officials, platforms, moderators, or PennyFloat staff.</li>
+          <li>Uploading content that violates privacy, confidentiality, or intellectual property rights.</li>
+          <li>Scraping, bulk downloading, reverse engineering, credential stuffing, API abuse, rate-limit evasion, or attempts to interfere with service operations.</li>
+        </ul>
+
+        <h2>Moderation and Account Actions</h2>
+        <p>PennyFloat may review, label, limit, hide, remove, preserve, or escalate content, and may suspend or terminate accounts, when needed to enforce these Terms, protect users, comply with law, investigate abuse, or maintain service integrity.</p>
+
+        <h2>Intellectual Property</h2>
+        <p>Verifact, PennyFloat, product names, logos, software, interfaces, workflows, analysis systems, and original content are owned by PennyFloat or its licensors. These Terms do not grant ownership of Verifact or PennyFloat intellectual property.</p>
+
+        <h2>Liability Limitation</h2>
+        <p>To the fullest extent permitted by law, PennyFloat is not liable for indirect, incidental, special, consequential, exemplary, or punitive damages, lost profits, lost data, service interruption, reputational harm, or reliance on user-generated or AI-assisted content.</p>
+
+        <h2>Contact</h2>
+        <p>Questions about these Terms may be sent to <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+    """,
+)
+
+COPYRIGHT_NOTICE_HTML = build_legal_page(
+    "Verifact Copyright Notice",
+    "Copyright notice and intellectual property policy for Verifact by PennyFloat.",
+    """
+        <h1>Copyright Notice</h1>
+        <p class="updated">Effective June 10, 2026</p>
+        <p>&copy; 2026 PennyFloat. All rights reserved.</p>
+
+        <h2>Verifact Ownership</h2>
+        <p>Verifact, including its name, product experience, software, interface designs, workflows, analysis systems, documentation, and original PennyFloat content, is owned by PennyFloat or its licensors and protected by intellectual property laws.</p>
+
+        <h2>User-Generated Content Licensing</h2>
+        <p>You retain ownership of content you submit to Verifact, including claims, evidence, images, comments, reports, and related materials, subject to rights held by third parties. By submitting content, you grant PennyFloat a worldwide, non-exclusive, royalty-free license to host, store, reproduce, display, analyze, moderate, format, and distribute that content as needed to operate, protect, and improve Verifact.</p>
+
+        <h2>Your Responsibility</h2>
+        <p>You are responsible for ensuring that your submissions do not infringe copyrights, trademarks, privacy rights, publicity rights, confidentiality obligations, or other rights. Do not upload screenshots, articles, images, videos, documents, or other materials unless you have the right to share them.</p>
+
+        <h2>DMCA and Copyright Contact Process</h2>
+        <p>If you believe content on Verifact infringes your copyright, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a> with your name, contact email, a description of the copyrighted work, the location of the allegedly infringing content, and a statement that you believe the use is unauthorized.</p>
+
+        <h2>Repeat Infringement and Abuse</h2>
+        <p>PennyFloat may remove or restrict content and may suspend or terminate accounts that repeatedly infringe intellectual property rights or misuse the copyright reporting process.</p>
+
+        <h2>AI Analysis Disclaimer</h2>
+        <p>AI-assisted analysis may process user-generated content to classify, summarize, or compare claims and evidence. AI analysis does not create a legal determination of ownership, infringement, fair use, authorization, or factual accuracy.</p>
+    """,
+)
+
+COMMUNITY_GUIDELINES_HTML = build_legal_page(
+    "Verifact Community Guidelines",
+    "Community Guidelines for Verifact by PennyFloat.",
+    """
+        <h1>Community Guidelines</h1>
+        <p class="updated">Effective June 10, 2026</p>
+        <p>These Community Guidelines keep Verifact focused on useful claim and evidence review. They apply to claims, evidence, images, reports, votes, usernames, profiles, and any other user-submitted content.</p>
+
+        <h2>Respectful Discussion</h2>
+        <p>Discuss claims, evidence, and reasoning without attacking people. Strong disagreement is allowed; harassment, threats, intimidation, and targeted abuse are not.</p>
+
+        <h2>Not Allowed</h2>
+        <ul>
+          <li>Harassment, threats, bullying, doxxing, exploitation, or coordinated abuse.</li>
+          <li>Explicit sexual content, exploitative content, illegal content, graphic violence for shock value, or content that promotes self-harm or violence.</li>
+          <li>Hate speech or attacks based on race, ethnicity, national origin, religion, sex, gender identity, sexual orientation, disability, age, caste, or veteran status.</li>
+          <li>Spam, scams, malware, malicious links, repetitive content, fake engagement, or coordinated manipulation.</li>
+          <li>Impersonation of another person, organization, public official, platform, moderator, or PennyFloat representative.</li>
+        </ul>
+
+        <h2>Evidence Quality Expectations</h2>
+        <p>Submit evidence that is relevant to the claim, clearly sourced when possible, and not intentionally misleading. Avoid cropped, edited, or out-of-context media unless you clearly explain the edit or context.</p>
+
+        <h2>Moderation Actions</h2>
+        <p>Content may be removed for policy violations. Verifact may also reduce visibility, add labels, limit features, preserve records, suspend accounts, or report serious issues when content violates these Guidelines, Terms, platform rules, or applicable law.</p>
+
+        <h2>Contact</h2>
+        <p>Questions or reports may be sent to <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+    """,
+)
+
 # PHASE 4 STEP 20
 # PHASE 4 STEP 20C
 ALLOWED_SOURCE_QUALITIES = {
@@ -429,6 +733,26 @@ class AiPrecheckResponse(BaseModel):
 @app.get("/")
 def home():
     return {"message": "Verifact API running"}
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page():
+    return HTMLResponse(content=PRIVACY_POLICY_HTML, status_code=200)
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page():
+    return HTMLResponse(content=TERMS_OF_SERVICE_HTML, status_code=200)
+
+
+@app.get("/copyright", response_class=HTMLResponse)
+def copyright_page():
+    return HTMLResponse(content=COPYRIGHT_NOTICE_HTML, status_code=200)
+
+
+@app.get("/community-guidelines", response_class=HTMLResponse)
+def community_guidelines_page():
+    return HTMLResponse(content=COMMUNITY_GUIDELINES_HTML, status_code=200)
 
 
 @app.get("/health")
