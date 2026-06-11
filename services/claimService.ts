@@ -24,7 +24,7 @@ import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
 import { detectVideoPlatform, getYouTubeThumbnailUrl } from "../utils/videoUrl";
 import { normalizeUrl } from "../utils/url";
-import { formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
+import { cleanSourceReviewText, formatErrorForDisplay, getDebugErrorParts } from "../utils/debugError";
 import {
   createClaimTiming,
   createProductionModeTiming,
@@ -825,15 +825,15 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   // PHASE 4 STEP 9
   const sourceDomain = row.source_domain ?? null;
   const sourceScore = row.source_score ?? null;
-  const sourceReason = row.source_reason ?? null;
+  const sourceReason = cleanSourceReviewText(row.source_reason, null);
   // PHASE 4 STEP 22
   const sourceReadStatus = mapSourceReadStatus(row.source_read_status);
   const sourcePageTitle = row.source_page_title ?? null;
   const sourceSupportsClaim = typeof row.source_supports_claim === "boolean" ? row.source_supports_claim : null;
-  const sourceSupportSummary = row.source_support_summary ?? null;
+  const sourceSupportSummary = cleanSourceReviewText(row.source_support_summary);
   // PHASE 4 STEP 10
   const evidenceUsedCount = row.evidence_used_count ?? 0;
-  const aiSummary = row.ai_summary ?? row.ai_reason ?? null;
+  const aiSummary = cleanSourceReviewText(row.ai_summary ?? row.ai_reason, null);
   // PHASE 3 STEP 25
   const aiCheck = {
     status: aiStatus,
@@ -1039,15 +1039,15 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     sourceQuality: mapSourceQuality(row.source_quality),
     sourceDomain: row.source_domain ?? null,
     sourceScore: row.source_score ?? null,
-    sourceReason: row.source_reason ?? null,
+    sourceReason: cleanSourceReviewText(row.source_reason, null),
     // PHASE 4 STEP 22
     sourceReadStatus: mapSourceReadStatus(row.source_read_status),
     sourcePageTitle: row.source_page_title ?? null,
     sourceSupportsClaim: typeof row.source_supports_claim === "boolean" ? row.source_supports_claim : null,
-    sourceSupportSummary: row.source_support_summary ?? null,
+    sourceSupportSummary: cleanSourceReviewText(row.source_support_summary),
     evidenceUsedCount: row.evidence_used_count ?? 0,
     redFlags: [],
-    aiSummary: row.ai_summary ?? row.ai_reason ?? null,
+    aiSummary: cleanSourceReviewText(row.ai_summary ?? row.ai_reason, null),
     status: mapStatus(row.status ?? "OPEN"),
     // PHASE 5 STEP 3
     hidden: Boolean(row.hidden),

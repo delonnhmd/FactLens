@@ -10,6 +10,7 @@ import { useAuth } from "../../context/AuthContext";
 import { fetchPublicProfileBySlug, type PublicProfileCard } from "../../services/publicProfileService";
 import { reportProfile } from "../../services/reportService";
 import { formatPoints, getTopBadges } from "../../utils/reputation";
+import { cleanUserError } from "../../utils/debugError";
 
 export default function PublicProfileScreen() {
   const router = useRouter();
@@ -33,7 +34,7 @@ export default function PublicProfileScreen() {
         }
 
         setProfile(result.profile);
-        setError(result.error ?? "");
+        setError(result.error ? cleanUserError(result.error) : "");
       })
       .finally(() => {
         if (mounted) {
@@ -72,7 +73,7 @@ export default function PublicProfileScreen() {
     const result = await reportProfile(profile.id, currentUser.id, "Harassment or abuse");
 
     if (result.error) {
-      Alert.alert(result.error);
+      Alert.alert(cleanUserError(result.error));
       return;
     }
 

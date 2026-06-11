@@ -22,6 +22,7 @@ import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
 import { getSourceQuality, getSourceTrustLabel } from "../../services/sourceQuality";
+import { cleanUserError } from "../../utils/debugError";
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
@@ -255,7 +256,7 @@ export default function CreateScreen() {
       setErrors({
         // PHASE 4 STEP 24
         // PHASE 5 STEP 6
-        general: error instanceof Error ? error.message : "Could not submit claim right now. Please try again.",
+        general: cleanUserError(error),
       });
     } finally {
       setIsSubmitting(false);

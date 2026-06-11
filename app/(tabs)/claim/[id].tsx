@@ -39,6 +39,13 @@ import {
 } from "../../../services/sourceQuality";
 import { getScoreLockAt, getVoteAcceptUntil } from "../../../utils/verificationTiming";
 import {
+  cleanSourceReviewText,
+  cleanUserError,
+  SOURCE_REVIEW_UNAVAILABLE_BODY,
+  SOURCE_REVIEW_UNAVAILABLE_NOTE,
+  SOURCE_REVIEW_UNAVAILABLE_TITLE,
+} from "../../../utils/debugError";
+import {
   subscribeToClaimById,
   subscribeToEvidenceForClaim,
   subscribeToReportsForClaim,
@@ -202,7 +209,7 @@ function getSourceReadStatusLabel(status: string | null | undefined): string {
   }
 
   if (status === "failed") {
-    return "Could not read source page.";
+    return SOURCE_REVIEW_UNAVAILABLE_TITLE;
   }
 
   return "Source not checked yet.";
@@ -737,7 +744,7 @@ export default function ClaimDetailScreen() {
     const result = await reportEvidence(evidenceId, currentUser.id, "Malicious evidence");
 
     if (result.error) {
-      Alert.alert(result.error);
+      Alert.alert(cleanUserError(result.error));
       return;
     }
 
@@ -923,10 +930,17 @@ export default function ClaimDetailScreen() {
   const mainSourceQuality = getSourceQuality(claim.sourceUrl);
   // Source trust label update
   const displayedSourceScore = typeof claim.sourceScore === "number" ? claim.sourceScore : mainSourceQuality.score;
-  const displayedSourceTrust = typeof claim.sourceScore === "number"
-    ? getSourceTrustLabel(claim.sourceScore, claim.sourceQuality)
-    : mainSourceQuality.label;
-  const displayedSourceMessage = getSourceMessage(displayedSourceScore, mainSourceQuality.label);
+  const displayedSourceTrust = claim.sourceReadStatus === "failed"
+    ? "Not verified"
+    : typeof claim.sourceScore === "number"
+      ? getSourceTrustLabel(claim.sourceScore, claim.sourceQuality)
+      : mainSourceQuality.label;
+  const displayedSourceMessage = claim.sourceReadStatus === "failed"
+    ? {
+        text: "Source review unavailable. Community verification is important for this source.",
+        color: "amber" as const,
+      }
+    : getSourceMessage(displayedSourceScore, mainSourceQuality.label);
   const claimSourceDomain = getEvidenceSourceDomain(claim.sourceUrl);
   // PHASE 3 STEP 8
   const mediaUrl = claim.media.youtubeUrl ?? claim.media.videoUrl ?? null;
@@ -948,7 +962,10 @@ export default function ClaimDetailScreen() {
   const sourceSupportColor = getSourceSupportColor(claim.sourceSupportsClaim);
   const sourceSupportTextStyle = getSourceSupportTextStyle(claim.sourceSupportsClaim);
   const sourcePageTitle = claim.sourcePageTitle?.trim();
-  const sourceSupportSummary = claim.sourceSupportSummary?.trim();
+  const sourceReviewUnavailable = claim.sourceReadStatus === "failed";
+  const sourceSupportSummary = sourceReviewUnavailable
+    ? SOURCE_REVIEW_UNAVAILABLE_BODY
+    : cleanSourceReviewText(claim.sourceSupportSummary);
   // PHASE 5 election positioning UI
   const showNeutralPoliticsBadge = claim.category === "Politics" || claim.subCategory === "Election 2026";
   // PHASE 4 STEP 7
@@ -1106,20 +1123,29 @@ export default function ClaimDetailScreen() {
                   />
                   <Text style={styles.sourceSupportText}>{sourceReadStatusLabel}</Text>
                 </View>
-                {sourcePageTitle ? (
+                {sourceReviewUnavailable ? (
+                  <Text style={styles.sourceSupportTitle} numberOfLines={2}>
+                    {SOURCE_REVIEW_UNAVAILABLE_TITLE}
+                  </Text>
+                ) : sourcePageTitle ? (
                   <Text style={styles.sourceSupportTitle} numberOfLines={2}>
                     {sourcePageTitle}
                   </Text>
                 ) : null}
-                <View style={styles.sourceSupportRow}>
-                  <Ionicons name={sourceSupportIcon} size={15} color={sourceSupportColor} />
-                  <Text style={[styles.sourceSupportText, sourceSupportTextStyle]}>{sourceSupportLabel}</Text>
-                </View>
+                {sourceReviewUnavailable ? null : (
+                  <View style={styles.sourceSupportRow}>
+                    <Ionicons name={sourceSupportIcon} size={15} color={sourceSupportColor} />
+                    <Text style={[styles.sourceSupportText, sourceSupportTextStyle]}>{sourceSupportLabel}</Text>
+                  </View>
+                )}
                 {sourceSupportSummary ? (
                   <Text style={styles.sourceSupportSummary} numberOfLines={5}>{sourceSupportSummary}</Text>
                 ) : (
                   <Text style={styles.sourceSupportSummary}>Source support has not been summarized yet.</Text>
                 )}
+                {sourceReviewUnavailable ? (
+                  <Text style={styles.sourceSupportDisclaimer}>{SOURCE_REVIEW_UNAVAILABLE_NOTE}</Text>
+                ) : null}
                 <Text style={styles.sourceSupportDisclaimer}>
                   This only checks whether the source appears to support the claim. It is not a final truth decision.
                 </Text>

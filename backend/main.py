@@ -1563,6 +1563,16 @@ def mark_claim_ai_error(claim_id: str) -> str | None:
     return None
 
 
+def build_safe_ai_precheck_failure(claim_id: str) -> dict:
+    return {
+        "ok": False,
+        "claim_id": claim_id,
+        "error": "AI pre-check is unavailable right now.",
+        "details": None,
+        "hint": None,
+    }
+
+
 # PHASE 4 STEP 5B
 # PHASE 4 STEP 5C
 # PHASE 4 STEP 5D
@@ -1703,13 +1713,7 @@ def ai_precheck(payload: AiPrecheckRequest, request: Request):
 
     if not update_result.get("ok"):
         print(f"[ai/precheck] Supabase update failure: {update_result.get('error')}", flush=True)
-        return {
-            "ok": False,
-            "claim_id": payload.claim_id,
-            "error": update_result.get("error"),
-            "details": update_result.get("details"),
-            "hint": update_result.get("hint"),
-        }
+        return build_safe_ai_precheck_failure(payload.claim_id)
 
     print("[ai/precheck] Supabase update success", flush=True)
     return build_ai_precheck_response(payload.claim_id, update_result)
@@ -1769,13 +1773,7 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest, request: Request):
 
         if not update_result.get("ok"):
             print(f"[ai/precheck/retry] Supabase update failure: {update_result.get('error')}", flush=True)
-            return {
-                "ok": False,
-                "claim_id": claim_id,
-                "error": update_result.get("error"),
-                "details": update_result.get("details"),
-                "hint": update_result.get("hint"),
-            }
+            return build_safe_ai_precheck_failure(claim_id)
 
         print("[ai/precheck/retry] Supabase update success", flush=True)
         return build_ai_precheck_response(claim_id, update_result)

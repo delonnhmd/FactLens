@@ -18,6 +18,7 @@ import { deleteCurrentAccount } from "../../services/accountService";
 import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
 import { updateProfile } from "../../services/profileService";
 import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
+import { cleanUserError } from "../../utils/debugError";
 import {
   formatImageSize,
   pickImageFromCamera,
@@ -106,7 +107,7 @@ export default function ProfileScreen() {
             setDeleteLoading(false);
 
             if (!result.ok) {
-              Alert.alert(result.error ?? "Could not delete account right now.");
+              Alert.alert(result.error ? cleanUserError(result.error) : "Could not delete account right now.");
               return;
             }
 
@@ -141,7 +142,7 @@ export default function ProfileScreen() {
     const result = await ensureProfile();
 
     if (result.error) {
-      setActionError(result.error);
+      setActionError(cleanUserError(result.error));
       return;
     }
 
@@ -161,7 +162,7 @@ export default function ProfileScreen() {
     setUsernameSaving(false);
 
     if (result.error) {
-      setActionError(result.error);
+      setActionError(cleanUserError(result.error));
       return;
     }
 
@@ -222,7 +223,7 @@ export default function ProfileScreen() {
       });
 
       if (result.error) {
-        setAvatarError(result.error);
+        setAvatarError(cleanUserError(result.error));
         return;
       }
 

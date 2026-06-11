@@ -43,6 +43,7 @@ import {
   type AiPrecheckResponse,
 } from "../services/aiPrecheckService";
 import { getVoteAcceptUntil } from "../utils/verificationTiming";
+import { cleanSourceReviewText, cleanUserError } from "../utils/debugError";
 import {
   addEvidence as addRemoteEvidence,
   fetchEvidenceForClaim as fetchRemoteEvidenceForClaim,
@@ -261,7 +262,9 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
   const sourceCount = getNumberField(updatedClaim.source_count ?? result.source_count) ?? claim.sourceCount;
   const sourceDomain = getStringField(updatedClaim.source_domain ?? result.source_domain) ?? claim.sourceDomain;
   const sourceScore = getNumberField(updatedClaim.source_score ?? result.source_score) ?? claim.sourceScore;
-  const sourceReason = getStringField(updatedClaim.source_reason ?? result.source_reason) ?? claim.sourceReason;
+  const sourceReason =
+    cleanSourceReviewText(getStringField(updatedClaim.source_reason ?? result.source_reason), null) ??
+    claim.sourceReason;
   // PHASE 4 STEP 22
   const sourceReadStatusRaw = Object.prototype.hasOwnProperty.call(updatedClaim, "source_read_status")
     ? updatedClaim.source_read_status
@@ -282,12 +285,14 @@ function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckRespon
     claim.sourceSupportsClaim,
   );
   const sourceSupportSummary = getNullableStringField(
-    sourceSupportSummaryRaw,
+    cleanSourceReviewText(sourceSupportSummaryRaw),
     claim.sourceSupportSummary,
   );
   const evidenceUsedCount = getNumberField(updatedClaim.evidence_used_count ?? result.evidence_used_count) ?? claim.evidenceUsedCount;
   const redFlags = getStringListField(updatedClaim.red_flags ?? result.red_flags);
-  const aiSummary = getStringField(updatedClaim.ai_summary ?? result.ai_summary) ?? claim.aiSummary;
+  const aiSummary =
+    cleanSourceReviewText(getStringField(updatedClaim.ai_summary ?? result.ai_summary), null) ??
+    claim.aiSummary;
 
   return {
     ...claim,
@@ -1439,7 +1444,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         const result = await fetchRemoteClaimById(claimId);
 
         if (result.error) {
-          setError(result.error);
+          setError(cleanUserError(result.error));
           return undefined;
         }
 

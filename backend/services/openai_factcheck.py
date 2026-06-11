@@ -93,6 +93,12 @@ SUSPICIOUS_TERMS = [
 
 CLAIM_TYPES = {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}
 AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "NOT_FACT_CHECKABLE", "ERROR"}
+SOURCE_REVIEW_UNAVAILABLE_SUMMARY = (
+    "We could not automatically read this source. Community review can still continue."
+)
+SOURCE_REVIEW_UNAVAILABLE_AI_SUMMARY = (
+    "Source could not be automatically reviewed. Please check the source manually and add evidence."
+)
 
 
 # PHASE 4 STEP 7
@@ -211,7 +217,23 @@ def _attach_source_page_metadata(analysis: dict, source_page: dict | None = None
     page_error = str(source_page.get("error") or "").strip()
 
     if read_status != "read":
-        source_support_summary = f"Source page could not be read: {page_error}" if page_error else "Source page was not read."
+        source_support_summary = SOURCE_REVIEW_UNAVAILABLE_SUMMARY
+        analysis = {
+            **analysis,
+            "source_quality": "unknown",
+            "source_score": 45,
+            "source_count": 0,
+            "ai_status": "NEEDS_MORE_EVIDENCE",
+            "ai_summary": SOURCE_REVIEW_UNAVAILABLE_AI_SUMMARY,
+            "red_flags": [
+                flag
+                for flag in list(analysis.get("red_flags") or [])
+                if "http" not in str(flag).lower()
+                and "traceback" not in str(flag).lower()
+                and "client error" not in str(flag).lower()
+            ][:7]
+            + ["Source review unavailable"],
+        }
     elif not source_support_summary:
         source_support_summary = "Source page was read, but source-support analysis is pending."
 

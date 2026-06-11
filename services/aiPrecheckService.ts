@@ -13,6 +13,7 @@
 import { API_CONFIG } from "../constants/apiConfig";
 import { supabase } from "../lib/supabase";
 import type { Claim } from "../types/claim";
+import { cleanSourceReviewText, cleanUserError, isRawUserFacingError } from "../utils/debugError";
 
 export interface AiPrecheckResponse {
   ok: boolean;
@@ -73,6 +74,10 @@ export function formatAiPrecheckErrorForDisplay(parts: Array<unknown>, fallback 
 
   if (isRawBackendError(message)) {
     return fallback;
+  }
+
+  if (isRawUserFacingError(message)) {
+    return cleanUserError(message);
   }
 
   return message || fallback;
@@ -163,14 +168,14 @@ async function postAiPrecheck(
       source_quality: json.source_quality ?? null,
       source_domain: json.source_domain ?? null,
       source_score: json.source_score ?? null,
-      source_reason: json.source_reason ?? null,
+      source_reason: cleanSourceReviewText(json.source_reason, null),
       source_read_status: json.source_read_status ?? null,
       source_page_title: json.source_page_title ?? null,
       source_supports_claim: json.source_supports_claim ?? null,
-      source_support_summary: json.source_support_summary ?? null,
+      source_support_summary: cleanSourceReviewText(json.source_support_summary),
       evidence_used_count: json.evidence_used_count ?? null,
       red_flags: json.red_flags ?? [],
-      ai_summary: json.ai_summary ?? null,
+      ai_summary: cleanSourceReviewText(json.ai_summary, null),
       ai_status: json.ai_status ?? null,
       error: responseError || json.error || null,
       details: shouldHideDebugDetails ? null : json.details ?? null,

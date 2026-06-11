@@ -17,6 +17,21 @@ SOURCE_FETCH_USER_AGENT = (
     "VerifactBot/1.0 (+https://verifact.pennyfloat.com; source support precheck; contact: support@verifact.pennyfloat.com)"
 )
 BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain"}
+SAFE_SOURCE_FETCH_ERROR = "We could not automatically read this source. Community review can still continue."
+
+
+def build_failed_source_page(
+    title: str = "",
+    meta_description: str = "",
+    excerpt: str = "",
+) -> dict:
+    return {
+        "status": "failed",
+        "title": title,
+        "meta_description": meta_description,
+        "excerpt": excerpt,
+        "error": SAFE_SOURCE_FETCH_ERROR,
+    }
 
 
 # PHASE 4 STEP 27
@@ -138,13 +153,7 @@ def fetch_source_page(url: str | None) -> dict:
     fetch_url = normalize_fetch_url(url)
 
     if not fetch_url:
-        return {
-            "status": "failed",
-            "title": "",
-            "meta_description": "",
-            "excerpt": "",
-            "error": "Invalid or missing source URL.",
-        }
+        return build_failed_source_page()
 
     try:
         response = requests.get(
@@ -160,33 +169,16 @@ def fetch_source_page(url: str | None) -> dict:
         response.raise_for_status()
         if not normalize_fetch_url(response.url):
             response.close()
-            return {
-                "status": "failed",
-                "title": "",
-                "meta_description": "",
-                "excerpt": "",
-                "error": "Source URL redirected to a blocked host.",
-            }
+            return build_failed_source_page()
     except requests.RequestException as error:
-        return {
-            "status": "failed",
-            "title": "",
-            "meta_description": "",
-            "excerpt": "",
-            "error": str(error)[:300],
-        }
+        print(f"[source fetch] failed: {type(error).__name__}", flush=True)
+        return build_failed_source_page()
 
     try:
         content_type = response.headers.get("content-type", "").lower()
 
         if "html" not in content_type and "text/plain" not in content_type:
-            return {
-                "status": "failed",
-                "title": "",
-                "meta_description": "",
-                "excerpt": "",
-                "error": f"Unsupported content type: {content_type or 'unknown'}",
-            }
+            return build_failed_source_page()
 
         html = read_limited_response_text(response)
         soup = BeautifulSoup(html, "html.parser")
@@ -194,24 +186,13 @@ def fetch_source_page(url: str | None) -> dict:
         meta_description = extract_meta_description(soup)
         excerpt = extract_readable_text(soup)
     except Exception as error:
-        return {
-            "status": "failed",
-            "title": "",
-            "meta_description": "",
-            "excerpt": "",
-            "error": str(error)[:300],
-        }
+        print(f"[source fetch] parse failed: {type(error).__name__}", flush=True)
+        return build_failed_source_page()
     finally:
         response.close()
 
     if not excerpt:
-        return {
-            "status": "failed",
-            "title": title,
-            "meta_description": meta_description,
-            "excerpt": "",
-            "error": "No readable text found.",
-        }
+        return build_failed_source_page(title=title, meta_description=meta_description)
 
     return {
         "status": "read",

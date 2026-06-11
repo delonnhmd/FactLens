@@ -196,9 +196,12 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // PHASE 4 STEP 18
   const useLocalSourceFallback = (!claim.sourceQuality || claim.sourceQuality === "unknown") && claim.sourceScore === null;
   const sourceScore = typeof claim.sourceScore === "number" ? Math.round(claim.sourceScore) : sourceQuality.score;
-  const sourceQualityLabel = useLocalSourceFallback
-    ? sourceQuality.label
-    : getSourceTrustLabel(sourceScore, claim.sourceQuality || sourceQuality.label);
+  const sourceQualityLabel =
+    claim.sourceReadStatus === "failed"
+      ? "Not verified"
+      : useLocalSourceFallback
+        ? sourceQuality.label
+        : getSourceTrustLabel(sourceScore, claim.sourceQuality || sourceQuality.label);
   const verdictLabel =
     claim.status === "FINALIZED_TRUE" ||
     claim.status === "FINALIZED_FAKE" ||
