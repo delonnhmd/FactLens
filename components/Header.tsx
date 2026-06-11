@@ -80,9 +80,10 @@ function createStyles(theme: AppTheme) {
     color: "#EAF0FF",
   },
   actionSlot: {
-    alignItems: "flex-end",
+    alignItems: "center",
+    height: 44,
     justifyContent: "center",
-    minWidth: 32,
+    minWidth: 44,
   },
   });
 }

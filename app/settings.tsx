@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Alert,
@@ -14,12 +14,14 @@ import {
 } from "react-native";
 import {
   getAppVersion,
-  openExternalUrl,
   type AppTheme,
   type TextSizePreference,
   type ThemePreference,
 } from "../context/DisplaySettingsContext";
+import { useAuth } from "../context/AuthContext";
 import { useDisplaySettings } from "../hooks/useTheme";
+import { deleteCurrentAccount } from "../services/accountService";
+import { cleanUserError } from "../utils/debugError";
 
 type SegmentOption<T extends string> = {
   label: string;
@@ -34,20 +36,21 @@ const themeOptions: Array<SegmentOption<ThemePreference>> = [
 
 const textSizeOptions: Array<SegmentOption<TextSizePreference>> = [
   { label: "Small", value: "small" },
-  { label: "Default", value: "default" },
+  { label: "Medium", value: "default" },
   { label: "Large", value: "large" },
   { label: "Extra Large", value: "extraLarge" },
 ];
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { isAuthenticated, signOut } = useAuth();
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const {
     appTheme,
     highContrastEnabled,
-    notificationSettings,
     reduceMotionOverride,
     setHighContrastEnabled,
-    setNotificationSetting,
     setReduceMotionOverride,
     setTextSizePreference,
     setThemePreference,
@@ -55,6 +58,50 @@ export default function SettingsScreen() {
     themePreference,
   } = useDisplaySettings();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+
+  const handleLogout = async () => {
+    setLogoutLoading(true);
+    const result = await signOut();
+    setLogoutLoading(false);
+
+    if (result.error) {
+      Alert.alert("Logout unavailable", cleanUserError(result.error));
+      return;
+    }
+
+    router.replace("/");
+  };
+
+  const handleDeleteAccount = () => {
+    if (!isAuthenticated) {
+      Alert.alert("Delete Account", "Please log in before deleting your account.");
+      return;
+    }
+
+    Alert.alert(
+      "Delete account?",
+      "Your public profile will be anonymized as Deleted User. Claims, votes, and evidence stay in Verifact so verification history does not break. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleteLoading(true);
+            const result = await deleteCurrentAccount();
+            setDeleteLoading(false);
+
+            if (!result.ok) {
+              Alert.alert("Delete Account", cleanUserError(result.error ?? "Could not delete account right now."));
+              return;
+            }
+
+            router.replace("/");
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -73,7 +120,7 @@ export default function SettingsScreen() {
         <View style={styles.headerButton} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic" showsVerticalScrollIndicator={false}>
         <Section title="Appearance" styles={styles}>
           <SegmentedControl
             label="Theme"
@@ -83,7 +130,7 @@ export default function SettingsScreen() {
             styles={styles}
           />
           <SegmentedControl
-            label="Text size"
+            label="Font Size"
             options={textSizeOptions}
             selectedValue={textSizePreference}
             onChange={setTextSizePreference}
@@ -93,7 +140,7 @@ export default function SettingsScreen() {
 
         <Section title="Accessibility" styles={styles}>
           <SettingsToggle
-            label="Reduce motion override"
+            label="Reduce Motion"
             value={reduceMotionOverride}
             onValueChange={setReduceMotionOverride}
             styles={styles}
@@ -106,50 +153,34 @@ export default function SettingsScreen() {
           />
         </Section>
 
-        <Section title="Notifications" styles={styles}>
-          <SettingsToggle
-            label="Push notifications"
-            value={notificationSettings.pushNotifications}
-            onValueChange={(enabled) => setNotificationSetting("pushNotifications", enabled)}
-            styles={styles}
-          />
-          <SettingsToggle
-            label="Badge & rank updates"
-            value={notificationSettings.badgeRankUpdates}
-            onValueChange={(enabled) => setNotificationSetting("badgeRankUpdates", enabled)}
-            styles={styles}
-          />
-          <SettingsToggle
-            label="Election alerts"
-            value={notificationSettings.electionAlerts}
-            onValueChange={(enabled) => setNotificationSetting("electionAlerts", enabled)}
+        <Section title="Support" styles={styles}>
+          <SettingsLink label="Privacy Policy" onPress={() => router.push("/legal/privacy")} styles={styles} />
+          <SettingsLink label="Terms" onPress={() => router.push("/legal/terms")} styles={styles} />
+          <SettingsLink label="Copyright" onPress={() => router.push("/legal/copyright")} styles={styles} />
+          <SettingsLink
+            label="Community Guidelines"
+            onPress={() => router.push("/legal/community-guidelines")}
             styles={styles}
           />
         </Section>
 
         <Section title="Account" styles={styles}>
-          <SettingsLink label="Edit profile" onPress={() => router.push("/profile")} styles={styles} />
           <SettingsLink
-            label="Change password"
-            onPress={() => Alert.alert("Change password", "Use the account email flow from the sign-in screen.")}
+            label={logoutLoading ? "Logging out..." : "Logout"}
+            onPress={handleLogout}
             styles={styles}
+            disabled={logoutLoading}
           />
           <SettingsLink
-            label="Delete account"
+            label={deleteLoading ? "Deleting..." : "Delete Account"}
             danger
-            onPress={() => router.push("/profile")}
+            onPress={handleDeleteAccount}
             styles={styles}
+            disabled={deleteLoading}
           />
         </Section>
 
         <Section title="About" styles={styles}>
-          <SettingsLink label="Privacy Policy" onPress={() => openExternalUrl("https://factlens.app/privacy")} styles={styles} />
-          <SettingsLink label="Terms of Service" onPress={() => openExternalUrl("https://factlens.app/terms")} styles={styles} />
-          <SettingsLink
-            label="How verdicts work"
-            onPress={() => openExternalUrl("https://factlens.app/how-it-works")}
-            styles={styles}
-          />
           <View style={styles.staticRow}>
             <Text style={styles.rowLabel}>App version</Text>
             <Text style={styles.rowValue}>{getAppVersion()}</Text>
@@ -246,19 +277,23 @@ function SettingsLink({
   onPress,
   styles,
   danger = false,
+  disabled = false,
 }: {
   label: string;
   onPress: () => void;
   styles: ReturnType<typeof createStyles>;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={styles.row}
+      style={[styles.row, disabled && styles.disabledRow]}
       activeOpacity={0.8}
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
     >
       <Text style={[styles.rowLabel, danger && styles.dangerText]}>{label}</Text>
       <Ionicons name="chevron-forward" size={17} color={danger ? "#E24B4A" : styles.iconColor.color} />
@@ -274,7 +309,7 @@ function createStyles(theme: AppTheme) {
     },
     header: {
       alignItems: "center",
-      backgroundColor: "#0D1B3E",
+      backgroundColor: theme.colors.navy,
       flexDirection: "row",
       justifyContent: "space-between",
       paddingHorizontal: 14,
@@ -282,9 +317,9 @@ function createStyles(theme: AppTheme) {
     },
     headerButton: {
       alignItems: "center",
-      height: 36,
+      height: 44,
       justifyContent: "center",
-      width: 36,
+      width: 44,
     },
     headerTitle: {
       color: "#FFFFFF",
@@ -356,6 +391,9 @@ function createStyles(theme: AppTheme) {
       minHeight: 54,
       paddingHorizontal: 14,
       paddingVertical: 10,
+    },
+    disabledRow: {
+      opacity: 0.55,
     },
     staticRow: {
       alignItems: "center",

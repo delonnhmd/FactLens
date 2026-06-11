@@ -1,4 +1,3 @@
-// PHASE 5 STEP 2
 import { useMemo } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
@@ -6,32 +5,31 @@ import { Header } from "../../components/Header";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useAppTheme } from "../../hooks/useTheme";
 
-export default function TermsScreen() {
+export default function CopyrightScreen() {
   const router = useRouter();
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Terms of Service" subtitle="Verifact public launch terms" />
+      <Header title="Copyright" subtitle="Rights and content ownership" />
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} accessibilityRole="button">
           <Text style={styles.link}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.heading}>Use of Verifact</Text>
+        <Text style={styles.heading}>Verifact Materials</Text>
         <Text style={styles.body}>
-          Verifact is an informational community news-verification app. Content, AI pre-checks, source analysis,
-          and community voting are not guaranteed to be complete, accurate, or final truth.
+          Verifact names, interface text, product design, and app materials are protected by their respective owners.
         </Text>
-        <Text style={styles.heading}>User Content</Text>
+        <Text style={styles.heading}>User Submissions</Text>
         <Text style={styles.body}>
-          You are responsible for the claims, evidence, reports, and profile information you submit. Do not post
-          spam, harassment, explicit content, hateful content, illegal threats, malicious evidence, or harmful abuse.
+          Users are responsible for the claims, evidence, links, images, and profile content they submit. Submit only
+          content you have the right to share.
         </Text>
-        <Text style={styles.heading}>Moderation</Text>
+        <Text style={styles.heading}>Copyright Concerns</Text>
         <Text style={styles.body}>
-          Verifact may remove, hide, or restrict content and accounts that violate these terms or create safety risk.
-          Reports are reviewed for launch safety and abuse prevention.
+          If you believe content in Verifact infringes copyright, contact support with the claim details and the
+          material you want reviewed.
         </Text>
       </ScrollView>
     </SafeAreaView>

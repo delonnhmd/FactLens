@@ -1,4 +1,3 @@
-// PHASE 5 STEP 2
 import { useMemo } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
@@ -6,32 +5,31 @@ import { Header } from "../../components/Header";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useAppTheme } from "../../hooks/useTheme";
 
-export default function TermsScreen() {
+export default function PrivacyScreen() {
   const router = useRouter();
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Terms of Service" subtitle="Verifact public launch terms" />
+      <Header title="Privacy Policy" subtitle="How Verifact handles account data" />
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} accessibilityRole="button">
           <Text style={styles.link}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.heading}>Use of Verifact</Text>
+        <Text style={styles.heading}>Account Data</Text>
         <Text style={styles.body}>
-          Verifact is an informational community news-verification app. Content, AI pre-checks, source analysis,
-          and community voting are not guaranteed to be complete, accurate, or final truth.
+          Verifact uses account, profile, claim, vote, report, and evidence information to run community verification
+          features and protect launch safety.
         </Text>
-        <Text style={styles.heading}>User Content</Text>
+        <Text style={styles.heading}>Public Contributions</Text>
         <Text style={styles.body}>
-          You are responsible for the claims, evidence, reports, and profile information you submit. Do not post
-          spam, harassment, explicit content, hateful content, illegal threats, malicious evidence, or harmful abuse.
+          Claims, votes, evidence, rankings, and public profile details may be visible to other users as part of the
+          verification experience.
         </Text>
-        <Text style={styles.heading}>Moderation</Text>
+        <Text style={styles.heading}>Safety and Support</Text>
         <Text style={styles.body}>
-          Verifact may remove, hide, or restrict content and accounts that violate these terms or create safety risk.
-          Reports are reviewed for launch safety and abuse prevention.
+          Reports and moderation signals may be reviewed to prevent spam, harassment, unsafe content, and abuse.
         </Text>
       </ScrollView>
     </SafeAreaView>

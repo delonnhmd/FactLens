@@ -601,6 +601,9 @@ export default function ProfileScreen() {
                 Verifact uses AI and community voting to help review claims. Results are informational and may be
                 incorrect. Always check original sources.
               </Text>
+              <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={() => router.push("/settings")}>
+                <Text style={styles.legalLinkText}>Settings</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={handleOpenPrivacyPolicy}>
                 <Text style={styles.legalLinkText}>Privacy Policy</Text>
               </TouchableOpacity>
