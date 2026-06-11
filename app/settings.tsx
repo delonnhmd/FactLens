@@ -69,7 +69,7 @@ export default function SettingsScreen() {
       return;
     }
 
-    router.replace("/");
+    router.replace("/auth");
   };
 
   const handleDeleteAccount = () => {
@@ -96,7 +96,7 @@ export default function SettingsScreen() {
               return;
             }
 
-            router.replace("/");
+            router.replace("/auth");
           },
         },
       ],

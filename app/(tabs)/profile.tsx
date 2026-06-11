@@ -88,7 +88,7 @@ export default function ProfileScreen() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace("/");
+    router.replace("/auth");
   };
 
   // PHASE 5 STEP 2
@@ -111,7 +111,7 @@ export default function ProfileScreen() {
               return;
             }
 
-            router.replace("/");
+            router.replace("/auth");
           },
         },
       ],
