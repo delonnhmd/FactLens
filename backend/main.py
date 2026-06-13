@@ -17,15 +17,17 @@
 import os
 import sys
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 from time import monotonic
 from typing import Any, Literal
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
+from uuid import UUID
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 try:
@@ -852,6 +854,629 @@ COMMUNITY_GUIDELINES_HTML = build_legal_page(
     """,
 )
 
+PUBLIC_SITE_URL = os.environ.get("VERIFACT_PUBLIC_SITE_URL", "https://verifact.pennyfloat.com").rstrip("/")
+VERIFACT_APP_STORE_URL = os.environ.get("VERIFACT_APP_STORE_URL", "").strip()
+VERIFACT_GOOGLE_PLAY_URL = os.environ.get("VERIFACT_GOOGLE_PLAY_URL", "").strip()
+VERIFACT_DEFAULT_OG_IMAGE_URL = f"{PUBLIC_SITE_URL}/assets/icon/icon.png"
+
+CLAIM_PAGE_STYLE = """
+  :root {
+    --bg: #08111f;
+    --panel: #0f1b2d;
+    --panel-strong: #14253d;
+    --ink: #f6f8fb;
+    --muted: #aeb9c9;
+    --soft: #d8e0ec;
+    --border: rgba(255, 255, 255, 0.12);
+    --blue: #5ea2ff;
+    --red: #ff6b6b;
+    --green: #33d39f;
+    --gold: #f6c65b;
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  .page {
+    margin: 0 auto;
+    max-width: 800px;
+    min-height: 100vh;
+    padding: 24px 18px 44px;
+    width: 100%;
+  }
+
+  .topbar,
+  .footer {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+  }
+
+  .brand {
+    align-items: center;
+    color: var(--ink);
+    display: inline-flex;
+    font-size: 19px;
+    font-weight: 850;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .mark {
+    align-items: center;
+    background: var(--ink);
+    border-radius: 8px;
+    color: var(--bg);
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 900;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+  }
+
+  .slogan-small {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .hero,
+  .card,
+  .download-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 18px 48px var(--shadow);
+  }
+
+  .hero {
+    margin-top: 24px;
+    overflow: hidden;
+  }
+
+  .hero-inner {
+    padding: 28px;
+  }
+
+  .eyebrow-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--soft);
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 850;
+    line-height: 1;
+    padding: 8px 10px;
+  }
+
+  h1 {
+    color: var(--ink);
+    font-size: clamp(32px, 8vw, 56px);
+    letter-spacing: 0;
+    line-height: 1.02;
+    margin: 0;
+  }
+
+  .description {
+    color: var(--soft);
+    font-size: 17px;
+    margin: 16px 0 0;
+  }
+
+  .claim-image {
+    background: #050a13;
+    display: block;
+    max-height: 430px;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .button,
+  .download-button {
+    align-items: center;
+    border-radius: 10px;
+    display: inline-flex;
+    font-size: 14px;
+    font-weight: 850;
+    justify-content: center;
+    min-height: 46px;
+    padding: 12px 15px;
+    text-decoration: none;
+  }
+
+  .button.primary {
+    background: var(--ink);
+    color: var(--bg);
+  }
+
+  .button.secondary,
+  .download-button {
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    color: var(--ink);
+  }
+
+  .grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 14px;
+  }
+
+  .stat {
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 15px;
+  }
+
+  .stat span {
+    color: var(--muted);
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .stat strong {
+    color: var(--ink);
+    display: block;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .bar {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    height: 8px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    border-radius: inherit;
+    display: block;
+    height: 100%;
+    min-width: 3px;
+  }
+
+  .true {
+    background: var(--green);
+  }
+
+  .fake {
+    background: var(--red);
+  }
+
+  .unsure {
+    background: var(--gold);
+  }
+
+  .content {
+    display: grid;
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .card,
+  .download-card {
+    padding: 22px;
+  }
+
+  h2 {
+    color: var(--ink);
+    font-size: 18px;
+    letter-spacing: 0;
+    line-height: 1.25;
+    margin: 0 0 10px;
+  }
+
+  p {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0;
+  }
+
+  .source-link {
+    color: var(--blue);
+    display: inline-flex;
+    font-weight: 850;
+    margin-top: 10px;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  .source-link:hover {
+    text-decoration: underline;
+  }
+
+  .downloads {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 16px;
+  }
+
+  .download-button.disabled {
+    color: var(--muted);
+  }
+
+  .tagline {
+    color: var(--ink);
+    font-size: 20px;
+    font-weight: 900;
+    margin-top: 18px;
+  }
+
+  .footer {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 22px;
+  }
+
+  @media (max-width: 640px) {
+    .page {
+      padding: 18px 12px 34px;
+    }
+
+    .hero,
+    .card,
+    .download-card {
+      border-radius: 14px;
+    }
+
+    .hero-inner,
+    .card,
+    .download-card {
+      padding: 20px;
+    }
+
+    .actions,
+    .downloads,
+    .grid {
+      grid-template-columns: 1fr;
+    }
+
+    .button,
+    .download-button {
+      width: 100%;
+    }
+  }
+"""
+
+
+def compact_text(value: object, fallback: str = "") -> str:
+    text = fallback if value is None else str(value)
+    return " ".join(text.split())
+
+
+def html_attr(value: object, fallback: str = "") -> str:
+    text = compact_text(value, fallback)
+    return escape(" ".join(text.split()), quote=True)
+
+
+def html_body(value: object, fallback: str = "") -> str:
+    return escape(compact_text(value, fallback), quote=False)
+
+
+def truncate_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+
+    return value[: max_length - 3].rstrip() + "..."
+
+
+def to_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def format_count(value: object) -> str:
+    return f"{to_int(value):,}"
+
+
+def normalize_public_url(url: object) -> str:
+    value = str(url or "").strip()
+
+    if not value:
+        return ""
+
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return value
+
+    if value.startswith("/"):
+        return f"{PUBLIC_SITE_URL}{value}"
+
+    return f"https://{value}"
+
+
+def get_url_host(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "Source").removeprefix("www.")
+    except Exception:
+        return "Source"
+
+
+def get_claim_image_url(claim: dict) -> str:
+    for key in ("image_url", "thumbnail_url"):
+        image_url = normalize_public_url(claim.get(key))
+        if image_url:
+            return image_url
+
+    return ""
+
+
+def get_claim_meta_description(claim: dict) -> str:
+    description = compact_text(claim.get("description"), "Review this claim on Verifact.")
+    return truncate_text(description, 180)
+
+
+def get_vote_percent(count: int, total: int) -> str:
+    if total <= 0:
+        return "0"
+
+    return str(round((count / total) * 100, 1))
+
+
+def is_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+        return True
+    except ValueError:
+        return False
+
+
+def build_download_button(label: str, url: str) -> str:
+    if url:
+        return f'<a class="download-button" href="{html_attr(url)}" rel="noopener noreferrer" target="_blank">{html_body(label)}</a>'
+
+    return f'<span class="download-button disabled" aria-disabled="true">{html_body(label)} - Coming soon</span>'
+
+
+def build_vote_stat(label: str, count: int, total: int, color_class: str) -> str:
+    return f"""
+            <div class="stat">
+              <span>{html_body(label)}</span>
+              <strong>{format_count(count)}</strong>
+              <div class="bar" aria-hidden="true"><span class="bar-fill {color_class}" style="width: {get_vote_percent(count, total)}%"></span></div>
+            </div>"""
+
+
+def build_public_claim_page(claim: dict) -> str:
+    claim_id = str(claim.get("id") or "")
+    encoded_claim_id = quote(claim_id, safe="")
+    title = html_body(claim.get("title"), "Verifact claim")
+    meta_title = truncate_text(compact_text(claim.get("title"), "Verifact claim"), 95)
+    description = html_body(claim.get("description"), "No description provided.")
+    meta_description = get_claim_meta_description(claim)
+    category = html_body(claim.get("category"), "Other")
+    ai_summary = html_body(
+        claim.get("ai_summary") or claim.get("source_support_summary") or claim.get("ai_reason"),
+        "AI review is still pending. Community voting and evidence are still available.",
+    )
+    source_url = normalize_public_url(claim.get("source_url"))
+    source_host = html_body(get_url_host(source_url))
+    source_link = ""
+    if source_url:
+        source_link = f'<a class="source-link" href="{html_attr(source_url)}" rel="noopener noreferrer" target="_blank">{source_host}</a>'
+
+    votes_true = to_int(claim.get("votes_true"))
+    votes_fake = to_int(claim.get("votes_fake"))
+    votes_unsure = to_int(claim.get("votes_unsure"))
+    total_votes = to_int(claim.get("total_votes")) or votes_true + votes_fake + votes_unsure
+    image_url = get_claim_image_url(claim)
+    og_image_url = image_url or VERIFACT_DEFAULT_OG_IMAGE_URL
+    public_url = f"{PUBLIC_SITE_URL}/claim/{encoded_claim_id}"
+    app_url = f"verifact://claim/{encoded_claim_id}"
+    image_html = ""
+    if image_url:
+        image_html = f'<img class="claim-image" src="{html_attr(image_url)}" alt="Image for this Verifact claim" loading="lazy" />'
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <meta name="description" content="{html_attr(meta_description)}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Verifact" />
+    <meta property="og:url" content="{html_attr(public_url)}" />
+    <meta property="og:title" content="{html_attr(meta_title)}" />
+    <meta property="og:description" content="{html_attr(meta_description)}" />
+    <meta property="og:image" content="{html_attr(og_image_url)}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{html_attr(meta_title)}" />
+    <meta name="twitter:description" content="{html_attr(meta_description)}" />
+    <meta name="twitter:image" content="{html_attr(og_image_url)}" />
+    <title>{title} | Verifact</title>
+    <style>{CLAIM_PAGE_STYLE}</style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="mark">VF</span><span>Verifact</span></a>
+        <span class="slogan-small">The red. The blue. The truth.</span>
+      </header>
+
+      <main>
+        <article class="hero">
+          {image_html}
+          <div class="hero-inner">
+            <div class="eyebrow-row">
+              <span class="eyebrow">{category}</span>
+              <span class="eyebrow">{format_count(total_votes)} total votes</span>
+            </div>
+            <h1>{title}</h1>
+            <p class="description">{description}</p>
+            <div class="actions">
+              <a class="button primary" href="{html_attr(app_url)}">Open in Verifact App</a>
+              <a class="button secondary" href="#download">Download Verifact</a>
+            </div>
+          </div>
+        </article>
+
+        <section class="grid" aria-label="Vote totals">
+          {build_vote_stat("True", votes_true, total_votes, "true")}
+          {build_vote_stat("Fake", votes_fake, total_votes, "fake")}
+          {build_vote_stat("Not sure", votes_unsure, total_votes, "unsure")}
+        </section>
+
+        <div class="content">
+          <section class="card">
+            <h2>AI Summary</h2>
+            <p>{ai_summary}</p>
+          </section>
+
+          <section class="card">
+            <h2>Source</h2>
+            <p>Review the original source connected to this claim.</p>
+            {source_link}
+          </section>
+
+          <section id="download" class="download-card">
+            <h2>Download Verifact</h2>
+            <p>Read the claim on web or open it in the app when Verifact is installed.</p>
+            <div class="downloads" aria-label="Download Verifact">
+              {build_download_button("App Store", VERIFACT_APP_STORE_URL)}
+              {build_download_button("Google Play", VERIFACT_GOOGLE_PLAY_URL)}
+            </div>
+            <p class="tagline">The red. The blue. The truth.</p>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <span>&copy; 2026 PennyFloat</span>
+        <a href="/privacy">Privacy</a>
+      </footer>
+    </div>
+  </body>
+</html>"""
+
+
+def build_public_claim_404_page() -> str:
+    description = "This Verifact claim could not be found or is no longer public."
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="{description}" />
+    <meta property="og:title" content="Claim not found | Verifact" />
+    <meta property="og:description" content="{description}" />
+    <meta property="og:image" content="{html_attr(VERIFACT_DEFAULT_OG_IMAGE_URL)}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>Claim not found | Verifact</title>
+    <style>{CLAIM_PAGE_STYLE}</style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="mark">VF</span><span>Verifact</span></a>
+        <span class="slogan-small">The red. The blue. The truth.</span>
+      </header>
+      <main>
+        <section class="hero">
+          <div class="hero-inner">
+            <div class="eyebrow-row"><span class="eyebrow">404</span></div>
+            <h1>Claim not found</h1>
+            <p class="description">{description}</p>
+            <div class="actions">
+              <a class="button primary" href="/">Go to Verifact</a>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>"""
+
+
+def build_public_claim_error_page() -> str:
+    description = "Verifact could not load this claim page right now. Please try again later."
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="{description}" />
+    <meta property="og:title" content="Claim temporarily unavailable | Verifact" />
+    <meta property="og:description" content="{description}" />
+    <meta property="og:image" content="{html_attr(VERIFACT_DEFAULT_OG_IMAGE_URL)}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>Claim temporarily unavailable | Verifact</title>
+    <style>{CLAIM_PAGE_STYLE}</style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="mark">VF</span><span>Verifact</span></a>
+        <span class="slogan-small">The red. The blue. The truth.</span>
+      </header>
+      <main>
+        <section class="hero">
+          <div class="hero-inner">
+            <div class="eyebrow-row"><span class="eyebrow">Unavailable</span></div>
+            <h1>Claim temporarily unavailable</h1>
+            <p class="description">{description}</p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>"""
+
+
+def fetch_public_claim_row(claim_id: str) -> dict | None:
+    supabase = get_supabase_client()
+    response = supabase.table("claims").select("*").eq("id", claim_id).limit(1).execute()
+    rows = response.data or []
+
+    if isinstance(rows, dict):
+        return rows
+
+    if not rows:
+        return None
+
+    return rows[0]
+
 # PHASE 4 STEP 20
 # PHASE 4 STEP 20C
 ALLOWED_SOURCE_QUALITIES = {
@@ -1104,6 +1729,35 @@ def copyright_page():
 @app.get("/community-guidelines", response_class=HTMLResponse)
 def community_guidelines_page():
     return HTMLResponse(content=COMMUNITY_GUIDELINES_HTML, status_code=200)
+
+
+@app.get("/assets/icon/icon.png")
+def app_icon():
+    icon_path = Path(__file__).resolve().parents[1] / "assets" / "icon" / "icon.png"
+
+    if not icon_path.exists():
+        return HTMLResponse(content="", status_code=404)
+
+    return FileResponse(icon_path, media_type="image/png")
+
+
+@app.get("/claim/{claim_id}", response_class=HTMLResponse)
+def public_claim_page(claim_id: str):
+    normalized_claim_id = claim_id.strip()
+
+    if not is_uuid(normalized_claim_id):
+        return HTMLResponse(content=build_public_claim_404_page(), status_code=404)
+
+    try:
+        claim = fetch_public_claim_row(normalized_claim_id)
+    except Exception as error:
+        print("[public claim] fetch failed:", normalized_claim_id, error, flush=True)
+        return HTMLResponse(content=build_public_claim_error_page(), status_code=503)
+
+    if not claim or claim.get("hidden"):
+        return HTMLResponse(content=build_public_claim_404_page(), status_code=404)
+
+    return HTMLResponse(content=build_public_claim_page(claim), status_code=200)
 
 
 @app.get("/health")
