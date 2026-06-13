@@ -360,6 +360,7 @@ def build_legal_page(title: str, description: str, content: str) -> str:
       <header>
         <a class="brand" href="/">Verifact</a>
         <nav aria-label="Legal pages">
+          <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/personal-privacy">Personal Privacy</a>
           <a href="/terms">Terms</a>
@@ -375,6 +376,308 @@ def build_legal_page(title: str, description: str, content: str) -> str:
         <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>
       </footer>
     </div>
+  </body>
+</html>"""
+
+
+ABOUT_PAGE_STYLE = """
+  :root {
+    --navy: #0d1b3e;
+    --navy-2: #12306f;
+    --surface: #ffffff;
+    --soft: #f5f7fa;
+    --ink: #172033;
+    --muted: #667085;
+    --border: #e4e7ec;
+    --green: #1d9e75;
+    --red: #e24b4a;
+    --amber: #ef9f27;
+    --purple: #534ab7;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--soft);
+    color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  .hero {
+    background: linear-gradient(135deg, var(--navy), var(--navy-2));
+    color: #ffffff;
+    padding: 34px 20px 42px;
+  }
+
+  .container {
+    margin: 0 auto;
+    max-width: 850px;
+    width: 100%;
+  }
+
+  .nav {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    justify-content: space-between;
+    margin-bottom: 44px;
+  }
+
+  .brand {
+    color: #ffffff;
+    font-size: 22px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .nav-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .nav-links a {
+    color: #dbe7ff;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .nav-links a:hover {
+    color: #ffffff;
+    text-decoration: underline;
+  }
+
+  .badge {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    color: #e7eefc;
+    display: inline-flex;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 18px;
+    padding: 7px 12px;
+  }
+
+  h1 {
+    color: #ffffff;
+    font-size: clamp(42px, 10vw, 72px);
+    letter-spacing: 0;
+    line-height: 0.95;
+    margin: 0 0 12px;
+  }
+
+  .slogan {
+    color: #ffffff;
+    font-size: clamp(22px, 6vw, 34px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin: 0 0 16px;
+  }
+
+  .intro {
+    color: #dbe7ff;
+    font-size: 18px;
+    margin: 0;
+    max-width: 720px;
+  }
+
+  main {
+    padding: 34px 20px 0;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 18px;
+    padding: 24px;
+  }
+
+  h2 {
+    color: var(--navy);
+    font-size: 24px;
+    line-height: 1.2;
+    margin: 0 0 10px;
+  }
+
+  p {
+    color: var(--muted);
+    font-size: 16px;
+    margin: 0 0 14px;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 22px;
+  }
+
+  li {
+    color: var(--muted);
+    font-size: 16px;
+    margin: 8px 0;
+  }
+
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .pill {
+    border-radius: 999px;
+    color: #ffffff;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 10px;
+  }
+
+  .green {
+    background: var(--green);
+  }
+
+  .red {
+    background: var(--red);
+  }
+
+  .amber {
+    background: var(--amber);
+  }
+
+  .purple {
+    background: var(--purple);
+  }
+
+  .contact {
+    background: #eef4ff;
+    border-color: #d8e4ff;
+  }
+
+  .contact a {
+    color: var(--navy);
+    font-weight: 700;
+  }
+
+  footer {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 28px auto 0;
+    max-width: 850px;
+    padding: 22px 20px 34px;
+  }
+
+  @media (max-width: 560px) {
+    .hero {
+      padding-top: 24px;
+    }
+
+    .nav {
+      align-items: flex-start;
+      flex-direction: column;
+      margin-bottom: 34px;
+    }
+
+    main {
+      padding-top: 24px;
+    }
+
+    .card {
+      border-radius: 12px;
+      padding: 20px;
+    }
+  }
+"""
+
+
+ABOUT_PAGE_HTML = f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <meta
+      name="description"
+      content="About Verifact, a community-powered claim verification app with AI-assisted source review and community voting."
+    />
+    <title>About Verifact | The red. The blue. The truth.</title>
+    <style>{ABOUT_PAGE_STYLE}</style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="container">
+        <nav class="nav" aria-label="Verifact pages">
+          <a class="brand" href="/">Verifact</a>
+          <div class="nav-links">
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/copyright">Copyright</a>
+            <a href="/community-guidelines">Guidelines</a>
+          </div>
+        </nav>
+        <span class="badge">Owned and operated by PennyFloat</span>
+        <h1>About Verifact</h1>
+        <p class="slogan">The red. The blue. The truth.</p>
+        <p class="intro">Verifact is a community-powered claim verification app built to help people review claims, sources, and evidence with more transparency.</p>
+      </div>
+    </header>
+
+    <main>
+      <div class="container">
+        <section class="card">
+          <h2>What Verifact is</h2>
+          <p>Verifact helps users submit claims, review source links, add evidence, and vote on whether a claim appears True, Fake, or Not Sure.</p>
+          <p>The product is designed for community-powered claim verification. It is not an official fact-checking authority, and it does not promise guaranteed truth.</p>
+        </section>
+
+        <section class="card">
+          <h2>How the review process works</h2>
+          <ul>
+            <li>Users submit claims with source links or context.</li>
+            <li>Community members can add evidence and review what supports or challenges a claim.</li>
+            <li>AI-assisted source review can help summarize source quality and risk signals.</li>
+            <li>AI does not make the final decision. Human and community voting remains the deciding signal in Verifact's review flow.</li>
+          </ul>
+          <div class="pill-row" aria-label="Verifact review signals">
+            <span class="pill green">True</span>
+            <span class="pill red">Fake</span>
+            <span class="pill amber">Not Sure</span>
+            <span class="pill purple">AI-assisted review</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Neutral by design</h2>
+          <p>Verifact is built for political neutrality. The same rules apply to claims from any person, party, organization, source, or viewpoint.</p>
+          <p>The goal is to make the review process more transparent: show the claim, show the evidence, show the source context, and let the community participate.</p>
+        </section>
+
+        <section class="card contact">
+          <h2>Contact</h2>
+          <p>Verifact is owned and operated by PennyFloat.</p>
+          <p>For support, app review questions, or public page requests, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <div class="container">&copy; 2026 PennyFloat</div>
+    </footer>
   </body>
 </html>"""
 
@@ -771,6 +1074,11 @@ class AiPrecheckResponse(BaseModel):
 @app.get("/")
 def home():
     return {"message": "Verifact API running"}
+
+
+@app.get("/about", response_class=HTMLResponse)
+def about_page():
+    return HTMLResponse(content=ABOUT_PAGE_HTML, status_code=200)
 
 
 @app.get("/privacy", response_class=HTMLResponse)

@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const pages = [
   { source: "index.html", destination: join(repoRoot, "dist", "index.html") },
+  { source: "about.html", destination: join(repoRoot, "dist", "about", "index.html") },
   { source: "privacy.html", destination: join(repoRoot, "dist", "privacy", "index.html") },
   { source: "terms.html", destination: join(repoRoot, "dist", "terms", "index.html") },
   {
