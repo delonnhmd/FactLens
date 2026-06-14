@@ -43,6 +43,7 @@ export interface AiPrecheckResponse {
 }
 
 const AI_PRECHECK_TIMEOUT_MS = 12000;
+const AI_PRECHECK_UNAVAILABLE_MESSAGE = "AI review unavailable. Community verification can continue.";
 
 // PHASE 4 STEP 20
 function isSourceQualityConstraintError(message: string): boolean {
@@ -62,14 +63,14 @@ function isRawBackendError(message: string): boolean {
 }
 
 // PHASE 4 STEP 20
-export function formatAiPrecheckErrorForDisplay(parts: Array<unknown>, fallback = "AI pre-check unavailable."): string {
+export function formatAiPrecheckErrorForDisplay(parts: Array<unknown>, fallback = AI_PRECHECK_UNAVAILABLE_MESSAGE): string {
   const message = parts
     .filter((part) => part !== null && part !== undefined && part !== "")
     .map((part) => (typeof part === "string" ? part : JSON.stringify(part)))
     .join(" ");
 
   if (isSourceQualityConstraintError(message)) {
-    return "AI pre-check is unavailable right now.";
+    return fallback;
   }
 
   if (isRawBackendError(message)) {
@@ -93,7 +94,7 @@ function getBackendErrorMessage(data: Partial<AiPrecheckResponse>, status: numbe
 
   return formatAiPrecheckErrorForDisplay(
     [data.error, detail, data.details, data.hint],
-    "AI pre-check is unavailable right now.",
+    AI_PRECHECK_UNAVAILABLE_MESSAGE,
   );
 }
 
@@ -110,7 +111,7 @@ async function postAiPrecheck(
     return {
       ok: false,
       claim_id: claimId,
-      error: "AI pre-check unavailable",
+      error: AI_PRECHECK_UNAVAILABLE_MESSAGE,
     };
   }
 
@@ -187,14 +188,14 @@ async function postAiPrecheck(
       return {
         ok: false,
         claim_id: claimId,
-        error: "AI request timed out.",
+        error: AI_PRECHECK_UNAVAILABLE_MESSAGE,
       };
     }
 
     return {
       ok: false,
       claim_id: claimId,
-      error: "AI pre-check unavailable",
+      error: AI_PRECHECK_UNAVAILABLE_MESSAGE,
     };
   } finally {
     clearTimeout(timeoutId);

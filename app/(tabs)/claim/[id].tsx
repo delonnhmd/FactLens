@@ -127,6 +127,8 @@ const compactReportReasons: Array<{ label: string; value: ReportReason }> = [
 ];
 
 const CLAIM_REFETCH_DELAY_MS = 300;
+const AI_SOURCE_REVIEW_RUNNING_MESSAGE = "Running AI source review...";
+const AI_REVIEW_FALLBACK_MESSAGE = "AI review unavailable. Community verification can continue.";
 
 function waitForClaimRefetch() {
   return new Promise((resolve) => setTimeout(resolve, CLAIM_REFETCH_DELAY_MS));
@@ -309,8 +311,6 @@ export default function ClaimDetailScreen() {
     fetchReportsForClaim,
     reportClaim,
     refreshClaimVerdict,
-    runAiPrecheckForClaimId,
-    retryAiPrecheckWithEvidenceForClaimId,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -343,12 +343,6 @@ export default function ClaimDetailScreen() {
   const [voteSuccess, setVoteSuccess] = useState("");
   // PHASE 4 STEP 24
   const [voteSubmitting, setVoteSubmitting] = useState(false);
-  // PHASE 4 STEP 2
-  const [aiPrecheckLoading, setAiPrecheckLoading] = useState(false);
-  // PHASE 4 STEP 10
-  const [aiEvidenceRecheckLoading, setAiEvidenceRecheckLoading] = useState(false);
-  const [aiPrecheckMessage, setAiPrecheckMessage] = useState("");
-  const [aiPrecheckError, setAiPrecheckError] = useState("");
   // PHASE 3 STEP 12
   const [liveUpdatesOn, setLiveUpdatesOn] = useState(false);
   // PHASE 4 STEP 15
@@ -813,58 +807,6 @@ export default function ClaimDetailScreen() {
     }
   };
 
-  // PHASE 4 STEP 3
-  // PHASE 4 STEP 10B
-  const handleRunAiPrecheck = async () => {
-    // PHASE 4 STEP 15
-    if (!claim || aiPrecheckLoading || aiEvidenceRecheckLoading) {
-      return;
-    }
-
-    setAiPrecheckLoading(true);
-    setAiPrecheckMessage("");
-    setAiPrecheckError("");
-
-    try {
-      const updatedClaim = await runAiPrecheckForClaimId(claim.id);
-      if (!updatedClaim) {
-        throw new Error("AI pre-check completed, but claim refresh failed.");
-      }
-
-      await waitForClaimRefetch();
-      await refreshDetailClaim();
-      setAiPrecheckMessage("AI pre-check updated.");
-    } catch (error) {
-      setAiPrecheckError("AI check is in progress. Results will appear shortly.");
-    } finally {
-      setAiPrecheckLoading(false);
-    }
-  };
-
-  // PHASE 4 STEP 10
-  const handleRecheckWithEvidence = async () => {
-    // PHASE 4 STEP 15
-    if (!claim || aiPrecheckLoading || aiEvidenceRecheckLoading) {
-      return;
-    }
-
-    setAiEvidenceRecheckLoading(true);
-    setAiPrecheckMessage("");
-    setAiPrecheckError("");
-
-    try {
-      await retryAiPrecheckWithEvidenceForClaimId(claim.id);
-      await waitForClaimRefetch();
-      await refreshDetailClaim();
-      setAiPrecheckMessage("AI re-check updated.");
-    } catch (error) {
-      // PHASE 4 STEP 16
-      setAiPrecheckError("AI check is in progress. Results will appear shortly.");
-    } finally {
-      setAiEvidenceRecheckLoading(false);
-    }
-  };
-
   if (!claim) {
     return (
       <SafeAreaView style={styles.container}>
@@ -925,7 +867,6 @@ export default function ClaimDetailScreen() {
     (firstEvidence, secondEvidence) =>
       new Date(secondEvidence.createdAt).getTime() - new Date(firstEvidence.createdAt).getTime(),
   );
-  const hasEvidenceLinks = evidenceCount > 0 || claim.evidence.length > 0;
   // PHASE 5 STEP 1E
   const openContributorProfile = (slugOrUsername?: string | null) => {
     if (!slugOrUsername) {
@@ -979,13 +920,14 @@ export default function ClaimDetailScreen() {
   const showNeutralPoliticsBadge = claim.category === "Politics" || claim.subCategory === "Election 2026";
   // PHASE 4 STEP 7
   const isNotFactCheckable = claim.aiCheck.status === "NOT_FACT_CHECKABLE";
-  // PHASE 4 STEP 3
-  const canRetryAiPrecheck =
-    claim.aiCheck.status === "PENDING" ||
-    claim.aiCheck.status === "ERROR" ||
-    claim.aiCheck.status === "NEEDS_MORE_EVIDENCE" ||
-    claim.aiCheck.confidence === null ||
-    claim.aiCheck.confidence === undefined;
+  const aiReviewStatusMessage =
+    claim.aiCheck.status === "PENDING"
+      ? AI_SOURCE_REVIEW_RUNNING_MESSAGE
+      : claim.aiCheck.status === "ERROR"
+        ? AI_REVIEW_FALLBACK_MESSAGE
+        : "";
+  const aiReviewStatusStyle =
+    claim.aiCheck.status === "ERROR" ? styles.aiReviewFallback : styles.aiReviewRunning;
   const voteMessage = voteSubmitting
     ? "Saving vote..."
     : !votingOpen
@@ -1168,32 +1110,7 @@ export default function ClaimDetailScreen() {
               <Text style={styles.aiDisclaimer}>
                 AI pre-check is only a risk signal. Community voting decides the final result.
               </Text>
-              {canRetryAiPrecheck ? (
-                <TouchableOpacity
-                  style={[styles.aiRetryButton, (aiPrecheckLoading || aiEvidenceRecheckLoading) && styles.disabledButton]}
-                  activeOpacity={0.85}
-                  disabled={aiPrecheckLoading || aiEvidenceRecheckLoading}
-                  onPress={handleRunAiPrecheck}
-                >
-                  <Text style={styles.aiRetryButtonText}>
-                    {aiPrecheckLoading ? "Checking..." : "Run AI Pre-check"}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-              {hasEvidenceLinks ? (
-                <TouchableOpacity
-                  style={[styles.aiRetryButton, (aiPrecheckLoading || aiEvidenceRecheckLoading) && styles.disabledButton]}
-                  activeOpacity={0.85}
-                  disabled={aiPrecheckLoading || aiEvidenceRecheckLoading}
-                  onPress={handleRecheckWithEvidence}
-                >
-                  <Text style={styles.aiRetryButtonText}>
-                    {aiEvidenceRecheckLoading ? "Re-checking..." : "Re-check with Evidence"}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-              {aiPrecheckMessage ? <Text style={styles.aiRetryMessage}>{aiPrecheckMessage}</Text> : null}
-              {aiPrecheckError ? <Text style={styles.aiRetryError}>{aiPrecheckError}</Text> : null}
+              {aiReviewStatusMessage ? <Text style={aiReviewStatusStyle}>{aiReviewStatusMessage}</Text> : null}
             </View>
           </View>
         </View>
@@ -1933,30 +1850,17 @@ function createStyles(theme: AppTheme) {
     fontSize: 11,
     lineHeight: 15,
   },
-  // PHASE 4 STEP 2
-  aiRetryButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: theme.colors.ai,
-    borderRadius: theme.radius.sm,
-    marginTop: 2,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  aiRetryButtonText: {
-    color: theme.colors.chipActiveText,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  aiRetryMessage: {
-    color: theme.colors.success,
+  aiReviewRunning: {
+    color: theme.colors.ai,
     fontSize: 11,
     fontWeight: "500",
+    lineHeight: 15,
   },
-  aiRetryError: {
-    color: theme.colors.danger,
+  aiReviewFallback: {
+    color: theme.colors.warningText,
     fontSize: 11,
     fontWeight: "500",
+    lineHeight: 15,
   },
   notFactCheckableWarning: {
     color: theme.colors.warningText,

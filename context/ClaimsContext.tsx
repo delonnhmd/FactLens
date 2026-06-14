@@ -135,6 +135,8 @@ interface ClaimsContextValue {
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
 const AI_PRECHECK_REFETCH_DELAY_MS = 300;
+const AI_PRECHECK_RUNNING_MESSAGE = "Running AI source review...";
+const AI_PRECHECK_FALLBACK_MESSAGE = "AI review unavailable. Community verification can continue.";
 
 function waitForAiPrecheckRefresh() {
   return new Promise((resolve) => setTimeout(resolve, AI_PRECHECK_REFETCH_DELAY_MS));
@@ -250,7 +252,7 @@ function getStringListField(value: unknown): string[] {
 
 function getAiPrecheckErrorMessage(result: AiPrecheckResponse): string {
   // PHASE 4 STEP 20
-  return formatAiPrecheckErrorForDisplay([result.error, result.details, result.hint], "AI pre-check unavailable.");
+  return formatAiPrecheckErrorForDisplay([result.error, result.details, result.hint], AI_PRECHECK_FALLBACK_MESSAGE);
 }
 
 function mergeAiPrecheckResponseIntoClaim(claim: Claim, result: AiPrecheckResponse): Claim {
@@ -722,10 +724,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
   /*
    * PHASE 4 STEP 15
-   * Automatic AI retry on app open is disabled for stability. AI now runs only:
-   * 1. once after claim creation,
-   * 2. when the user taps Run AI Pre-check,
-   * 3. when the user taps Re-check with Evidence.
+   * Automatic AI retry on app open is disabled for stability.
+   * AI source review starts once after claim creation.
    */
 
   const currentClaims = useMemo(
@@ -760,7 +760,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
 
       if (refreshedClaimResult.error || !refreshedClaimResult.claim) {
         console.log("[ai precheck warning]", refreshedClaimResult.error ?? "Could not refresh AI pre-check result.");
-        setAiPrecheckNotice(refreshedClaimResult.error ?? "AI pre-check will retry later.");
+        setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
         return undefined;
       }
 
@@ -794,6 +794,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       aiInFlightClaimIdsRef.current.add(targetClaim.id);
+      setAiPrecheckNotice(AI_PRECHECK_RUNNING_MESSAGE);
 
       try {
         const precheckResult = await runAiPrecheckForClaim(targetClaim);
@@ -807,11 +808,21 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         if (!precheckResult.ok) {
           const message = getAiPrecheckErrorMessage(precheckResult);
           console.log("[ai precheck warning]", message);
-          setAiPrecheckNotice(`AI pre-check failed: ${message}`);
-          throw new Error(message);
+          await refreshClaimAfterAiPrecheck(targetClaim).catch((refreshError) => {
+            console.log("[ai precheck warning]", refreshError instanceof Error ? refreshError.message : refreshError);
+          });
+          setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
+          return undefined;
         }
 
         return refreshClaimAfterAiPrecheck(targetClaim, precheckResult);
+      } catch (error) {
+        console.log("[ai precheck warning]", error instanceof Error ? error.message : error);
+        await refreshClaimAfterAiPrecheck(targetClaim).catch((refreshError) => {
+          console.log("[ai precheck warning]", refreshError instanceof Error ? refreshError.message : refreshError);
+        });
+        setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
+        return undefined;
       } finally {
         aiInFlightClaimIdsRef.current.delete(targetClaim.id);
       }
@@ -841,7 +852,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
           });
 
           if (showNotice) {
-            setAiPrecheckNotice(`AI pre-check failed: ${message}`);
+            setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
             throw new Error(message);
           }
 
@@ -969,7 +980,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     // PHASE 4 STEP 2
     void runAiPrecheckAndRefreshClaim(createdClaim).catch((precheckError) => {
       console.log("[ai precheck warning]", precheckError instanceof Error ? precheckError.message : precheckError);
-      setAiPrecheckNotice("AI pre-check will retry later.");
+      setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
     });
 
     return createdClaim;
