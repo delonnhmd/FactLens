@@ -138,7 +138,7 @@ export default function AuthCallbackScreen() {
             if (mounted) {
               clearSensitiveWebUrl("success");
               setStatus("success");
-              setMessage("Your account has been verified successfully. You can now continue to Verifact.");
+              setMessage("Your account has been verified successfully. You can now return to Verifact and sign in.");
             }
             return;
           }
@@ -152,7 +152,7 @@ export default function AuthCallbackScreen() {
 
         clearSensitiveWebUrl("success");
         setStatus("success");
-        setMessage("Your account has been verified successfully. You can now continue to Verifact.");
+        setMessage("Your account has been verified successfully. You can now return to Verifact and sign in.");
       } catch (error) {
         if (!mounted) {
           return;
@@ -170,6 +170,11 @@ export default function AuthCallbackScreen() {
       mounted = false;
     };
   }, [authParams.accessToken, authParams.code, authParams.error, authParams.refreshToken, refreshUser]);
+
+  const handleContinueToLogin = async () => {
+    await supabase.auth.signOut();
+    router.replace("/auth");
+  };
 
   const title =
     status === "loading" ? "Verifying your email..." : status === "success" ? "Email verified successfully" : "Verification link problem";
@@ -192,11 +197,8 @@ export default function AuthCallbackScreen() {
 
         {status !== "loading" ? (
           <View style={styles.actions}>
-            <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={() => router.replace("/")}>
-              <Text style={styles.buttonText}>Open App</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85} onPress={() => router.replace("/auth")}>
-              <Text style={styles.secondaryButtonText}>Continue to Login</Text>
+            <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={handleContinueToLogin}>
+              <Text style={styles.buttonText}>Continue to Login</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -266,21 +268,6 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: theme.colors.background,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "500",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    minHeight: 48,
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-  },
-  secondaryButtonText: {
-    color: theme.colors.primary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },

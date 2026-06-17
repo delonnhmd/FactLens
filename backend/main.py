@@ -14,6 +14,7 @@
 # PHASE 4 STEP 17
 # PHASE 4 STEP 18
 # PHASE 4 STEP 27
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -51,6 +52,20 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
 load_dotenv()
 # PHASE 4 STEP 27
 app = FastAPI(title="Verifact backend", docs_url=None, redoc_url=None, openapi_url=None)
+
+PUBLIC_SITE_URL = "https://verifact.pennyfloat.com"
+FALLBACK_SUPABASE_URL = "https://islcxqkevxxopatqvlqz.supabase.co"
+FALLBACK_SUPABASE_ANON_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzbGN4cWtldnh4b3BhdHF2bHF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3NDE5ODksImV4cCI6MjA5NTMxNzk4OX0."
+    "96zZEPyRz2_RLkKJTx1GJIzQ-E1EcGA1X82FLPohTlg"
+)
+SUPABASE_PUBLIC_URL = (
+    os.environ.get("EXPO_PUBLIC_SUPABASE_URL")
+    or os.environ.get("SUPABASE_URL")
+    or FALLBACK_SUPABASE_URL
+).rstrip("/")
+SUPABASE_PUBLIC_ANON_KEY = os.environ.get("EXPO_PUBLIC_SUPABASE_ANON_KEY") or FALLBACK_SUPABASE_ANON_KEY
 
 AUTH_CALLBACK_HTML = """
 <!DOCTYPE html>
@@ -172,17 +187,14 @@ AUTH_CALLBACK_HTML = """
     <main id="card" data-state="success">
       <div id="mark" class="mark">OK</div>
       <h1 id="title">Email verified successfully</h1>
-      <p id="copy">Your account has been verified successfully. You can now continue to Verifact.</p>
+      <p id="copy">Your account has been verified successfully. You can now return to Verifact and sign in.</p>
       <div class="actions">
-        <a id="open-app" class="primary" href="verifact://auth/callback">Open App</a>
-        <a id="login" class="secondary" href="verifact://auth">Continue to Login</a>
+        <a id="login" class="primary" href="/">Continue to Login</a>
       </div>
-      <p id="small" class="small">If Verifact does not open automatically, use the button above.</p>
     </main>
     <script>
       const search = window.location.search || "";
       const hash = window.location.hash || "";
-      const deepLink = `verifact://auth/callback${search}${hash}`;
       const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
       const searchParams = new URLSearchParams(search.replace(/^\\?/, ""));
       const error =
@@ -195,10 +207,6 @@ AUTH_CALLBACK_HTML = """
       const mark = document.getElementById("mark");
       const title = document.getElementById("title");
       const copy = document.getElementById("copy");
-      const openApp = document.getElementById("open-app");
-      const login = document.getElementById("login");
-
-      openApp.href = deepLink;
 
       if (window.history && window.history.replaceState) {
         window.history.replaceState(null, "", error ? "/auth/callback" : "/auth/confirmed");
@@ -209,17 +217,346 @@ AUTH_CALLBACK_HTML = """
         mark.textContent = "!";
         title.textContent = "Verification link problem";
         copy.textContent = "This verification link could not be used. Request a new verification email from the Verifact app and try again.";
-      } else {
-        window.setTimeout(() => {
-          window.location.href = deepLink;
-        }, 900);
       }
-
-      login.href = "verifact://auth";
     </script>
   </body>
 </html>
 """
+
+RESET_PASSWORD_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="Reset your Verifact password." />
+    <title>Reset your password | Verifact</title>
+    <style>
+      :root {
+        --ink: #172033;
+        --muted: #667085;
+        --border: #e4e7ec;
+        --surface: #ffffff;
+        --soft: #f5f7fa;
+        --navy: #0d1b3e;
+        --danger: #e24b4a;
+        --success: #1d9e75;
+        --success-soft: #e1f5ee;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        align-items: center;
+        background:
+          radial-gradient(circle at top left, rgba(29, 158, 117, 0.12), transparent 28%),
+          linear-gradient(180deg, #ffffff 0%, var(--soft) 100%);
+        color: var(--ink);
+        display: flex;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        justify-content: center;
+        line-height: 1.5;
+        margin: 0;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      main {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        max-width: 480px;
+        padding: 28px;
+        width: 100%;
+      }
+
+      .brand {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .mark {
+        align-items: center;
+        background: var(--navy);
+        border-radius: 12px;
+        color: #ffffff;
+        display: flex;
+        font-size: 15px;
+        font-weight: 800;
+        height: 42px;
+        justify-content: center;
+        width: 42px;
+      }
+
+      .brand-name {
+        color: var(--navy);
+        font-size: 21px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+
+      .brand-line {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 2px;
+      }
+
+      h1 {
+        color: var(--navy);
+        font-size: 26px;
+        letter-spacing: 0;
+        line-height: 1.2;
+        margin: 0 0 10px;
+      }
+
+      p {
+        color: var(--muted);
+        font-size: 15px;
+        margin: 0 0 18px;
+      }
+
+      form {
+        display: grid;
+        gap: 14px;
+      }
+
+      label {
+        color: var(--ink);
+        display: grid;
+        font-size: 13px;
+        font-weight: 800;
+        gap: 7px;
+      }
+
+      input {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--ink);
+        font: inherit;
+        min-height: 48px;
+        padding: 11px 12px;
+        width: 100%;
+      }
+
+      input:focus {
+        border-color: var(--navy);
+        outline: 3px solid rgba(13, 27, 62, 0.12);
+      }
+
+      button,
+      a.button {
+        align-items: center;
+        background: var(--navy);
+        border: 0;
+        border-radius: 8px;
+        color: #ffffff;
+        cursor: pointer;
+        display: inline-flex;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        justify-content: center;
+        min-height: 48px;
+        padding: 12px 16px;
+        text-decoration: none;
+      }
+
+      button:disabled {
+        background: #98a2b3;
+        cursor: not-allowed;
+      }
+
+      .feedback {
+        border-radius: 10px;
+        display: none;
+        font-size: 14px;
+        font-weight: 700;
+        margin: 18px 0 0;
+        padding: 12px;
+      }
+
+      .feedback[data-kind="error"],
+      .feedback[data-kind="success"] {
+        display: block;
+      }
+
+      .feedback[data-kind="error"] {
+        background: #fcebeb;
+        color: var(--danger);
+      }
+
+      .feedback[data-kind="success"] {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .success-actions {
+        display: none;
+        margin-top: 18px;
+      }
+
+      main[data-state="success"] .success-actions {
+        display: grid;
+      }
+
+      main[data-state="success"] form,
+      main[data-state="invalid"] form {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="card" data-state="loading">
+      <div class="brand" aria-label="Verifact">
+        <div class="mark">V</div>
+        <div>
+          <div class="brand-name">Verifact</div>
+          <div class="brand-line">The red. The blue. The truth.</div>
+        </div>
+      </div>
+
+      <h1>Reset your password</h1>
+      <p id="intro">Enter a new password for your Verifact account.</p>
+
+      <form id="reset-form" hidden>
+        <label>
+          New password
+          <input id="new-password" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+
+        <label>
+          Confirm password
+          <input id="confirm-password" type="password" autocomplete="new-password" minlength="8" required />
+        </label>
+
+        <button id="submit-button" type="submit">Update password</button>
+      </form>
+
+      <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
+      <div class="success-actions">
+        <a class="button" href="/">Continue to Login</a>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      const SUPABASE_URL = __SUPABASE_PUBLIC_URL__;
+      const SUPABASE_ANON_KEY = __SUPABASE_PUBLIC_ANON_KEY__;
+      const card = document.getElementById("card");
+      const form = document.getElementById("reset-form");
+      const feedback = document.getElementById("feedback");
+      const intro = document.getElementById("intro");
+      const newPassword = document.getElementById("new-password");
+      const confirmPassword = document.getElementById("confirm-password");
+      const submitButton = document.getElementById("submit-button");
+
+      function setFeedback(message, kind) {
+        feedback.textContent = message;
+        feedback.dataset.kind = kind;
+      }
+
+      function showInvalidLink() {
+        card.dataset.state = "invalid";
+        intro.textContent = "This reset link could not be used. Request a new password reset email from Verifact and try again.";
+        setFeedback("We could not verify this reset link. Please request a new password reset email.", "error");
+      }
+
+      async function initializeResetSession() {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const accessToken = hashParams.get("access_token") || "";
+        const refreshToken = hashParams.get("refresh_token") || "";
+        const type = hashParams.get("type") || "";
+
+        if (!accessToken || !refreshToken || type !== "recovery") {
+          showInvalidLink();
+          return;
+        }
+
+        if (!window.supabase || !window.supabase.createClient) {
+          card.dataset.state = "invalid";
+          setFeedback("Password reset is temporarily unavailable. Please try again.", "error");
+          return;
+        }
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let sessionResult;
+
+        try {
+          sessionResult = await supabaseClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        } catch {
+          showInvalidLink();
+          return;
+        }
+
+        if (sessionResult.error) {
+          showInvalidLink();
+          return;
+        }
+
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, "", "/reset-password");
+        }
+
+        card.dataset.state = "ready";
+        form.hidden = false;
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          setFeedback("", "");
+
+          const nextPassword = newPassword.value;
+          const confirmedPassword = confirmPassword.value;
+
+          if (nextPassword.length < 8) {
+            setFeedback("Password must be at least 8 characters.", "error");
+            return;
+          }
+
+          if (nextPassword !== confirmedPassword) {
+            setFeedback("Passwords must match.", "error");
+            return;
+          }
+
+          submitButton.disabled = true;
+          submitButton.textContent = "Updating...";
+
+          try {
+            const { error: updateError } = await supabaseClient.auth.updateUser({ password: nextPassword });
+
+            if (updateError) {
+              setFeedback("We could not update your password. Please try again.", "error");
+              return;
+            }
+          } catch {
+            setFeedback("We could not update your password. Please try again.", "error");
+            return;
+          } finally {
+            submitButton.disabled = false;
+            submitButton.textContent = "Update password";
+          }
+
+          card.dataset.state = "success";
+          intro.textContent = "";
+          setFeedback("Password updated successfully. You can now return to Verifact and sign in.", "success");
+        });
+      }
+
+      initializeResetSession();
+    </script>
+  </body>
+</html>
+""".replace("__SUPABASE_PUBLIC_URL__", json.dumps(SUPABASE_PUBLIC_URL)).replace(
+    "__SUPABASE_PUBLIC_ANON_KEY__",
+    json.dumps(SUPABASE_PUBLIC_ANON_KEY),
+)
 
 LEGAL_PAGE_STYLE = """
   :root {
@@ -1774,6 +2111,16 @@ def auth_callback_page():
 @app.get("/auth/confirmed", response_class=HTMLResponse)
 def auth_confirmed_page():
     return HTMLResponse(content=AUTH_CALLBACK_HTML, status_code=200)
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page():
+    return HTMLResponse(content=RESET_PASSWORD_HTML, status_code=200)
+
+
+@app.get("/auth/reset-password", response_class=HTMLResponse)
+def auth_reset_password_page():
+    return HTMLResponse(content=RESET_PASSWORD_HTML, status_code=200)
 
 
 # PHASE 5 STEP 1B

@@ -2,9 +2,15 @@ import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-na
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { theme } from "../../constants/theme";
+import { supabase } from "../../lib/supabase";
 
 export default function AuthConfirmedScreen() {
   const router = useRouter();
+
+  const handleContinueToLogin = async () => {
+    await supabase.auth.signOut();
+    router.replace("/auth");
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -13,12 +19,11 @@ export default function AuthConfirmedScreen() {
           <Ionicons name="checkmark-circle-outline" size={38} color={theme.colors.primary} />
         </View>
         <Text style={styles.title}>Email verified successfully</Text>
-        <Text style={styles.body}>Your account has been verified successfully. You can now continue to Verifact.</Text>
-        <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={() => router.replace("/")}>
-          <Text style={styles.buttonText}>Open App</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.85} onPress={() => router.replace("/auth")}>
-          <Text style={styles.secondaryButtonText}>Continue to Login</Text>
+        <Text style={styles.body}>
+          Your account has been verified successfully. You can now return to Verifact and sign in.
+        </Text>
+        <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={handleContinueToLogin}>
+          <Text style={styles.buttonText}>Continue to Login</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -75,28 +80,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.sm,
     minHeight: 48,
     justifyContent: "center",
-    marginBottom: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
   },
   buttonText: {
     color: theme.colors.background,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "500",
-  },
-  secondaryButton: {
-    alignItems: "center",
-    alignSelf: "stretch",
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    minHeight: 48,
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-  },
-  secondaryButtonText: {
-    color: theme.colors.primary,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
   },

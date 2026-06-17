@@ -1,10 +1,24 @@
 // PHASE 3 STEP 1
 import { useState } from "react";
-import { View, Text, TextInput, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
+import { RESET_PASSWORD_URL } from "../../constants/launchConfig";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
+import { supabase, supabaseConfigError } from "../../lib/supabase";
 
 type AuthMode = "LOGIN" | "SIGN_UP";
 
@@ -18,6 +32,11 @@ export default function AuthScreen() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetModalVisible, setResetModalVisible] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
+  const [resetError, setResetError] = useState("");
 
   const signingUp = mode === "SIGN_UP";
 
@@ -66,6 +85,53 @@ export default function AuthScreen() {
     setMessage("");
   };
 
+  const openResetModal = () => {
+    setResetEmail(email.trim().toLowerCase());
+    setResetError("");
+    setResetMessage("");
+    setResetModalVisible(true);
+  };
+
+  const closeResetModal = () => {
+    if (resetLoading) {
+      return;
+    }
+
+    setResetModalVisible(false);
+    setResetError("");
+    setResetMessage("");
+  };
+
+  const handleSendPasswordReset = async () => {
+    setResetError("");
+    setResetMessage("");
+
+    const trimmedEmail = resetEmail.trim().toLowerCase();
+
+    if (!trimmedEmail || supabaseConfigError) {
+      setResetError("We could not send the reset email. Please try again.");
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      const { error: resetPasswordError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: RESET_PASSWORD_URL,
+      });
+
+      if (resetPasswordError) {
+        setResetError("We could not send the reset email. Please try again.");
+        return;
+      }
+
+      setResetMessage("Password reset email sent. Please check your inbox.");
+    } catch {
+      setResetError("We could not send the reset email. Please try again.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Verifact Account" subtitle="Log in or create a verified account" />
@@ -104,6 +170,12 @@ export default function AuthScreen() {
             />
           </View>
 
+          {!signingUp ? (
+            <TouchableOpacity style={styles.forgotButton} activeOpacity={0.8} onPress={openResetModal}>
+              <Text style={styles.forgotButtonText}>Forgot your password?</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {signingUp ? (
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Username</Text>
@@ -140,6 +212,52 @@ export default function AuthScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal visible={resetModalVisible} animationType="fade" transparent onRequestClose={closeResetModal}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Reset your password</Text>
+            <Text style={styles.modalBody}>
+              Enter the email address on your Verifact account and we will send a reset link.
+            </Text>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                value={resetEmail}
+                onChangeText={(nextEmail) => setResetEmail(nextEmail.trim().toLowerCase())}
+                placeholder="you@example.com"
+                placeholderTextColor={theme.colors.muted}
+                style={styles.input}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!resetLoading}
+              />
+            </View>
+
+            {resetError ? <Text style={styles.errorText}>{resetError}</Text> : null}
+            {resetMessage ? <Text style={styles.messageText}>{resetMessage}</Text> : null}
+
+            <TouchableOpacity
+              style={[styles.button, resetLoading && styles.buttonDisabled]}
+              activeOpacity={0.8}
+              disabled={resetLoading}
+              onPress={handleSendPasswordReset}
+            >
+              {resetLoading ? <ActivityIndicator color={theme.colors.background} /> : null}
+              <Text style={styles.buttonText}>{resetLoading ? "Sending..." : "Send reset email"}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.8} onPress={closeResetModal}>
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -191,6 +309,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
   },
+  forgotButton: {
+    alignSelf: "flex-start",
+    marginBottom: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  forgotButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
   errorText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
@@ -207,6 +335,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
     paddingVertical: theme.spacing.md,
   },
   buttonDisabled: {
@@ -226,5 +357,35 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
+  },
+  modalOverlay: {
+    alignItems: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.48)",
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: theme.colors.background,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    maxWidth: 440,
+    padding: theme.spacing.lg,
+    width: "100%",
+    ...theme.shadows.light,
+  },
+  modalTitle: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title.fontSize,
+    fontWeight: "500",
+    lineHeight: theme.typography.title.lineHeight,
+    marginBottom: theme.spacing.sm,
+  },
+  modalBody: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.body.fontSize,
+    lineHeight: theme.typography.body.lineHeight,
+    marginBottom: theme.spacing.lg,
   },
 });

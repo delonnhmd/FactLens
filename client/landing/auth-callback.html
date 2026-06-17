@@ -117,17 +117,14 @@
     <main id="card" data-state="success">
       <div id="mark" class="mark">OK</div>
       <h1 id="title">Email verified successfully</h1>
-      <p id="copy">Your account has been verified successfully. You can now continue to Verifact.</p>
+      <p id="copy">Your account has been verified successfully. You can now return to Verifact and sign in.</p>
       <div class="actions">
-        <a id="open-app" class="primary" href="verifact://auth/callback">Open App</a>
-        <a id="login" class="secondary" href="verifact://auth">Continue to Login</a>
+        <a id="login" class="primary" href="/">Continue to Login</a>
       </div>
-      <p id="small" class="small">If Verifact does not open automatically, use the button above.</p>
     </main>
     <script>
       const search = window.location.search || "";
       const hash = window.location.hash || "";
-      const deepLink = `verifact://auth/callback${search}${hash}`;
       const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
       const searchParams = new URLSearchParams(search.replace(/^\?/, ""));
       const error =
@@ -140,10 +137,6 @@
       const mark = document.getElementById("mark");
       const title = document.getElementById("title");
       const copy = document.getElementById("copy");
-      const openApp = document.getElementById("open-app");
-      const login = document.getElementById("login");
-
-      openApp.href = deepLink;
 
       if (window.history && window.history.replaceState) {
         window.history.replaceState(null, "", error ? "/auth/callback" : "/auth/confirmed");
@@ -154,13 +147,7 @@
         mark.textContent = "!";
         title.textContent = "Verification link problem";
         copy.textContent = "This verification link could not be used. Request a new verification email from the Verifact app and try again.";
-      } else {
-        window.setTimeout(() => {
-          window.location.href = deepLink;
-        }, 900);
       }
-
-      login.href = "verifact://auth";
     </script>
   </body>
 </html>

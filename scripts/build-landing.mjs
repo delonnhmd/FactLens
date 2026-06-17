@@ -17,6 +17,8 @@ const pages = [
   { source: "ai-disclaimer.html", destination: join(repoRoot, "dist", "ai-disclaimer", "index.html") },
   { source: "auth-callback.html", destination: join(repoRoot, "dist", "auth", "callback", "index.html") },
   { source: "auth-callback.html", destination: join(repoRoot, "dist", "auth", "confirmed", "index.html") },
+  { source: "reset-password.html", destination: join(repoRoot, "dist", "reset-password", "index.html") },
+  { source: "reset-password.html", destination: join(repoRoot, "dist", "auth", "reset-password", "index.html") },
 ];
 
 pages.forEach((page) => {
