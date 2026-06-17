@@ -106,7 +106,7 @@ export default function AuthScreen() {
     setResetError("");
     setResetMessage("");
 
-    const trimmedEmail = resetEmail.trim().toLowerCase();
+    const trimmedEmail = resetEmail.trim();
 
     if (!trimmedEmail || supabaseConfigError) {
       setResetError("We could not send the reset email. Please try again.");
@@ -171,7 +171,14 @@ export default function AuthScreen() {
           </View>
 
           {!signingUp ? (
-            <TouchableOpacity style={styles.forgotButton} activeOpacity={0.8} onPress={openResetModal}>
+            <TouchableOpacity
+              style={styles.forgotButton}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessible
+              accessibilityLabel="Reset your password"
+              onPress={openResetModal}
+            >
               <Text style={styles.forgotButtonText}>Forgot your password?</Text>
             </TouchableOpacity>
           ) : null}
@@ -228,7 +235,7 @@ export default function AuthScreen() {
               <Text style={styles.label}>Email</Text>
               <TextInput
                 value={resetEmail}
-                onChangeText={(nextEmail) => setResetEmail(nextEmail.trim().toLowerCase())}
+                onChangeText={setResetEmail}
                 placeholder="you@example.com"
                 placeholderTextColor={theme.colors.muted}
                 style={styles.input}
@@ -310,14 +317,16 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   forgotButton: {
-    alignSelf: "flex-start",
+    alignItems: "flex-end",
+    alignSelf: "stretch",
     marginBottom: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
   },
   forgotButtonText: {
-    color: theme.colors.primary,
+    color: theme.colors.link,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
+    textAlign: "right",
   },
   errorText: {
     color: theme.colors.danger,
