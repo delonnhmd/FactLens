@@ -8,9 +8,9 @@ import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { AUTH_CALLBACK_URL } from "../constants/launchConfig";
 import { supabase, supabaseConfigError } from "../lib/supabase";
-import { ensureProfileForUser, getProfile } from "../services/profileService";
+import { checkUsernameAvailability, ensureProfileForUser, getProfile, USERNAME_TAKEN_MESSAGE } from "../services/profileService";
 import type { Profile } from "../services/profileService";
-import { normalizeUsername } from "../utils/username";
+import { getUsernameValidationError, normalizeUsername } from "../utils/username";
 
 interface AuthActionResult {
   error?: string;
@@ -314,10 +314,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: CONFIG_UNAVAILABLE_MESSAGE };
     }
 
+    const usernameValidationError = getUsernameValidationError(username);
     const trimmedUsername = normalizeUsername(username);
 
-    if (!trimmedUsername) {
-      return { error: "Username must be at least 3 characters." };
+    if (usernameValidationError || !trimmedUsername) {
+      return { error: usernameValidationError || "Username must be 3-20 characters." };
+    }
+
+    const availability = await checkUsernameAvailability(trimmedUsername);
+
+    if (!availability.available) {
+      return { error: availability.error === USERNAME_TAKEN_MESSAGE ? USERNAME_TAKEN_MESSAGE : availability.error ?? USERNAME_TAKEN_MESSAGE };
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -327,7 +334,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: AUTH_CALLBACK_URL,
         data: {
           username: trimmedUsername,
-          displayName: username.trim() || trimmedUsername,
+          displayName: trimmedUsername,
         },
       },
     });

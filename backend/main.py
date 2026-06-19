@@ -2221,7 +2221,7 @@ def profile_reputation_events(request: Request, limit: int = 50):
 def delete_account(request: Request):
     authenticated_user_id = get_authenticated_user_id(request)
     supabase = get_supabase_client()
-    deleted_username = f"deleted_user_{authenticated_user_id.replace('-', '')[-8:]}"
+    deleted_username = f"deleted_{authenticated_user_id.replace('-', '')[-8:]}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
     try:

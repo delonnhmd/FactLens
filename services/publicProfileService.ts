@@ -90,10 +90,15 @@ export async function fetchPublicProfileBySlug(slugOrUsername: string): Promise<
     return { profile: null, error: "Profile not found." };
   }
 
+  const profileFilters = [
+    ...(normalizedSlug ? [`public_profile_slug.eq.${normalizedSlug}`] : []),
+    ...(normalizedUsername ? [`username.eq.${normalizedUsername}`] : []),
+  ];
+
   const { data, error } = await supabase
     .from("profiles")
     .select(PUBLIC_PROFILE_SELECT)
-    .or(`public_profile_slug.eq.${normalizedSlug},username.eq.${normalizedUsername ?? normalizedSlug}`)
+    .or(profileFilters.join(","))
     .maybeSingle();
 
   if (error) {

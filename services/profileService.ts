@@ -8,7 +8,7 @@
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { supabase } from "../lib/supabase";
-import { generateFallbackUsername, normalizeUsername } from "../utils/username";
+import { generateFallbackUsername, getUsernameValidationError, normalizeUsername, USERNAME_MAX_LENGTH } from "../utils/username";
 import type { VerificationUserRole } from "../types/verification";
 import { parseBadgeList, type ReputationBadge } from "../utils/reputation";
 import {
@@ -64,6 +64,7 @@ export interface Profile {
 type ProfileRow = {
   id: string;
   username: string;
+  username_normalized?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
   avatar_path?: string | null;
@@ -110,6 +111,14 @@ export interface ProfileResult {
   message?: string;
 }
 
+export interface UsernameAvailabilityResult {
+  available: boolean;
+  normalizedUsername: string;
+  error?: string;
+}
+
+export const USERNAME_TAKEN_MESSAGE = "Username is already taken";
+export const USERNAME_NOT_AVAILABLE_MESSAGE = "Username is not available";
 const FALLBACK_USERNAME_MESSAGE = "That username was taken, so Verifact created a fallback username for you.";
 
 // PHASE 3 STEP 28
@@ -127,7 +136,10 @@ function isDuplicateUsernameError(message: string, code?: string): boolean {
 
   return (
     (code === "23505" || normalizedMessage.includes("duplicate")) &&
-    (normalizedMessage.includes("username") || normalizedMessage.includes("profiles_username_key"))
+    (normalizedMessage.includes("username") ||
+      normalizedMessage.includes("username_normalized") ||
+      normalizedMessage.includes("profiles_username_key") ||
+      normalizedMessage.includes("profiles_username_normalized_unique"))
   );
 }
 
@@ -142,9 +154,15 @@ function isDuplicateProfileIdError(message: string, code?: string): boolean {
   );
 }
 
-function getProfileErrorMessage(message: string, code?: string): string {
+function isMissingUsernameNormalizedColumn(message: string, code?: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+
+  return code === "42703" || (normalizedMessage.includes("username_normalized") && normalizedMessage.includes("column"));
+}
+
+function getProfileErrorMessage(message: string, code?: string, duplicateMessage = USERNAME_TAKEN_MESSAGE): string {
   if (isDuplicateUsernameError(message, code)) {
-    return "Username already taken.";
+    return duplicateMessage;
   }
 
   return "Could not load your profile right now.";
@@ -225,9 +243,73 @@ function getDisplayName(user: SupabaseUser, username: string): string {
 function withUserIdSuffix(username: string, userId: string): string {
   const suffix = userId.replace(/-/g, "").slice(-6).toLowerCase() || "000000";
   const normalizedUsername = normalizeUsername(username) || "user";
-  const maxBaseLength = Math.max(3, 24 - suffix.length - 1);
+  const maxBaseLength = Math.max(3, USERNAME_MAX_LENGTH - suffix.length - 1);
 
-  return `${normalizedUsername.slice(0, maxBaseLength)}_${suffix}`.slice(0, 24);
+  return `${normalizedUsername.slice(0, maxBaseLength)}_${suffix}`.slice(0, USERNAME_MAX_LENGTH);
+}
+
+export async function checkUsernameAvailability(
+  username: string,
+  currentUserId?: string,
+): Promise<UsernameAvailabilityResult> {
+  const validationError = getUsernameValidationError(username);
+  const normalizedUsername = normalizeUsername(username);
+
+  if (validationError || !normalizedUsername) {
+    return {
+      available: false,
+      normalizedUsername,
+      error: validationError || "Username must be 3-20 characters.",
+    };
+  }
+
+  let query = supabase
+    .from("profiles")
+    .select("id")
+    .eq("username_normalized", normalizedUsername)
+    .limit(1);
+
+  if (currentUserId) {
+    query = query.neq("id", currentUserId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    if (isMissingUsernameNormalizedColumn(error.message, error.code)) {
+      let fallbackQuery = supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", normalizedUsername)
+        .limit(1);
+
+      if (currentUserId) {
+        fallbackQuery = fallbackQuery.neq("id", currentUserId);
+      }
+
+      const fallbackResult = await fallbackQuery;
+
+      if (!fallbackResult.error) {
+        return {
+          available: (fallbackResult.data ?? []).length === 0,
+          normalizedUsername,
+          error: (fallbackResult.data ?? []).length > 0 ? USERNAME_TAKEN_MESSAGE : undefined,
+        };
+      }
+    }
+
+    return {
+      available: false,
+      normalizedUsername,
+      error: "Could not check username availability right now.",
+    };
+  }
+
+  return {
+    available: (data ?? []).length === 0,
+    normalizedUsername,
+    error: (data ?? []).length > 0 ? USERNAME_TAKEN_MESSAGE : undefined,
+  };
 }
 
 async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise<ProfileResult> {
@@ -273,6 +355,7 @@ async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise
     .from("profiles")
     .update({
       ...updates,
+      ...(updates.username ? { display_name: updates.username } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", user.id)
@@ -292,9 +375,10 @@ async function insertProfileForUser(
   displayName: string,
 ): Promise<ProfileResult> {
   const finalUsername = normalizeUsername(username);
+  const validationError = getUsernameValidationError(username);
 
-  if (!finalUsername) {
-    return { profile: null, error: "Username must be at least 3 characters." };
+  if (validationError || !finalUsername) {
+    return { profile: null, error: validationError || "Username must be 3-20 characters." };
   }
 
   const { data, error } = await supabase
@@ -302,7 +386,7 @@ async function insertProfileForUser(
     .insert({
       id: user.id,
       username: finalUsername,
-      display_name: displayName.trim() || finalUsername,
+      display_name: finalUsername,
       // PHASE 5 STEP 1E
       public_profile_slug: generateProfileSlug(finalUsername, user.id),
       profile_visibility: "public",
@@ -343,9 +427,10 @@ export async function createProfile(
   displayName?: string,
 ): Promise<ProfileResult> {
   const normalizedUsername = normalizeUsername(username);
+  const validationError = getUsernameValidationError(username);
 
-  if (!normalizedUsername) {
-    return { profile: null, error: "Username must be at least 3 characters." };
+  if (validationError || !normalizedUsername) {
+    return { profile: null, error: validationError || "Username must be 3-20 characters." };
   }
 
   const { data, error } = await supabase
@@ -353,7 +438,7 @@ export async function createProfile(
     .insert({
       id: userId,
       username: normalizedUsername,
-      display_name: displayName?.trim() || normalizedUsername,
+      display_name: normalizedUsername,
       // PHASE 5 STEP 1E
       public_profile_slug: generateProfileSlug(normalizedUsername, userId),
       profile_visibility: "public",
@@ -401,10 +486,24 @@ export async function getProfileByUsername(username: string): Promise<ProfileRes
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("username", normalizedUsername)
+    .eq("username_normalized", normalizedUsername)
     .maybeSingle();
 
   if (error) {
+    if (isMissingUsernameNormalizedColumn(error.message, error.code)) {
+      const fallbackResult = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("username", normalizedUsername)
+        .maybeSingle();
+
+      if (!fallbackResult.error) {
+        return {
+          profile: fallbackResult.data ? mapProfileRowToProfile(fallbackResult.data as ProfileRow) : null,
+        };
+      }
+    }
+
     return {
       profile: null,
       error: getProfileLoadErrorMessage(),
@@ -451,43 +550,17 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
     return result;
   }
 
-  let finalUsername = preferredUsername;
-  let fallbackMessage: string | undefined;
-
   if (usernameLookup.profile && usernameLookup.profile.id !== user.id) {
-    finalUsername = withUserIdSuffix(preferredUsername, user.id);
-    fallbackMessage = FALLBACK_USERNAME_MESSAGE;
-    console.log("PHASE 3 STEP 15 fallback username used", {
-      userId: user.id,
-      username: finalUsername,
-    });
+    return { profile: null, error: USERNAME_TAKEN_MESSAGE };
   }
 
-  const insertResult = await insertProfileForUser(user, finalUsername, displayName);
-
-  if (insertResult.profile || insertResult.error !== "Username already taken.") {
-    return {
-      ...insertResult,
-      message: fallbackMessage ?? insertResult.message,
-    };
-  }
-
-  const retryUsername = withUserIdSuffix(finalUsername, user.id);
-  console.log("PHASE 3 STEP 15 fallback username used", {
-    userId: user.id,
-    username: retryUsername,
-  });
-
-  const retryResult = await insertProfileForUser(user, retryUsername, displayName);
-
-  return {
-    ...retryResult,
-    message: retryResult.profile ? FALLBACK_USERNAME_MESSAGE : retryResult.message,
-  };
+  return insertProfileForUser(user, preferredUsername, displayName);
 }
 
 export async function updateProfile(userId: string, updates: ProfileUpdates): Promise<ProfileResult> {
   const normalizedUsername = updates.username !== undefined ? normalizeUsername(updates.username) : undefined;
+  const usernameValidationError =
+    updates.username !== undefined ? getUsernameValidationError(updates.username) : "";
 
   if (updates.avatar_url !== undefined && updates.avatar_url && !isValidAvatarUrl(updates.avatar_url)) {
     return { profile: null, error: "Avatar URL must be a valid URL." };
@@ -510,13 +583,29 @@ export async function updateProfile(userId: string, updates: ProfileUpdates): Pr
     updated_at: new Date().toISOString(),
   };
 
-  if (updates.username !== undefined && !normalizedUpdates.username) {
-    return { profile: null, error: "Username must be at least 3 characters." };
+  if (updates.username !== undefined && (usernameValidationError || !normalizedUpdates.username)) {
+    return { profile: null, error: usernameValidationError || "Username must be 3-20 characters." };
+  }
+
+  if (updates.username !== undefined && normalizedUsername) {
+    const availability = await checkUsernameAvailability(normalizedUsername, userId);
+
+    if (!availability.available) {
+      return {
+        profile: null,
+        error: availability.error === USERNAME_TAKEN_MESSAGE ? USERNAME_NOT_AVAILABLE_MESSAGE : availability.error,
+      };
+    }
   }
 
   const { data, error } = await supabase
     .from("profiles")
-    .update(normalizedUpdates)
+    .update({
+      ...normalizedUpdates,
+      ...(updates.username !== undefined && normalizedUsername
+        ? { display_name: normalizedUsername }
+        : {}),
+    })
     .eq("id", userId)
     .select()
     .single();
@@ -524,7 +613,7 @@ export async function updateProfile(userId: string, updates: ProfileUpdates): Pr
   if (error) {
     return {
       profile: null,
-      error: getProfileErrorMessage(error.message, error.code),
+      error: getProfileErrorMessage(error.message, error.code, USERNAME_NOT_AVAILABLE_MESSAGE),
     };
   }
 

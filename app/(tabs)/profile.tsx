@@ -16,9 +16,10 @@ import { useAppTheme } from "../../hooks/useTheme";
 import { getAuthProfile } from "../../services/authProfile";
 import { deleteCurrentAccount } from "../../services/accountService";
 import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
-import { updateProfile } from "../../services/profileService";
+import { checkUsernameAvailability, updateProfile, USERNAME_TAKEN_MESSAGE } from "../../services/profileService";
 import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
 import { cleanUserError } from "../../utils/debugError";
+import { getUsernameValidationError } from "../../utils/username";
 import {
   formatImageSize,
   pickImageFromCamera,
@@ -26,6 +27,8 @@ import {
   uploadProfileAvatar,
   type PickedOptimizedImage,
 } from "../../services/imageUploadService";
+
+type UsernameAvailabilityStatus = "idle" | "checking" | "available" | "unavailable" | "invalid";
 
 export default function ProfileScreen() {
   // PHASE 3 STEP 2
@@ -53,6 +56,8 @@ export default function ProfileScreen() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState("");
   const [usernameSaving, setUsernameSaving] = useState(false);
+  const [usernameAvailabilityStatus, setUsernameAvailabilityStatus] = useState<UsernameAvailabilityStatus>("idle");
+  const [usernameAvailabilityMessage, setUsernameAvailabilityMessage] = useState("");
   // PHASE 5 STEP 6
   const [selectedAvatar, setSelectedAvatar] = useState<PickedOptimizedImage | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
@@ -81,10 +86,69 @@ export default function ProfileScreen() {
   const highestRank = profile?.highest_rank_achieved || rankInfo.title;
   const avatarPreviewUri = selectedAvatar?.uri || profile?.avatar_url || null;
   const showAvatarImage = Boolean(avatarPreviewUri && !avatarLoadFailed);
+  const usernameSaveDisabled =
+    usernameSaving ||
+    !usernameDraft.trim() ||
+    usernameAvailabilityStatus === "checking" ||
+    usernameAvailabilityStatus === "unavailable" ||
+    usernameAvailabilityStatus === "invalid";
 
   useEffect(() => {
     setAvatarLoadFailed(false);
   }, [avatarPreviewUri]);
+
+  useEffect(() => {
+    if (!profile || !currentUser || !usernameDraft.trim()) {
+      setUsernameAvailabilityStatus("idle");
+      setUsernameAvailabilityMessage("");
+      return;
+    }
+
+    const validationError = getUsernameValidationError(usernameDraft);
+
+    if (validationError) {
+      setUsernameAvailabilityStatus("invalid");
+      setUsernameAvailabilityMessage(validationError);
+      return;
+    }
+
+    let active = true;
+    setUsernameAvailabilityStatus("checking");
+    setUsernameAvailabilityMessage("Checking username...");
+
+    const timer = setTimeout(() => {
+      checkUsernameAvailability(usernameDraft, currentUser.id)
+        .then((result) => {
+          if (!active) {
+            return;
+          }
+
+          if (result.available) {
+            setUsernameAvailabilityStatus("available");
+            setUsernameAvailabilityMessage("Username available");
+            return;
+          }
+
+          setUsernameAvailabilityStatus("unavailable");
+          setUsernameAvailabilityMessage(
+            result.error === USERNAME_TAKEN_MESSAGE ? "Username already taken" : result.error ?? "Username already taken",
+          );
+        })
+        .catch(() => {
+          if (!active) {
+            return;
+          }
+
+          setUsernameAvailabilityStatus("unavailable");
+          setUsernameAvailabilityMessage("Could not check username availability right now.");
+        });
+    }, 450);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [currentUser, profile, usernameDraft]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -157,6 +221,23 @@ export default function ProfileScreen() {
 
     setActionError("");
     setActionMessage("");
+
+    const usernameValidationError = getUsernameValidationError(usernameDraft);
+
+    if (usernameValidationError) {
+      setActionError(usernameValidationError);
+      return;
+    }
+
+    const availability = await checkUsernameAvailability(usernameDraft, currentUser.id);
+
+    if (!availability.available) {
+      setActionError(
+        availability.error === USERNAME_TAKEN_MESSAGE ? "Username is not available" : availability.error ?? "Username is not available",
+      );
+      return;
+    }
+
     setUsernameSaving(true);
     const result = await updateProfile(currentUser.id, { username: usernameDraft });
     setUsernameSaving(false);
@@ -485,13 +566,24 @@ export default function ProfileScreen() {
                   placeholderTextColor={appTheme.colors.muted}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  maxLength={20}
                   style={styles.usernameInput}
                 />
+                {usernameAvailabilityMessage ? (
+                  <Text
+                    style={[
+                      styles.availabilityText,
+                      usernameAvailabilityStatus === "available" ? styles.availableText : styles.unavailableText,
+                    ]}
+                  >
+                    {usernameAvailabilityMessage}
+                  </Text>
+                ) : null}
                 <TouchableOpacity
-                  style={[styles.smallButton, usernameSaving && styles.disabledButton]}
+                  style={[styles.smallButton, usernameSaveDisabled && styles.disabledButton]}
                   activeOpacity={0.8}
                   onPress={handleSaveUsername}
-                  disabled={usernameSaving || !usernameDraft.trim()}
+                  disabled={usernameSaveDisabled}
                 >
                   <Text style={styles.smallButtonText}>{usernameSaving ? "Saving..." : "Save username"}</Text>
                 </TouchableOpacity>
@@ -792,6 +884,18 @@ function createStyles(theme: AppTheme) {
     marginBottom: theme.spacing.sm,
     paddingHorizontal: 10,
     paddingVertical: 10,
+  },
+  availabilityText: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginBottom: theme.spacing.sm,
+    marginTop: -theme.spacing.xs,
+  },
+  availableText: {
+    color: theme.colors.success,
+  },
+  unavailableText: {
+    color: theme.colors.danger,
   },
   smallButton: {
     alignItems: "center",

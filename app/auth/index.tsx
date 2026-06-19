@@ -1,5 +1,5 @@
 // PHASE 3 STEP 1
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -19,8 +19,11 @@ import { RESET_PASSWORD_URL } from "../../constants/launchConfig";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { supabase, supabaseConfigError } from "../../lib/supabase";
+import { checkUsernameAvailability } from "../../services/profileService";
+import { getUsernameValidationError } from "../../utils/username";
 
 type AuthMode = "LOGIN" | "SIGN_UP";
+type UsernameAvailabilityStatus = "idle" | "checking" | "available" | "unavailable" | "invalid";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -37,8 +40,74 @@ export default function AuthScreen() {
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState("");
   const [resetError, setResetError] = useState("");
+  const [usernameAvailabilityStatus, setUsernameAvailabilityStatus] = useState<UsernameAvailabilityStatus>("idle");
+  const [usernameAvailabilityMessage, setUsernameAvailabilityMessage] = useState("");
 
   const signingUp = mode === "SIGN_UP";
+  const usernameSubmitBlocked =
+    signingUp &&
+    (!username.trim() ||
+      usernameAvailabilityStatus === "checking" ||
+      usernameAvailabilityStatus === "unavailable" ||
+      usernameAvailabilityStatus === "invalid");
+  const submitDisabled = loading || usernameSubmitBlocked;
+
+  useEffect(() => {
+    if (!signingUp) {
+      setUsernameAvailabilityStatus("idle");
+      setUsernameAvailabilityMessage("");
+      return;
+    }
+
+    if (!username.trim()) {
+      setUsernameAvailabilityStatus("idle");
+      setUsernameAvailabilityMessage("");
+      return;
+    }
+
+    const validationError = getUsernameValidationError(username);
+
+    if (validationError) {
+      setUsernameAvailabilityStatus("invalid");
+      setUsernameAvailabilityMessage(validationError);
+      return;
+    }
+
+    let active = true;
+    setUsernameAvailabilityStatus("checking");
+    setUsernameAvailabilityMessage("Checking username...");
+
+    const timer = setTimeout(() => {
+      checkUsernameAvailability(username)
+        .then((result) => {
+          if (!active) {
+            return;
+          }
+
+          if (result.available) {
+            setUsernameAvailabilityStatus("available");
+            setUsernameAvailabilityMessage("Username available");
+            return;
+          }
+
+          setUsernameAvailabilityStatus("unavailable");
+          setUsernameAvailabilityMessage(result.error ?? "Username already taken");
+        })
+        .catch(() => {
+          if (!active) {
+            return;
+          }
+
+          setUsernameAvailabilityStatus("unavailable");
+          setUsernameAvailabilityMessage("Could not check username availability right now.");
+        });
+    }, 450);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [signingUp, username]);
 
   const handleSubmit = async () => {
     setError("");
@@ -57,6 +126,22 @@ export default function AuthScreen() {
     if (signingUp && !username.trim()) {
       setError("Username is required.");
       return;
+    }
+
+    if (signingUp) {
+      const usernameValidationError = getUsernameValidationError(username);
+
+      if (usernameValidationError) {
+        setError(usernameValidationError);
+        return;
+      }
+
+      const availability = await checkUsernameAvailability(username);
+
+      if (!availability.available) {
+        setError(availability.error ?? "Username is already taken");
+        return;
+      }
     }
 
     setLoading(true);
@@ -194,7 +279,18 @@ export default function AuthScreen() {
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
+                maxLength={20}
               />
+              {usernameAvailabilityMessage ? (
+                <Text
+                  style={[
+                    styles.availabilityText,
+                    usernameAvailabilityStatus === "available" ? styles.availableText : styles.unavailableText,
+                  ]}
+                >
+                  {usernameAvailabilityMessage}
+                </Text>
+              ) : null}
             </View>
           ) : null}
 
@@ -202,9 +298,9 @@ export default function AuthScreen() {
           {message ? <Text style={styles.messageText}>{message}</Text> : null}
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[styles.button, submitDisabled && styles.buttonDisabled]}
             activeOpacity={0.8}
-            disabled={loading}
+            disabled={submitDisabled}
             onPress={handleSubmit}
           >
             <Text style={styles.buttonText}>
@@ -339,6 +435,17 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
     marginBottom: theme.spacing.md,
+  },
+  availabilityText: {
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+    marginTop: theme.spacing.sm,
+  },
+  availableText: {
+    color: theme.colors.success,
+  },
+  unavailableText: {
+    color: theme.colors.danger,
   },
   button: {
     alignItems: "center",
