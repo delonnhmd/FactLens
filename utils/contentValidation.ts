@@ -3,7 +3,7 @@
 // PHASE 4 STEP 11 REVISED
 // PHASE 4 STEP 13B
 import { APP_CONFIG } from "../constants/appConfig";
-import { PROHIBITED_CONTENT } from "../constants/contentRules";
+import { moderateNsfwContent } from "./nsfwModeration";
 import { isSupportedVideoUrl } from "./videoUrl";
 import { isValidSourceUrl, normalizeUrl } from "./url";
 
@@ -43,11 +43,6 @@ const BLOCKED_CONTENT_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   },
 ];
 
-function containsProhibitedTerm(value: string): boolean {
-  const normalizedValue = value.toLowerCase();
-  return PROHIBITED_CONTENT.some((term) => normalizedValue.includes(term.toLowerCase()));
-}
-
 function containsBlockedPattern(value: string): boolean {
   return BLOCKED_CONTENT_PATTERNS.some(({ pattern }) => pattern.test(value));
 }
@@ -81,7 +76,10 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
     errors.push("Enter a valid video URL, like youtube.com/watch or tiktok.com/@user/video.");
   }
 
-  if (containsProhibitedTerm(`${title} ${description}`) || containsBlockedPattern(`${title} ${description}`)) {
+  const combinedContent = `${title} ${description}`;
+  const nsfwModeration = moderateNsfwContent(combinedContent);
+
+  if (nsfwModeration.blocked || containsBlockedPattern(combinedContent)) {
     errors.push("This content is not allowed on Verifact.");
   }
 

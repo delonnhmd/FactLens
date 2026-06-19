@@ -1,5 +1,7 @@
 // PHASE 4 STEP 11
 // PHASE 4 STEP 11 REVISED
+import { moderateNsfwContent } from "./nsfwModeration";
+
 export type ClaimDraftQualityLevel = "good" | "soft_warning" | "blocked";
 export type ClaimDraftDetectedType = "FACTUAL" | "QUESTION" | "OPINION" | "PROMOTION" | "UNCLEAR";
 
@@ -86,10 +88,6 @@ const PROMOTION_PATTERNS = [
 
 const BLOCKED_CONTENT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   {
-    pattern: /\b(nude|naked|porn|pornography|sexually explicit|xxx|onlyfans|child sexual content|revenge porn|graphic sexual|rape video|leaked nude)\b/,
-    reason: "Verifact blocks nude, porn, and sexually explicit content.",
-  },
-  {
     pattern: /\b(i will|i am going to|going to)\s+(kill|shoot|stab|bomb|attack)\b/,
     reason: "Verifact blocks illegal violent threats.",
   },
@@ -124,6 +122,11 @@ const hasFactualSignals = (text: string) => FACTUAL_PATTERNS.some((pattern) => p
 const isPromotion = (text: string) => PROMOTION_PATTERNS.some((pattern) => pattern.test(text));
 
 const getBlockedReason = (text: string) => BLOCKED_CONTENT_PATTERNS.find(({ pattern }) => pattern.test(text))?.reason;
+
+const getNsfwBlockedReason = (text: string) => {
+  const result = moderateNsfwContent(text);
+  return result.blocked ? result.reason : undefined;
+};
 
 const getHostname = (sourceUrl: string) => {
   const trimmedUrl = sourceUrl.trim();
@@ -204,7 +207,7 @@ export function analyzeClaimDraft({ title, description = "", sourceUrl = "", cat
   const suggestions: string[] = [];
   let detectedType: ClaimDraftDetectedType = "UNCLEAR";
   let rewrittenTitle: string | undefined;
-  const blockedReason = getBlockedReason(combinedText);
+  const blockedReason = getNsfwBlockedReason(combinedText) ?? getBlockedReason(combinedText);
 
   if (blockedReason) {
     warnings.unshift(blockedReason);
