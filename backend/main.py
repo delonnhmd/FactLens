@@ -16,6 +16,7 @@
 # PHASE 4 STEP 27
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from html import escape
@@ -23,6 +24,7 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, Literal
 from urllib.parse import quote, urlparse
+from urllib.request import Request as UrlRequest, urlopen
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -2027,6 +2029,65 @@ class AiPrecheckResponse(BaseModel):
     updated_claim: dict | None = None
 
 
+def normalize_profile_username_value(value: Any) -> str:
+    return str(value or "").strip().lstrip("@").lower()
+
+
+def is_valid_profile_username(value: str) -> bool:
+    return bool(re.fullmatch(r"[a-z0-9_]{3,20}", value))
+
+
+def get_metadata_username_values(user: dict) -> set[str]:
+    metadata = user.get("user_metadata") or user.get("raw_user_meta_data") or {}
+
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    values: set[str] = set()
+    for key in ("username", "displayName", "display_name", "full_name", "name"):
+        normalized_value = normalize_profile_username_value(metadata.get(key))
+
+        if normalized_value:
+            values.add(normalized_value)
+
+    return values
+
+
+def fetch_auth_users_for_username_check() -> list[dict]:
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+    if not supabase_url or not service_role_key:
+        raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY on backend.")
+
+    users: list[dict] = []
+
+    for page in range(1, 21):
+        url = f"{supabase_url}/auth/v1/admin/users?page={page}&per_page=1000"
+        request = UrlRequest(
+            url,
+            headers={
+                "apikey": service_role_key,
+                "authorization": f"Bearer {service_role_key}",
+            },
+        )
+
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+        page_users = payload.get("users") if isinstance(payload, dict) else payload
+
+        if not isinstance(page_users, list) or not page_users:
+            break
+
+        users.extend([user for user in page_users if isinstance(user, dict)])
+
+        if len(page_users) < 1000:
+            break
+
+    return users
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     landing_path = Path(__file__).resolve().parents[1] / "client" / "landing" / "index.html"
@@ -2100,6 +2161,74 @@ def public_claim_page(claim_id: str):
 def health():
     # PHASE 4 STEP 21B
     return {"ok": True, "service": "Verifact backend", "version": "phase-4-step-21b"}
+
+
+@app.get("/auth/username-availability")
+def username_availability(username: str, request: Request):
+    normalized_username = normalize_profile_username_value(username)
+
+    if not is_valid_profile_username(normalized_username):
+        return {
+            "ok": True,
+            "available": False,
+            "normalized_username": normalized_username,
+            "message": "Username must be 3-20 characters.",
+        }
+
+    excluded_user_id = ""
+    authorization = request.headers.get("authorization", "")
+
+    if authorization.lower().startswith("bearer "):
+        try:
+            excluded_user_id = get_authenticated_user_id(request)
+        except HTTPException:
+            excluded_user_id = ""
+
+    try:
+        supabase = get_supabase_client()
+        profile_query = (
+            supabase.table("profiles")
+            .select("id")
+            .eq("username_normalized", normalized_username)
+            .limit(1)
+        )
+
+        if excluded_user_id:
+            profile_query = profile_query.neq("id", excluded_user_id)
+
+        profile_result = profile_query.execute()
+
+        if profile_result.data:
+            return {
+                "ok": True,
+                "available": False,
+                "normalized_username": normalized_username,
+                "message": "Username is already taken",
+            }
+
+        for auth_user in fetch_auth_users_for_username_check():
+            auth_user_id = str(auth_user.get("id") or "")
+
+            if excluded_user_id and auth_user_id == excluded_user_id:
+                continue
+
+            if normalized_username in get_metadata_username_values(auth_user):
+                return {
+                    "ok": True,
+                    "available": False,
+                    "normalized_username": normalized_username,
+                    "message": "Username is already taken",
+                }
+
+        return {
+            "ok": True,
+            "available": True,
+            "normalized_username": normalized_username,
+            "message": "Username available",
+        }
+    except Exception as error:
+        print("[username availability] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not check username availability right now.")
 
 
 @app.get("/auth/callback", response_class=HTMLResponse)

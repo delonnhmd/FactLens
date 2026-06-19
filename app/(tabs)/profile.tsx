@@ -72,6 +72,12 @@ export default function ProfileScreen() {
   // PHASE 3 STEP 18C
   const visibleProfileError = profile ? "" : profileError;
   const visibleActionError = profile ? "" : actionError;
+  const profileBlockedByUsername =
+    !profile &&
+    (visibleProfileError === USERNAME_TAKEN_MESSAGE ||
+      visibleActionError === USERNAME_TAKEN_MESSAGE ||
+      visibleProfileError === "Username is not available" ||
+      visibleActionError === "Username is not available");
   // PHASE 5 STEP 1
   const rankInfo = getDisplayRankInfo(profile ? {
     trustScore: profile.trust_score,
@@ -466,13 +472,19 @@ export default function ProfileScreen() {
 
             {!profile ? (
               <View style={styles.missingProfilePanel}>
-                <Text style={styles.missingProfileTitle}>Profile missing</Text>
-                <Text style={styles.subtitle}>
-                  Verifact could not find your public profile row. Create it from your auth metadata.
+                <Text style={styles.missingProfileTitle}>
+                  {profileBlockedByUsername ? "Username is already taken" : "Profile missing"}
                 </Text>
-                <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateMissingProfile}>
-                  <Text style={styles.buttonText}>Fix profile</Text>
-                </TouchableOpacity>
+                <Text style={styles.subtitle}>
+                  {profileBlockedByUsername
+                    ? "This account was created with a username already used by another account. Sign out and create a new account with a different username."
+                    : "Verifact could not find your public profile row. Create it from your auth metadata."}
+                </Text>
+                {!profileBlockedByUsername ? (
+                  <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleCreateMissingProfile}>
+                    <Text style={styles.buttonText}>Fix profile</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : null}
 

@@ -91,6 +91,15 @@ export function isRawUserFacingError(value: unknown): boolean {
 export function cleanUserError(error: unknown): string {
   const message = stringifyValue((error as DebuggableError | null)?.message) || stringifyValue(error);
 
+  if (
+    message === "Username is already taken" ||
+    message === "Username is not available" ||
+    message === "Username must be 3-20 characters." ||
+    message === "Username can only use letters, numbers, and underscores."
+  ) {
+    return message;
+  }
+
   if (isRawUserFacingError(message)) {
     return SOURCE_REVIEW_UNAVAILABLE_ERROR;
   }

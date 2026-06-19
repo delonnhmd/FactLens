@@ -7,6 +7,7 @@
 // PHASE 5 STEP 6
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
+import { getBackendUrl } from "../constants/apiConfig";
 import { supabase } from "../lib/supabase";
 import { generateFallbackUsername, getUsernameValidationError, normalizeUsername, USERNAME_MAX_LENGTH } from "../utils/username";
 import type { VerificationUserRole } from "../types/verification";
@@ -138,8 +139,10 @@ function isDuplicateUsernameError(message: string, code?: string): boolean {
     (code === "23505" || normalizedMessage.includes("duplicate")) &&
     (normalizedMessage.includes("username") ||
       normalizedMessage.includes("username_normalized") ||
+      normalizedMessage.includes("display_name") ||
       normalizedMessage.includes("profiles_username_key") ||
-      normalizedMessage.includes("profiles_username_normalized_unique"))
+      normalizedMessage.includes("profiles_username_normalized_unique") ||
+      normalizedMessage.includes("profiles_display_name_normalized_unique"))
   );
 }
 
@@ -263,41 +266,9 @@ export async function checkUsernameAvailability(
     };
   }
 
-  let query = supabase
-    .from("profiles")
-    .select("id")
-    .eq("username_normalized", normalizedUsername)
-    .limit(1);
+  const backendUrl = getBackendUrl();
 
-  if (currentUserId) {
-    query = query.neq("id", currentUserId);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    if (isMissingUsernameNormalizedColumn(error.message, error.code)) {
-      let fallbackQuery = supabase
-        .from("profiles")
-        .select("id")
-        .eq("username", normalizedUsername)
-        .limit(1);
-
-      if (currentUserId) {
-        fallbackQuery = fallbackQuery.neq("id", currentUserId);
-      }
-
-      const fallbackResult = await fallbackQuery;
-
-      if (!fallbackResult.error) {
-        return {
-          available: (fallbackResult.data ?? []).length === 0,
-          normalizedUsername,
-          error: (fallbackResult.data ?? []).length > 0 ? USERNAME_TAKEN_MESSAGE : undefined,
-        };
-      }
-    }
-
+  if (!backendUrl) {
     return {
       available: false,
       normalizedUsername,
@@ -305,11 +276,49 @@ export async function checkUsernameAvailability(
     };
   }
 
-  return {
-    available: (data ?? []).length === 0,
-    normalizedUsername,
-    error: (data ?? []).length > 0 ? USERNAME_TAKEN_MESSAGE : undefined,
-  };
+  try {
+    const { data: sessionData } = currentUserId ? await supabase.auth.getSession() : { data: { session: null } };
+    const accessToken = sessionData.session?.access_token;
+    const response = await fetch(
+      `${backendUrl}/auth/username-availability?username=${encodeURIComponent(normalizedUsername)}`,
+      {
+        headers: accessToken
+          ? {
+              Authorization: `Bearer ${accessToken}`,
+            }
+          : undefined,
+      },
+    );
+    const json = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      available?: boolean;
+      normalized_username?: string;
+      message?: string;
+      detail?: unknown;
+    };
+
+    if (!response.ok || !json.ok || typeof json.available !== "boolean") {
+      const detail = typeof json.detail === "string" ? json.detail : null;
+
+      return {
+        available: false,
+        normalizedUsername,
+        error: json.message || detail || "Could not check username availability right now.",
+      };
+    }
+
+    return {
+      available: json.available,
+      normalizedUsername: json.normalized_username || normalizedUsername,
+      error: json.available ? undefined : json.message || USERNAME_TAKEN_MESSAGE,
+    };
+  } catch {
+    return {
+      available: false,
+      normalizedUsername,
+      error: "Could not check username availability right now.",
+    };
+  }
 }
 
 async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise<ProfileResult> {
