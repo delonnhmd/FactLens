@@ -11,13 +11,17 @@ import { useAppTheme } from '../../hooks/useTheme';
 export default function SearchScreen() {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
-  const { handleScroll } = useScrollAwareTabBar();
+  const { contentBottomPadding, handleScroll } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Search" subtitle="Search claims, sources, and topics" />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={contentContainerStyle}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -44,7 +48,6 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
-    paddingBottom: 12,
   },
   searchBox: {
     borderWidth: theme.borderWidth,

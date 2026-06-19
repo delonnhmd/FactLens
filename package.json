@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "landing:build": "node scripts/build-landing.mjs",
     "typecheck": "tsc --noEmit",
+    "test:moderation": "node scripts/test-nsfw-moderation.mjs",
     "backend": "python -m uvicorn backend.main:app --reload",
     "seed:test-users": "node scripts/seed-test-users.mjs",
     "seed:delete-test-users": "node scripts/delete-test-users.mjs"

@@ -298,7 +298,11 @@ export default function ClaimDetailScreen() {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const evidenceTypeConfig = useMemo(() => getEvidenceTypeConfig(appTheme), [appTheme]);
-  const { showTabBar } = useScrollAwareTabBar();
+  const { contentBottomPadding, showTabBar } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
   // PHASE 2 STEP 9
   const { currentUser, isAuthenticated, isVerified } = useAuth();
   // PHASE 2 STEP 3
@@ -990,7 +994,7 @@ export default function ClaimDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={contentContainerStyle} showsVerticalScrollIndicator={false}>
         {/* PHASE 3 STEP 12 */}
         {liveUpdatesOn ? <Text style={styles.liveText}>Live updates on</Text> : null}
         {detailLoading ? <Text style={styles.inlineLoadingText}>Loading claim detail...</Text> : null}
@@ -1620,7 +1624,6 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: theme.spacing.xl,
   },
   // PHASE 3 STEP 12
   liveText: {

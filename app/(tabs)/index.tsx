@@ -49,7 +49,11 @@ export default function HomeScreen() {
   const router = useRouter();
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
-  const { handleScroll } = useScrollAwareTabBar();
+  const { contentBottomPadding, handleScroll } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
   const { claimPosted } = useLocalSearchParams<{ claimPosted?: string }>();
   const {
     claims,
@@ -302,7 +306,7 @@ export default function HomeScreen() {
         data={visibleClaims}
         keyExtractor={(claim) => claim.id}
         renderItem={renderClaim}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={contentContainerStyle}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -347,7 +351,6 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 12,
   },
   successBanner: {
     backgroundColor: theme.colors.successBg,

@@ -35,7 +35,11 @@ export default function ProfileScreen() {
   const router = useRouter();
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
-  const { handleScroll } = useScrollAwareTabBar();
+  const { contentBottomPadding, handleScroll } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
   const {
     currentUser,
     profile,
@@ -416,7 +420,7 @@ export default function ProfileScreen() {
         rightAccessibilityHint="Opens appearance, accessibility, notification, and account settings"
       />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={contentContainerStyle}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -762,7 +766,6 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
-    paddingBottom: 12,
   },
   card: {
     backgroundColor: theme.colors.background,

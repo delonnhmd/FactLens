@@ -1,6 +1,6 @@
 // PHASE 5 STEP 1
 // PHASE 5 STEP 5 PRE-LAUNCH
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -27,8 +27,12 @@ export default function LeaderboardScreen() {
   // PHASE 5 STEP 1E
   const router = useRouter();
   const appTheme = useAppTheme();
-  const styles = createStyles(appTheme);
-  const { handleScroll } = useScrollAwareTabBar();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const { contentBottomPadding, handleScroll } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
   const { currentUser } = useAuth();
   const [scope, setScope] = useState<LeaderboardScope>("monthly");
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
@@ -88,7 +92,7 @@ export default function LeaderboardScreen() {
     <SafeAreaView style={styles.container}>
       <Header title="Leaderboard" subtitle="Top Verifact contributors" />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={contentContainerStyle}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadLeaderboard(true)} />}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -195,7 +199,6 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
-    paddingBottom: 12,
   },
   tabRow: {
     backgroundColor: theme.colors.background,

@@ -71,7 +71,11 @@ export default function TrendingScreen() {
   const router = useRouter();
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
-  const { handleScroll } = useScrollAwareTabBar();
+  const { contentBottomPadding, handleScroll } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
   // PHASE 3 STEP 11
   const { claims, fetchTrendingClaimsPage, voteOnClaim, reportClaim } = useClaims();
   const [activeFilter, setActiveFilter] = useState<TrendingFilter>("ALL");
@@ -187,7 +191,7 @@ export default function TrendingScreen() {
         data={trendingClaims}
         keyExtractor={({ claim }) => claim.id}
         renderItem={renderTrendingClaim}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={contentContainerStyle}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         onScroll={handleScroll}
         scrollEventThrottle={16}
@@ -218,7 +222,6 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 12,
   },
   filterRow: {
     gap: theme.spacing.sm,

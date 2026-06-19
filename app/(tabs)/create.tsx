@@ -9,6 +9,7 @@ import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
 import { claimCategories } from "../../constants/claimCategories";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
+import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { useAppTheme } from "../../hooks/useTheme";
@@ -38,6 +39,11 @@ export default function CreateScreen() {
   const router = useRouter();
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  const { contentBottomPadding } = useScrollAwareTabBar();
+  const contentContainerStyle = useMemo(
+    () => [styles.content, { paddingBottom: contentBottomPadding }],
+    [contentBottomPadding, styles.content],
+  );
   // PHASE 3 STEP 2
   const { currentUser, profile, profileError, isAuthenticated, isVerified, loading, refreshUser, ensureProfile } = useAuth();
   const { createClaim } = useClaims();
@@ -408,7 +414,7 @@ export default function CreateScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Header title="Create Claim" subtitle="Draft a new news claim" />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={contentContainerStyle} keyboardShouldPersistTaps="handled">
         <View style={styles.composeCard}>
           <View style={styles.accountRow}>
             <View style={styles.avatar}>
