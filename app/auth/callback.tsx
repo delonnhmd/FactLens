@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
@@ -75,14 +75,13 @@ function getFriendlyCallbackError(message: string): string {
   }
 
   if (normalizedMessage.includes("already")) {
-    return "This email may already be verified. Continue to login to access Verifact.";
+    return "This email may already be verified. Close this page and return to the Verifact app to sign in.";
   }
 
   return "Could not verify this email link. Request a new verification email and try again.";
 }
 
 export default function AuthCallbackScreen() {
-  const router = useRouter();
   const routeParams = useLocalSearchParams();
   const linkingUrl = Linking.useURL();
   const currentUrl = getCurrentUrl(linkingUrl);
@@ -138,7 +137,7 @@ export default function AuthCallbackScreen() {
             if (mounted) {
               clearSensitiveWebUrl("success");
               setStatus("success");
-              setMessage("Your account has been verified successfully. You can now return to Verifact and sign in.");
+              setMessage("Your account has been verified. You may now close this page and return to the Verifact app to sign in.");
             }
             return;
           }
@@ -152,7 +151,7 @@ export default function AuthCallbackScreen() {
 
         clearSensitiveWebUrl("success");
         setStatus("success");
-        setMessage("Your account has been verified successfully. You can now return to Verifact and sign in.");
+        setMessage("Your account has been verified. You may now close this page and return to the Verifact app to sign in.");
       } catch (error) {
         if (!mounted) {
           return;
@@ -170,11 +169,6 @@ export default function AuthCallbackScreen() {
       mounted = false;
     };
   }, [authParams.accessToken, authParams.code, authParams.error, authParams.refreshToken, refreshUser]);
-
-  const handleContinueToLogin = async () => {
-    await supabase.auth.signOut();
-    router.replace("/auth");
-  };
 
   const title =
     status === "loading" ? "Verifying your email..." : status === "success" ? "Email verified successfully" : "Verification link problem";
@@ -194,14 +188,6 @@ export default function AuthCallbackScreen() {
 
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.body}>{message}</Text>
-
-        {status !== "loading" ? (
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.button} activeOpacity={0.85} onPress={handleContinueToLogin}>
-              <Text style={styles.buttonText}>Continue to Login</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -250,25 +236,6 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: theme.typography.body.fontSize,
     lineHeight: theme.typography.body.lineHeight,
-    marginBottom: theme.spacing.lg,
     textAlign: "center",
-  },
-  actions: {
-    alignSelf: "stretch",
-    gap: theme.spacing.sm,
-  },
-  button: {
-    alignItems: "center",
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.sm,
-    minHeight: 48,
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-  },
-  buttonText: {
-    color: theme.colors.background,
-    fontSize: theme.typography.body.fontSize,
-    fontWeight: "500",
   },
 });

@@ -59,6 +59,16 @@ function getAuthErrorMessage(message: string, action: "sign-in" | "sign-up" | "s
     return "Email or password is incorrect.";
   }
 
+  if (
+    action === "sign-in" &&
+    (normalizedMessage.includes("email not confirmed") ||
+      normalizedMessage.includes("not confirmed") ||
+      normalizedMessage.includes("confirm your email") ||
+      normalizedMessage.includes("verify your email"))
+  ) {
+    return "Please verify your email first. Check your inbox or spam folder.";
+  }
+
   if (normalizedMessage.includes("already registered") || normalizedMessage.includes("already exists")) {
     return "An account with this email may already exist.";
   }
@@ -342,7 +352,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return {
-      message: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? "Check your email to verify your account." : "Account created.",
+      message: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION
+        ? "Check your inbox and spam folder for the Verifact verification email."
+        : "Account created.",
     };
   }, [loadProfile]);
 

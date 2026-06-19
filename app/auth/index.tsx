@@ -140,7 +140,7 @@ export default function AuthScreen() {
           <Text style={styles.title}>{signingUp ? "Create account" : "Log in"}</Text>
           <Text style={styles.subtitle}>
             {signingUp
-              ? "Sign up with email and password. You will need to verify your email before posting."
+              ? "Check your inbox and spam folder for the Verifact verification email. After verifying your email, return here and sign in."
               : "Log in to post claims and manage your Verifact account."}
           </Text>
 

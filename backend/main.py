@@ -187,10 +187,7 @@ AUTH_CALLBACK_HTML = """
     <main id="card" data-state="success">
       <div id="mark" class="mark">OK</div>
       <h1 id="title">Email verified successfully</h1>
-      <p id="copy">Your account has been verified successfully. You can now return to Verifact and sign in.</p>
-      <div class="actions">
-        <a id="login" class="primary" href="/">Continue to Login</a>
-      </div>
+      <p id="copy">Your account has been verified. You may now close this page and return to the Verifact app to sign in.</p>
     </main>
     <script>
       const search = window.location.search || "";
@@ -438,9 +435,6 @@ RESET_PASSWORD_HTML = """
       </form>
 
       <div id="feedback" class="feedback" role="status" aria-live="polite"></div>
-      <div class="success-actions">
-        <a class="button" href="/">Continue to Login</a>
-      </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -545,7 +539,7 @@ RESET_PASSWORD_HTML = """
 
           card.dataset.state = "success";
           intro.textContent = "";
-          setFeedback("Password updated successfully. You can now return to Verifact and sign in.", "success");
+          setFeedback("Password updated successfully. You can now return to the Verifact app to sign in.", "success");
         });
       }
 
@@ -2033,9 +2027,14 @@ class AiPrecheckResponse(BaseModel):
     updated_claim: dict | None = None
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def home():
-    return {"message": "Verifact API running"}
+    landing_path = Path(__file__).resolve().parents[1] / "client" / "landing" / "index.html"
+
+    if landing_path.exists():
+        return FileResponse(landing_path)
+
+    return HTMLResponse(content=ABOUT_PAGE_HTML, status_code=200)
 
 
 @app.get("/about", response_class=HTMLResponse)

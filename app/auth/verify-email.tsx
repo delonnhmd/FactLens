@@ -33,7 +33,7 @@ export default function VerifyEmailScreen() {
   const [email, setEmail] = useState(initialEmail);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("We sent a verification link to your email address.");
+  const [message, setMessage] = useState("After verifying your email, return here and sign in.");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function VerifyEmailScreen() {
     }
 
     setCooldown(RESEND_COOLDOWN_SECONDS);
-    setMessage("Verification email sent. Check your inbox and spam folder.");
+    setMessage("Verification email sent. Check your inbox and spam folder for the Verifact verification email.");
   };
 
   return (
@@ -93,7 +93,7 @@ export default function VerifyEmailScreen() {
         </View>
         <Text style={styles.title}>Verify your email</Text>
         <Text style={styles.body}>
-          We sent a verification link to your email address. Please verify your account before signing in.
+          Check your inbox and spam folder for the Verifact verification email.
         </Text>
 
         <View style={styles.fieldGroup}>
