@@ -1,5 +1,8 @@
 -- Enforce case-insensitive unique usernames for Verifact profiles.
 alter table public.profiles
+add column if not exists is_deleted boolean default false;
+
+alter table public.profiles
 add column if not exists username_normalized text;
 
 create or replace function public.normalize_profile_username(input text)
@@ -18,8 +21,6 @@ where username_normalized is null
 with ranked_profiles as (
   select
     id,
-    username,
-    display_name,
     username_normalized,
     row_number() over (
       partition by username_normalized
@@ -31,13 +32,11 @@ with ranked_profiles as (
 duplicate_profiles as (
   select
     id,
-    username,
-    display_name,
     username_normalized,
     lower(
       left(
         coalesce(nullif(regexp_replace(username_normalized, '[^a-z0-9_]', '', 'g'), ''), 'user'),
-        greatest(3, 20 - 7)
+        13
       ) || '_' || substring(md5(id::text), 1, 6)
     ) as next_username
   from ranked_profiles
@@ -46,12 +45,7 @@ duplicate_profiles as (
 update public.profiles as profiles
 set
   username = duplicate_profiles.next_username,
-  display_name = case
-    when profiles.display_name is null
-      or public.normalize_profile_username(profiles.display_name) = duplicate_profiles.username_normalized
-      then duplicate_profiles.next_username
-    else profiles.display_name
-  end,
+  display_name = duplicate_profiles.next_username,
   username_normalized = duplicate_profiles.next_username,
   updated_at = now()
 from duplicate_profiles
@@ -60,12 +54,7 @@ where profiles.id = duplicate_profiles.id;
 update public.profiles
 set
   username = public.normalize_profile_username(username),
-  display_name = case
-    when display_name is null
-      or public.normalize_profile_username(display_name) = username_normalized
-      then public.normalize_profile_username(username)
-    else display_name
-  end,
+  display_name = public.normalize_profile_username(username),
   username_normalized = public.normalize_profile_username(username),
   updated_at = now()
 where username <> public.normalize_profile_username(username)
