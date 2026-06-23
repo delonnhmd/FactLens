@@ -2036,8 +2036,17 @@ class AdminVerificationDecisionRequest(BaseModel):
 
 
 class AdminAssignRoleRequest(BaseModel):
+    target_email: str = ""
     email: str = ""
     role: str = ""
+    note: str = ""
+    reason: str = ""
+
+
+class AdminRoleStatusRequest(BaseModel):
+    target_email: str = ""
+    email: str = ""
+    note: str = ""
     reason: str = ""
 
 
@@ -2463,6 +2472,113 @@ def fetch_admin_user_by_email(supabase: Any, email: str) -> dict | None:
     return get_first_row(result)
 
 
+def get_admin_active_value(admin_user: dict | None) -> bool:
+    if not admin_user:
+        return False
+
+    return bool(admin_user.get("active", admin_user.get("is_active", True)))
+
+
+def sanitize_admin_user(admin_user: dict) -> dict:
+    return {
+        "email": normalize_admin_email(admin_user.get("email")),
+        "role": normalize_admin_role(admin_user.get("role")),
+        "active": get_admin_active_value(admin_user),
+        "created_at": admin_user.get("created_at"),
+        "updated_at": admin_user.get("updated_at"),
+    }
+
+
+def get_admin_action_target_email(payload: Any) -> str:
+    return normalize_admin_email(getattr(payload, "target_email", "") or getattr(payload, "email", ""))
+
+
+def get_admin_action_note(payload: Any) -> str:
+    return str(getattr(payload, "note", "") or getattr(payload, "reason", "") or "").strip()
+
+
+def get_admin_role_by_email_rpc(supabase: Any, email: str) -> str | None:
+    try:
+        result = supabase.rpc("get_admin_role_by_email", {"email": normalize_admin_email(email)}).execute()
+    except Exception as error:
+        print("[identity admin] get_admin_role_by_email rpc skipped:", str(error), flush=True)
+        return None
+
+    data = getattr(result, "data", None)
+
+    if isinstance(data, str):
+        role = normalize_admin_role(data)
+        return role if role in IDENTITY_ADMIN_ROLES else None
+
+    if isinstance(data, list) and data:
+        first_value = data[0]
+
+        if isinstance(first_value, str):
+            role = normalize_admin_role(first_value)
+            return role if role in IDENTITY_ADMIN_ROLES else None
+
+        if isinstance(first_value, dict):
+            role = normalize_admin_role(first_value.get("role"))
+            return role if role in IDENTITY_ADMIN_ROLES else None
+
+    if isinstance(data, dict):
+        role = normalize_admin_role(data.get("role"))
+        return role if role in IDENTITY_ADMIN_ROLES else None
+
+    return None
+
+
+def can_assign_admin_role_rpc(supabase: Any, actor_email: str, target_role: str) -> bool | None:
+    params_variants = (
+        {"actor_email": normalize_admin_email(actor_email), "target_role": normalize_admin_role(target_role)},
+        {"p_actor_email": normalize_admin_email(actor_email), "p_target_role": normalize_admin_role(target_role)},
+    )
+
+    for params in params_variants:
+        try:
+            result = supabase.rpc("can_assign_admin_role", params).execute()
+        except Exception as error:
+            print("[identity admin] can_assign_admin_role rpc skipped:", str(error), flush=True)
+            continue
+
+        data = getattr(result, "data", None)
+
+        if isinstance(data, bool):
+            return data
+
+        if isinstance(data, list) and data:
+            first_value = data[0]
+
+            if isinstance(first_value, bool):
+                return first_value
+
+            if isinstance(first_value, dict):
+                for value in first_value.values():
+                    if isinstance(value, bool):
+                        return value
+
+        if isinstance(data, dict):
+            for value in data.values():
+                if isinstance(value, bool):
+                    return value
+
+    return None
+
+
+def actor_can_assign_role(supabase: Any, actor: dict, target_role: str) -> bool:
+    local_allowed = target_role in ROLE_ASSIGNMENT_PERMISSIONS.get(actor["role"], set())
+
+    if not local_allowed:
+        return False
+
+    rpc_result = can_assign_admin_role_rpc(supabase, actor["email"], target_role)
+
+    if rpc_result is False:
+        return False
+
+    return True
+
+
 def insert_with_optional_columns(
     supabase: Any,
     table_name: str,
@@ -2515,6 +2631,58 @@ def update_with_optional_columns(
     )
 
 
+def insert_admin_user_row(supabase: Any, payload: dict):
+    try:
+        return insert_with_optional_columns(
+            supabase,
+            "admin_users",
+            payload,
+            {"created_at", "updated_at"},
+        )
+    except Exception as error:
+        if not is_missing_column_error(error, ["active"]):
+            raise
+
+    next_payload = {
+        ("is_active" if key == "active" else key): value
+        for key, value in payload.items()
+    }
+    return insert_with_optional_columns(
+        supabase,
+        "admin_users",
+        next_payload,
+        {"created_at", "updated_at"},
+    )
+
+
+def update_admin_user_row(supabase: Any, target_email: str, payload: dict):
+    try:
+        return update_with_optional_columns(
+            supabase,
+            "admin_users",
+            payload,
+            "email",
+            normalize_admin_email(target_email),
+            {"updated_at"},
+        )
+    except Exception as error:
+        if not is_missing_column_error(error, ["active"]):
+            raise
+
+    next_payload = {
+        ("is_active" if key == "active" else key): value
+        for key, value in payload.items()
+    }
+    return update_with_optional_columns(
+        supabase,
+        "admin_users",
+        next_payload,
+        "email",
+        normalize_admin_email(target_email),
+        {"updated_at"},
+    )
+
+
 def insert_admin_role_history(
     supabase: Any,
     target_email: str,
@@ -2538,6 +2706,58 @@ def insert_admin_role_history(
     except Exception as error:
         print("[identity admin] role history insert failed:", str(error), flush=True)
         raise HTTPException(status_code=500, detail="Could not record role history right now.")
+
+
+def record_admin_role_change_entry(
+    supabase: Any,
+    target_email: str,
+    old_role: str | None,
+    new_role: str,
+    actor: dict,
+    note: str = "",
+    action: str = "ROLE_ASSIGNED",
+) -> None:
+    normalized_target_email = normalize_admin_email(target_email)
+    actor_email = normalize_admin_email(actor.get("email"))
+    params_variants = (
+        {
+            "target_email": normalized_target_email,
+            "old_role": old_role,
+            "new_role": new_role,
+            "actor_email": actor_email,
+            "note": note.strip() or None,
+        },
+        {
+            "p_target_email": normalized_target_email,
+            "p_old_role": old_role,
+            "p_new_role": new_role,
+            "p_actor_email": actor_email,
+            "p_note": note.strip() or None,
+        },
+        {
+            "target_email": normalized_target_email,
+            "old_role": old_role,
+            "new_role": new_role,
+            "changed_by_email": actor_email,
+            "reason": note.strip() or None,
+        },
+    )
+
+    for params in params_variants:
+        try:
+            supabase.rpc("record_admin_role_change", params).execute()
+            return
+        except Exception as error:
+            print("[identity admin] record_admin_role_change rpc skipped:", str(error), flush=True)
+
+    insert_admin_role_history(
+        supabase,
+        normalized_target_email,
+        old_role,
+        new_role,
+        actor,
+        f"{action}: {note.strip()}" if note.strip() else action,
+    )
 
 
 def insert_identity_audit_log(
@@ -2596,14 +2816,14 @@ def ensure_initial_admin_roles(supabase: Any) -> None:
 
         now_iso = now_utc_iso()
         try:
-            insert_with_optional_columns(supabase, "admin_users", {
+            insert_admin_user_row(supabase, {
                 "email": normalized_email,
                 "role": role,
                 "active": True,
                 "created_at": now_iso,
                 "updated_at": now_iso,
-            }, {"active", "created_at", "updated_at"})
-            insert_admin_role_history(supabase, normalized_email, None, role, system_actor, "Initial role seed")
+            })
+            record_admin_role_change_entry(supabase, normalized_email, None, role, system_actor, "Initial role seed")
             insert_identity_audit_log_best_effort(
                 supabase,
                 system_actor,
@@ -2621,25 +2841,35 @@ def ensure_initial_admin_roles(supabase: Any) -> None:
     INITIAL_ADMIN_ROLES_SEEDED = True
 
 
-def require_identity_admin(request: Request, allowed_roles: set[str] | None = None) -> dict:
+def get_current_user_email(request: Request) -> str:
     identity = get_authenticated_identity(request)
+    email = normalize_admin_email(identity.get("email"))
+
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    return email
+
+
+def require_admin_role(request: Request, allowed_roles: set[str] | None = None) -> dict:
+    identity = get_authenticated_identity(request)
+    email = normalize_admin_email(identity.get("email"))
+
+    if not email:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    identity["email"] = email
     supabase = get_supabase_client()
     ensure_initial_admin_roles(supabase)
     admin_user = fetch_admin_user_by_email(supabase, identity["email"])
-    fallback_role = INITIAL_ADMIN_ROLES.get(identity["email"])
-
-    if not admin_user and fallback_role:
-        admin_user = {"email": identity["email"], "role": fallback_role, "active": True}
 
     if not admin_user:
         raise HTTPException(status_code=403, detail="Admin access required.")
 
-    is_active = admin_user.get("active", admin_user.get("is_active", True))
-
-    if is_active is False:
+    if not get_admin_active_value(admin_user):
         raise HTTPException(status_code=403, detail="Admin access required.")
 
-    role = normalize_admin_role(admin_user.get("role"))
+    role = normalize_admin_role(admin_user.get("role")) or get_admin_role_by_email_rpc(supabase, identity["email"])
 
     if role not in IDENTITY_ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -2654,58 +2884,89 @@ def require_identity_admin(request: Request, allowed_roles: set[str] | None = No
     }
 
 
+def require_identity_admin(request: Request, allowed_roles: set[str] | None = None) -> dict:
+    return require_admin_role(request, allowed_roles)
+
+
 def upsert_admin_user_role(
     supabase: Any,
     target_email: str,
     new_role: str,
     actor: dict,
-    reason: str,
+    note: str,
 ) -> dict:
     normalized_email = normalize_admin_email(target_email)
     existing = fetch_admin_user_by_email(supabase, normalized_email)
     old_role = normalize_admin_role(existing.get("role")) if existing else None
     now_iso = now_utc_iso()
 
-    if old_role == new_role and existing:
-        return existing
-
     if existing:
-        result = update_with_optional_columns(
-            supabase,
-            "admin_users",
-            {
-                "role": new_role,
-                "active": True,
-                "updated_at": now_iso,
-            },
-            "email",
-            normalized_email,
-            {"active", "updated_at"},
-        )
+        result = update_admin_user_row(supabase, normalized_email, {
+            "role": new_role,
+            "active": True,
+            "updated_at": now_iso,
+        })
         row = get_first_row(result) or {"email": normalized_email, "role": new_role, "active": True}
     else:
-        result = insert_with_optional_columns(
-            supabase,
-            "admin_users",
-            {
-                "email": normalized_email,
-                "role": new_role,
-                "active": True,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            },
-            {"active", "created_at", "updated_at"},
-        )
+        result = insert_admin_user_row(supabase, {
+            "email": normalized_email,
+            "role": new_role,
+            "active": True,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        })
         row = get_first_row(result) or {"email": normalized_email, "role": new_role, "active": True}
 
-    insert_admin_role_history(supabase, normalized_email, old_role, new_role, actor, reason)
+    record_admin_role_change_entry(supabase, normalized_email, old_role, new_role, actor, note)
     insert_identity_audit_log(
         supabase,
         actor,
         "ADMIN_ROLE_ASSIGNED",
         "ADMIN_USER",
         normalized_email,
-        {"old_role": old_role, "new_role": new_role, "reason": reason.strip() or None},
+        {"old_role": old_role, "new_role": new_role, "note": note.strip() or None},
+    )
+    return row
+
+
+def set_admin_user_active(
+    supabase: Any,
+    target_email: str,
+    active: bool,
+    actor: dict,
+    note: str,
+) -> dict:
+    normalized_email = normalize_admin_email(target_email)
+    existing = fetch_admin_user_by_email(supabase, normalized_email)
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Admin user not found.")
+
+    role = normalize_admin_role(existing.get("role"))
+    now_iso = now_utc_iso()
+    result = update_admin_user_row(supabase, normalized_email, {
+        "active": active,
+        "updated_at": now_iso,
+    })
+    row = get_first_row(result) or {**existing, "active": active, "updated_at": now_iso}
+    action = "ADMIN_ENABLED" if active else "ADMIN_DISABLED"
+
+    record_admin_role_change_entry(
+        supabase,
+        normalized_email,
+        role,
+        role,
+        actor,
+        note,
+        action,
+    )
+    insert_identity_audit_log(
+        supabase,
+        actor,
+        action,
+        "ADMIN_USER",
+        normalized_email,
+        {"role": role, "active": active, "note": note.strip() or None},
     )
     return row
 
@@ -3369,41 +3630,98 @@ def admin_reject_verification_request(
 
 @app.get("/admin/users")
 def admin_list_identity_users(request: Request):
-    require_identity_admin(request)
+    require_admin_role(request, {"SUPER_ADMIN", "ADMIN"})
     supabase = get_supabase_client()
 
     try:
         result = supabase.table("admin_users").select("*").order("email").execute()
-        return {"ok": True, "users": result.data or []}
+        return {"ok": True, "users": [sanitize_admin_user(row) for row in result.data or []]}
     except Exception as error:
         print("[identity admin] list users failed:", str(error), flush=True)
         raise HTTPException(status_code=503, detail="Could not load admin users right now.")
 
 
+@app.get("/admin/me")
+def admin_me(request: Request):
+    actor = require_admin_role(request)
+    return {
+        "email": actor["email"],
+        "role": actor["role"],
+        "active": get_admin_active_value(actor["admin_user"]),
+    }
+
+
 @app.post("/admin/users/assign-role")
 def admin_assign_identity_role(payload: AdminAssignRoleRequest, request: Request):
-    actor = require_identity_admin(request)
-    target_email = normalize_admin_email(payload.email)
+    actor = require_admin_role(request, {"SUPER_ADMIN", "ADMIN"})
+    target_email = get_admin_action_target_email(payload)
     new_role = normalize_admin_role(payload.role)
+    note = get_admin_action_note(payload)
 
     if not target_email or "@" not in target_email:
         raise HTTPException(status_code=400, detail="A valid email is required.")
 
-    allowed_roles = ROLE_ASSIGNMENT_PERMISSIONS.get(actor["role"], set())
-
-    if new_role not in allowed_roles:
+    if new_role == "SUPER_ADMIN" or new_role not in {"ADMIN", "MODERATOR"}:
         raise HTTPException(status_code=403, detail="You do not have permission to assign that role.")
 
     supabase = get_supabase_client()
 
+    if not actor_can_assign_role(supabase, actor, new_role):
+        raise HTTPException(status_code=403, detail="You do not have permission to assign that role.")
+
     try:
-        row = upsert_admin_user_role(supabase, target_email, new_role, actor, payload.reason)
-        return {"ok": True, "user": row}
+        row = upsert_admin_user_role(supabase, target_email, new_role, actor, note)
+        return {"ok": True, "user": sanitize_admin_user(row)}
     except HTTPException:
         raise
     except Exception as error:
         print("[identity admin] assign role failed:", str(error), flush=True)
         raise HTTPException(status_code=503, detail="Could not assign admin role right now.")
+
+
+@app.post("/admin/users/disable")
+def admin_disable_identity_user(payload: AdminRoleStatusRequest, request: Request):
+    actor = require_admin_role(request, {"SUPER_ADMIN"})
+    target_email = get_admin_action_target_email(payload)
+    note = get_admin_action_note(payload)
+
+    if not target_email or "@" not in target_email:
+        raise HTTPException(status_code=400, detail="A valid email is required.")
+
+    if target_email == actor["email"]:
+        raise HTTPException(status_code=400, detail="You cannot disable your own admin account.")
+
+    supabase = get_supabase_client()
+
+    try:
+        row = set_admin_user_active(supabase, target_email, False, actor, note)
+        return {"ok": True, "user": sanitize_admin_user(row)}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[identity admin] disable user failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not disable admin user right now.")
+
+
+@app.post("/admin/users/enable")
+def admin_enable_identity_user(payload: AdminRoleStatusRequest, request: Request):
+    actor = require_admin_role(request, {"SUPER_ADMIN"})
+    target_email = get_admin_action_target_email(payload)
+    note = get_admin_action_note(payload)
+
+    if not target_email or "@" not in target_email:
+        raise HTTPException(status_code=400, detail="A valid email is required.")
+
+    supabase = get_supabase_client()
+
+    try:
+        row = set_admin_user_active(supabase, target_email, True, actor, note)
+        return {"ok": True, "user": sanitize_admin_user(row)}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[identity admin] enable user failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not enable admin user right now.")
 
 
 @app.get("/auth/callback", response_class=HTMLResponse)
