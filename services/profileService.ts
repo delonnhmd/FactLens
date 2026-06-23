@@ -9,7 +9,7 @@ import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { getBackendUrl } from "../constants/apiConfig";
 import { supabase } from "../lib/supabase";
-import { generateFallbackUsername, getUsernameValidationError, normalizeUsername, USERNAME_MAX_LENGTH } from "../utils/username";
+import { generateFallbackUsername, getUsernameValidationError, normalizeUsername } from "../utils/username";
 import type { VerificationUserRole } from "../types/verification";
 import { parseBadgeList, type ReputationBadge } from "../utils/reputation";
 import {
@@ -120,7 +120,6 @@ export interface UsernameAvailabilityResult {
 
 export const USERNAME_TAKEN_MESSAGE = "Username is already taken";
 export const USERNAME_NOT_AVAILABLE_MESSAGE = "Username is not available";
-const FALLBACK_USERNAME_MESSAGE = "That username was taken, so Verifact created a fallback username for you.";
 
 // PHASE 3 STEP 28
 function getUserVerifiedForProfile(user: SupabaseUser): boolean {
@@ -143,17 +142,6 @@ function isDuplicateUsernameError(message: string, code?: string): boolean {
       normalizedMessage.includes("profiles_username_key") ||
       normalizedMessage.includes("profiles_username_normalized_unique") ||
       normalizedMessage.includes("profiles_display_name_normalized_unique"))
-  );
-}
-
-function isDuplicateProfileIdError(message: string, code?: string): boolean {
-  const normalizedMessage = message.toLowerCase();
-
-  return (
-    (code === "23505" || normalizedMessage.includes("duplicate")) &&
-    (normalizedMessage.includes("profiles_pkey") ||
-      normalizedMessage.includes("profiles_id_key") ||
-      normalizedMessage.includes("id"))
   );
 }
 
@@ -233,24 +221,6 @@ function getPreferredUsername(user: SupabaseUser): string {
   );
 }
 
-function getDisplayName(user: SupabaseUser, username: string): string {
-  return (
-    readMetadataString(user, "displayName") ||
-    readMetadataString(user, "full_name") ||
-    readMetadataString(user, "username") ||
-    getEmailPrefix(user) ||
-    username
-  );
-}
-
-function withUserIdSuffix(username: string, userId: string): string {
-  const suffix = userId.replace(/-/g, "").slice(-6).toLowerCase() || "000000";
-  const normalizedUsername = normalizeUsername(username) || "user";
-  const maxBaseLength = Math.max(3, USERNAME_MAX_LENGTH - suffix.length - 1);
-
-  return `${normalizedUsername.slice(0, maxBaseLength)}_${suffix}`.slice(0, USERNAME_MAX_LENGTH);
-}
-
 export async function checkUsernameAvailability(
   username: string,
   currentUserId?: string,
@@ -321,67 +291,116 @@ export async function checkUsernameAvailability(
   }
 }
 
+type BackendProfileResponse = {
+  ok?: boolean;
+  profile?: ProfileRow | null;
+  detail?: unknown;
+  error?: unknown;
+  message?: unknown;
+};
+
+function getBackendProfileError(json: BackendProfileResponse, fallback: string): string {
+  if (typeof json.detail === "string" && json.detail.trim()) {
+    return json.detail.trim();
+  }
+
+  if (typeof json.message === "string" && json.message.trim()) {
+    return json.message.trim();
+  }
+
+  if (typeof json.error === "string" && json.error.trim()) {
+    return json.error.trim();
+  }
+
+  return fallback;
+}
+
+async function getBackendAccessToken(): Promise<string | null> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  return sessionData.session?.access_token ?? null;
+}
+
+async function saveProfileThroughBackend(
+  path: "/profile/ensure" | "/profile",
+  method: "POST" | "PATCH",
+  body: Record<string, unknown>,
+  fallbackError: string,
+): Promise<ProfileResult> {
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return { profile: null, error: fallbackError };
+  }
+
+  const accessToken = await getBackendAccessToken();
+
+  if (!accessToken) {
+    return { profile: null, error: "Please log in to update your profile." };
+  }
+
+  try {
+    const response = await fetch(`${backendUrl}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = (await response.json().catch(() => ({}))) as BackendProfileResponse;
+
+    if (!response.ok || !json.ok || !json.profile) {
+      return {
+        profile: null,
+        error: getBackendProfileError(json, fallbackError),
+      };
+    }
+
+    return {
+      profile: mapProfileRowToProfile(json.profile),
+    };
+  } catch {
+    return { profile: null, error: fallbackError };
+  }
+}
+
+async function ensureProfileThroughBackend(user: SupabaseUser, username?: string): Promise<ProfileResult> {
+  const preferredUsername = normalizeUsername(username) || getPreferredUsername(user);
+
+  return saveProfileThroughBackend(
+    "/profile/ensure",
+    "POST",
+    {
+      username: preferredUsername,
+      display_name: preferredUsername,
+    },
+    "Could not save your profile right now.",
+  );
+}
+
 async function syncProfileForUser(profile: Profile, user: SupabaseUser): Promise<ProfileResult> {
-  const updates: Partial<Pick<Profile, "username" | "verified" | "public_profile_slug">> & { updated_at?: string } = {};
   const normalizedUsername = normalizeUsername(profile.username) || getPreferredUsername(user);
-  let message: string | undefined;
+  const needsBackendSync =
+    normalizedUsername !== profile.username ||
+    (getUserVerifiedForProfile(user) && !profile.verified) ||
+    !profile.public_profile_slug;
 
-  if (normalizedUsername && normalizedUsername !== profile.username) {
-    const usernameLookup = await getProfileByUsername(normalizedUsername);
-
-    if (usernameLookup.error) {
-      return { profile, error: usernameLookup.error };
-    }
-
-    if (usernameLookup.profile && usernameLookup.profile.id !== user.id) {
-      updates.username = withUserIdSuffix(normalizedUsername, user.id);
-      message = FALLBACK_USERNAME_MESSAGE;
-      console.log("PHASE 3 STEP 15 fallback username used", {
-        userId: user.id,
-        username: updates.username,
-      });
-    } else {
-      updates.username = normalizedUsername;
-    }
-  }
-
-  // PHASE 3 STEP 22
-  // PHASE 3 STEP 28
-  if (getUserVerifiedForProfile(user) && !profile.verified) {
-    updates.verified = true;
-  }
-
-  // PHASE 5 STEP 1E
-  if (!profile.public_profile_slug) {
-    updates.public_profile_slug = generateProfileSlug(normalizedUsername, user.id);
-  }
-
-  if (Object.keys(updates).length === 0) {
+  if (!needsBackendSync) {
     return { profile };
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({
-      ...updates,
-      ...(updates.username ? { display_name: updates.username } : {}),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", user.id)
-    .select()
-    .single();
+  const result = await ensureProfileThroughBackend(user, normalizedUsername);
 
-  if (error) {
-    return { profile, error: getProfileErrorMessage(error.message, error.code) };
+  if (result.error) {
+    return { profile, error: result.error };
   }
 
-  return { profile: mapProfileRowToProfile(data as ProfileRow), message };
+  return result.profile ? result : { profile };
 }
 
 async function insertProfileForUser(
   user: SupabaseUser,
   username: string,
-  displayName: string,
 ): Promise<ProfileResult> {
   const finalUsername = normalizeUsername(username);
   const validationError = getUsernameValidationError(username);
@@ -390,50 +409,21 @@ async function insertProfileForUser(
     return { profile: null, error: validationError || "Username must be 3-20 characters." };
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .insert({
-      id: user.id,
-      username: finalUsername,
-      display_name: finalUsername,
-      // PHASE 5 STEP 1E
-      public_profile_slug: generateProfileSlug(finalUsername, user.id),
-      profile_visibility: "public",
-      // PHASE 3 STEP 22
-      // PHASE 3 STEP 28
-      verified: getUserVerifiedForProfile(user),
-    })
-    .select()
-    .single();
+  const result = await ensureProfileThroughBackend(user, finalUsername);
 
-  if (error) {
-    if (isDuplicateProfileIdError(error.message, error.code)) {
-      const existingProfile = await getProfile(user.id);
-
-      if (existingProfile.profile) {
-        return syncProfileForUser(existingProfile.profile, user);
-      }
-    }
-
-    return {
-      profile: null,
-      error: getProfileErrorMessage(error.message, error.code),
-    };
+  if (!result.error) {
+    console.log("PHASE 3 STEP 15 profile created", { userId: user.id, username: finalUsername });
+    console.log("[profile] ensure profile result:", user.id);
+    console.log("[profile] ensure result:", user.id);
   }
 
-  console.log("PHASE 3 STEP 15 profile created", { userId: user.id, username: finalUsername });
-  console.log("[profile] ensure profile result:", user.id);
-  console.log("[profile] ensure result:", user.id);
-
-  return {
-    profile: mapProfileRowToProfile(data as ProfileRow),
-  };
+  return result;
 }
 
 export async function createProfile(
   userId: string,
   username: string,
-  displayName?: string,
+  _displayName?: string,
 ): Promise<ProfileResult> {
   const normalizedUsername = normalizeUsername(username);
   const validationError = getUsernameValidationError(username);
@@ -442,31 +432,13 @@ export async function createProfile(
     return { profile: null, error: validationError || "Username must be 3-20 characters." };
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .insert({
-      id: userId,
-      username: normalizedUsername,
-      display_name: normalizedUsername,
-      // PHASE 5 STEP 1E
-      public_profile_slug: generateProfileSlug(normalizedUsername, userId),
-      profile_visibility: "public",
-      // PHASE 3 STEP 28
-      verified: APP_CONFIG.REQUIRE_EMAIL_VERIFICATION ? false : true,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.auth.getUser();
 
-  if (error) {
-    return {
-      profile: null,
-      error: getProfileErrorMessage(error.message, error.code),
-    };
+  if (error || !data.user || data.user.id !== userId) {
+    return { profile: null, error: "Please log in to create your profile." };
   }
 
-  return {
-    profile: mapProfileRowToProfile(data as ProfileRow),
-  };
+  return ensureProfileThroughBackend(data.user, normalizedUsername);
 }
 
 export async function getProfile(userId: string): Promise<ProfileResult> {
@@ -545,7 +517,6 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
   console.log("PHASE 3 STEP 15 profile missing", { userId: user.id });
 
   const preferredUsername = getPreferredUsername(user);
-  const displayName = getDisplayName(user, preferredUsername);
   const usernameLookup = await getProfileByUsername(preferredUsername);
 
   if (usernameLookup.error) {
@@ -563,7 +534,7 @@ export async function ensureProfileForUser(user: SupabaseUser): Promise<ProfileR
     return { profile: null, error: USERNAME_TAKEN_MESSAGE };
   }
 
-  return insertProfileForUser(user, preferredUsername, displayName);
+  return insertProfileForUser(user, preferredUsername);
 }
 
 export async function updateProfile(userId: string, updates: ProfileUpdates): Promise<ProfileResult> {
@@ -607,26 +578,16 @@ export async function updateProfile(userId: string, updates: ProfileUpdates): Pr
     }
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({
-      ...normalizedUpdates,
-      ...(updates.username !== undefined && normalizedUsername
-        ? { display_name: normalizedUsername }
-        : {}),
-    })
-    .eq("id", userId)
-    .select()
-    .single();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
 
-  if (error) {
-    return {
-      profile: null,
-      error: getProfileErrorMessage(error.message, error.code, USERNAME_NOT_AVAILABLE_MESSAGE),
-    };
+  if (userError || !userData.user || userData.user.id !== userId) {
+    return { profile: null, error: "Please log in to update your profile." };
   }
 
-  return {
-    profile: mapProfileRowToProfile(data as ProfileRow),
-  };
+  return saveProfileThroughBackend(
+    "/profile",
+    "PATCH",
+    normalizedUpdates,
+    "Could not update your profile right now.",
+  );
 }

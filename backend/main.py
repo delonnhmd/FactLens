@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+from io import BytesIO
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
@@ -28,7 +29,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -1913,6 +1914,23 @@ SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
 CLAIM_AI_COOLDOWNS: dict[str, float] = {}
 
+RESERVED_USERNAME_MESSAGE = (
+    "This username is reserved. If you represent this person or organization, "
+    "please apply for verification."
+)
+IDENTITY_ADMIN_ROLES = {"SUPER_ADMIN", "ADMIN", "MODERATOR"}
+ROLE_ASSIGNMENT_PERMISSIONS = {
+    "SUPER_ADMIN": {"ADMIN", "MODERATOR"},
+    "ADMIN": {"MODERATOR"},
+    "MODERATOR": set(),
+}
+INITIAL_ADMIN_ROLES = {
+    "md.noithat@gmail.com": "SUPER_ADMIN",
+    "delonnhmd@gmail.com": "ADMIN",
+    "minhducmediallc@gmail.com": "MODERATOR",
+}
+INITIAL_ADMIN_ROLES_SEEDED = False
+
 
 # PHASE 4 STEP 27
 def get_client_ip(request: Request) -> str:
@@ -1997,6 +2015,44 @@ class AdminUserActionRequest(BaseModel):
     user_id: str = ""
     reason: str = ""
     suspended: bool = True
+
+
+class IdentityUsernameCheckRequest(BaseModel):
+    username: str = ""
+
+
+class VerificationRequestPayload(BaseModel):
+    request_type: str = ""
+    requested_name: str = ""
+    official_email: str = ""
+    official_website: str = ""
+    social_links: list[Any] = []
+    supporting_documents: list[Any] = []
+
+
+class AdminVerificationDecisionRequest(BaseModel):
+    decision_note: str = ""
+    claimed_by_user_id: str | None = None
+
+
+class AdminAssignRoleRequest(BaseModel):
+    email: str = ""
+    role: str = ""
+    reason: str = ""
+
+
+class ProfileEnsureRequest(BaseModel):
+    username: str = ""
+    display_name: str = ""
+
+
+class ProfileUpdateRequest(BaseModel):
+    username: str | None = None
+    display_name: str | None = None
+    avatar_url: str | None = None
+    avatar_path: str | None = None
+    bio: str | None = None
+    profile_visibility: str | None = None
 
 
 class AiPrecheckResponse(BaseModel):
@@ -2088,6 +2144,747 @@ def fetch_auth_users_for_username_check() -> list[dict]:
     return users
 
 
+def normalize_identity_key(value: Any) -> str:
+    return re.sub(r"[\s_.-]+", "", str(value or "").strip().lower())
+
+
+def normalize_admin_email(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def normalize_admin_role(value: Any) -> str:
+    return str(value or "").strip().upper().replace(" ", "_")
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def get_first_row(result: Any) -> dict | None:
+    rows = getattr(result, "data", None) or []
+
+    if isinstance(rows, dict):
+        return rows
+
+    return rows[0] if rows else None
+
+
+def is_missing_column_error(error: Exception, column_names: list[str]) -> bool:
+    message = str(error).lower()
+    return (
+        any(column.lower() in message for column in column_names)
+        and ("column" in message or "schema cache" in message or "could not find" in message)
+    )
+
+
+def execute_reserved_query(query_builder, optional_columns: list[str] | None = None):
+    try:
+        return query_builder("active").execute()
+    except Exception as active_error:
+        if optional_columns and is_missing_column_error(active_error, optional_columns):
+            return None
+        if not is_missing_column_error(active_error, ["active"]):
+            raise
+
+    try:
+        return query_builder("is_active").execute()
+    except Exception as is_active_error:
+        if optional_columns and is_missing_column_error(is_active_error, optional_columns):
+            return None
+        if not is_missing_column_error(is_active_error, ["is_active"]):
+            raise
+
+    try:
+        return query_builder(None).execute()
+    except Exception as error:
+        if optional_columns and is_missing_column_error(error, optional_columns):
+            return None
+        raise
+
+
+def find_reserved_row_by_key(supabase: Any, table_name: str, normalized_key: str) -> dict | None:
+    def build_query(active_column: str | None):
+        query = supabase.table(table_name).select("*").eq("normalized_key", normalized_key).limit(1)
+
+        if active_column:
+            query = query.eq(active_column, True)
+
+        return query
+
+    result = execute_reserved_query(build_query)
+    return get_first_row(result) if result else None
+
+
+def find_reserved_row_by_alias(supabase: Any, table_name: str, normalized_key: str) -> dict | None:
+    for alias_column in ("aliases", "alias_keys", "normalized_aliases"):
+        def build_query(active_column: str | None, column: str = alias_column):
+            query = supabase.table(table_name).select("*").contains(column, [normalized_key]).limit(1)
+
+            if active_column:
+                query = query.eq(active_column, True)
+
+            return query
+
+        result = execute_reserved_query(build_query, optional_columns=[alias_column])
+        row = get_first_row(result) if result else None
+
+        if row:
+            return row
+
+    return None
+
+
+def find_reserved_identity_match(value: Any) -> dict | None:
+    normalized_key = normalize_identity_key(value)
+
+    if not normalized_key:
+        return None
+
+    supabase = get_supabase_client()
+    targets = (
+        ("reserved_people", "PERSON"),
+        ("reserved_brands", "BRAND"),
+    )
+
+    for table_name, reserved_type in targets:
+        row = find_reserved_row_by_key(supabase, table_name, normalized_key)
+
+        if not row:
+            row = find_reserved_row_by_alias(supabase, table_name, normalized_key)
+
+        if row:
+            return {
+                "type": reserved_type,
+                "table": table_name,
+                "normalized_key": normalized_key,
+                "row": row,
+            }
+
+    return None
+
+
+def build_reserved_username_check_response(username: str) -> dict:
+    normalized_key = normalize_identity_key(username)
+    match = find_reserved_identity_match(username)
+
+    if match:
+        return {
+            "available": False,
+            "reserved": True,
+            "normalized_key": normalized_key,
+            "message": RESERVED_USERNAME_MESSAGE,
+        }
+
+    return {
+        "available": True,
+        "reserved": False,
+        "normalized_key": normalized_key,
+    }
+
+
+def check_username_availability_for_save(username: str, excluded_user_id: str = "") -> dict:
+    normalized_username = normalize_profile_username_value(username)
+
+    if not is_valid_profile_username(normalized_username):
+        return {
+            "ok": True,
+            "available": False,
+            "reserved": False,
+            "normalized_username": normalized_username,
+            "message": "Username must be 3-20 characters.",
+        }
+
+    reserved_check = build_reserved_username_check_response(normalized_username)
+
+    if reserved_check.get("reserved"):
+        return {
+            "ok": True,
+            "available": False,
+            "reserved": True,
+            "normalized_username": normalized_username,
+            "message": RESERVED_USERNAME_MESSAGE,
+        }
+
+    supabase = get_supabase_client()
+    profile_query = (
+        supabase.table("profiles")
+        .select("id")
+        .eq("username_normalized", normalized_username)
+        .limit(1)
+    )
+
+    if excluded_user_id:
+        profile_query = profile_query.neq("id", excluded_user_id)
+
+    profile_result = profile_query.execute()
+
+    if profile_result.data:
+        return {
+            "ok": True,
+            "available": False,
+            "reserved": False,
+            "normalized_username": normalized_username,
+            "message": "Username is already taken",
+        }
+
+    for auth_user in fetch_auth_users_for_username_check():
+        auth_user_id = str(auth_user.get("id") or "")
+
+        if excluded_user_id and auth_user_id == excluded_user_id:
+            continue
+
+        if normalized_username in get_metadata_username_values(auth_user):
+            return {
+                "ok": True,
+                "available": False,
+                "reserved": False,
+                "normalized_username": normalized_username,
+                "message": "Username is already taken",
+            }
+
+    return {
+        "ok": True,
+        "available": True,
+        "reserved": False,
+        "normalized_username": normalized_username,
+        "message": "Username available",
+    }
+
+
+def read_auth_user_metadata(auth_user: Any) -> dict:
+    metadata = getattr(auth_user, "user_metadata", None) or getattr(auth_user, "raw_user_meta_data", None) or {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def read_auth_user_metadata_string(auth_user: Any, key: str) -> str:
+    value = read_auth_user_metadata(auth_user).get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def generate_backend_profile_slug(username: str, user_id: str) -> str:
+    base_slug = re.sub(r"[^a-z0-9]+", "-", str(username or "").strip().lower()).strip("-")[:48] or "user"
+    suffix = user_id.replace("-", "")[-6:].lower()
+    return f"{base_slug}-{suffix}"[:48] if suffix else base_slug
+
+
+def generate_backend_fallback_username(email: str, user_id: str) -> str:
+    email_prefix = normalize_profile_username_value((email or "").split("@", 1)[0])
+
+    if not is_valid_profile_username(email_prefix):
+        email_prefix = "user"
+
+    suffix = user_id.replace("-", "")[-6:].lower() or "000000"
+    max_base_length = max(3, 20 - len(suffix) - 1)
+    return f"{email_prefix[:max_base_length]}_{suffix}"[:20]
+
+
+def get_backend_preferred_username(auth_user: Any) -> str:
+    email = str(getattr(auth_user, "email", "") or "")
+    user_id = str(getattr(auth_user, "id", "") or "")
+    metadata_username = read_auth_user_metadata_string(auth_user, "username")
+    email_prefix = email.split("@", 1)[0] if email else ""
+
+    for value in (metadata_username, email_prefix, generate_backend_fallback_username(email, user_id)):
+        normalized = normalize_profile_username_value(value)
+
+        if is_valid_profile_username(normalized):
+            return normalized
+
+    return generate_backend_fallback_username(email, user_id)
+
+
+def sanitize_backend_bio(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    return re.sub(r"\s+", " ", value.replace("<", "").replace(">", "")).strip()[:160]
+
+
+def normalize_backend_profile_visibility(value: str | None) -> str:
+    return "private" if value == "private" else "public"
+
+
+def is_valid_backend_avatar_url(value: str | None) -> bool:
+    if value is None or not value.strip():
+        return True
+
+    parsed = urlparse(value.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def build_profile_response(row: dict | None) -> dict:
+    return {"ok": True, "profile": row}
+
+
+def fetch_profile_row(supabase: Any, user_id: str) -> dict | None:
+    result = supabase.table("profiles").select("*").eq("id", user_id).limit(1).execute()
+    return get_first_row(result)
+
+
+def get_authenticated_identity(request: Request) -> dict:
+    authorization = request.headers.get("authorization", "")
+
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    access_token = authorization.split(" ", 1)[1].strip()
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    try:
+        auth_response = get_supabase_client().auth.get_user(access_token)
+        auth_user = getattr(auth_response, "user", None)
+    except Exception as error:
+        print("[identity auth] token validation failed:", str(error), flush=True)
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    user_id = str(getattr(auth_user, "id", "") or "")
+    email = normalize_admin_email(getattr(auth_user, "email", "") or "")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    return {
+        "id": user_id,
+        "email": email,
+        "user": auth_user,
+    }
+
+
+def fetch_admin_user_by_email(supabase: Any, email: str) -> dict | None:
+    result = (
+        supabase.table("admin_users")
+        .select("*")
+        .eq("email", normalize_admin_email(email))
+        .limit(1)
+        .execute()
+    )
+    return get_first_row(result)
+
+
+def insert_with_optional_columns(
+    supabase: Any,
+    table_name: str,
+    payload: dict,
+    optional_columns: set[str],
+):
+    try:
+        return supabase.table(table_name).insert(payload).execute()
+    except Exception as error:
+        if not is_missing_column_error(error, list(optional_columns)):
+            raise
+
+    stripped_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in optional_columns
+    }
+    return supabase.table(table_name).insert(stripped_payload).execute()
+
+
+def update_with_optional_columns(
+    supabase: Any,
+    table_name: str,
+    payload: dict,
+    match_column: str,
+    match_value: Any,
+    optional_columns: set[str],
+):
+    try:
+        return (
+            supabase.table(table_name)
+            .update(payload)
+            .eq(match_column, match_value)
+            .execute()
+        )
+    except Exception as error:
+        if not is_missing_column_error(error, list(optional_columns)):
+            raise
+
+    stripped_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in optional_columns
+    }
+    return (
+        supabase.table(table_name)
+        .update(stripped_payload)
+        .eq(match_column, match_value)
+        .execute()
+    )
+
+
+def insert_admin_role_history(
+    supabase: Any,
+    target_email: str,
+    old_role: str | None,
+    new_role: str,
+    actor: dict,
+    reason: str = "",
+) -> None:
+    payload = {
+        "target_email": normalize_admin_email(target_email),
+        "old_role": old_role,
+        "new_role": new_role,
+        "changed_by_user_id": actor.get("id"),
+        "changed_by_email": normalize_admin_email(actor.get("email")),
+        "reason": reason.strip() or None,
+        "created_at": now_utc_iso(),
+    }
+
+    try:
+        supabase.table("admin_role_history").insert(payload).execute()
+    except Exception as error:
+        print("[identity admin] role history insert failed:", str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not record role history right now.")
+
+
+def insert_identity_audit_log(
+    supabase: Any,
+    actor: dict,
+    action: str,
+    target_type: str,
+    target_id: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    payload = {
+        "actor_user_id": actor.get("id"),
+        "actor_email": normalize_admin_email(actor.get("email")),
+        "action": action,
+        "target_type": target_type,
+        "target_id": target_id,
+        "metadata": metadata or {},
+        "created_at": now_utc_iso(),
+    }
+
+    try:
+        supabase.table("identity_audit_logs").insert(payload).execute()
+    except Exception as error:
+        print("[identity admin] audit insert failed:", str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not record admin action right now.")
+
+
+def insert_identity_audit_log_best_effort(
+    supabase: Any,
+    actor: dict,
+    action: str,
+    target_type: str,
+    target_id: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    try:
+        insert_identity_audit_log(supabase, actor, action, target_type, target_id, metadata)
+    except HTTPException as error:
+        print("[identity audit] best-effort audit skipped:", error.detail, flush=True)
+
+
+def ensure_initial_admin_roles(supabase: Any) -> None:
+    global INITIAL_ADMIN_ROLES_SEEDED
+
+    if INITIAL_ADMIN_ROLES_SEEDED:
+        return
+
+    system_actor = {"id": None, "email": "system"}
+
+    for email, role in INITIAL_ADMIN_ROLES.items():
+        normalized_email = normalize_admin_email(email)
+        existing = fetch_admin_user_by_email(supabase, normalized_email)
+
+        if existing:
+            continue
+
+        now_iso = now_utc_iso()
+        try:
+            insert_with_optional_columns(supabase, "admin_users", {
+                "email": normalized_email,
+                "role": role,
+                "active": True,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }, {"active", "created_at", "updated_at"})
+            insert_admin_role_history(supabase, normalized_email, None, role, system_actor, "Initial role seed")
+            insert_identity_audit_log_best_effort(
+                supabase,
+                system_actor,
+                "ADMIN_ROLE_INITIAL_SEED",
+                "ADMIN_USER",
+                normalized_email,
+                {"new_role": role},
+            )
+        except HTTPException:
+            raise
+        except Exception as error:
+            print("[identity admin] initial admin seed failed:", str(error), flush=True)
+            raise HTTPException(status_code=500, detail="Could not prepare admin access right now.")
+
+    INITIAL_ADMIN_ROLES_SEEDED = True
+
+
+def require_identity_admin(request: Request, allowed_roles: set[str] | None = None) -> dict:
+    identity = get_authenticated_identity(request)
+    supabase = get_supabase_client()
+    ensure_initial_admin_roles(supabase)
+    admin_user = fetch_admin_user_by_email(supabase, identity["email"])
+    fallback_role = INITIAL_ADMIN_ROLES.get(identity["email"])
+
+    if not admin_user and fallback_role:
+        admin_user = {"email": identity["email"], "role": fallback_role, "active": True}
+
+    if not admin_user:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    is_active = admin_user.get("active", admin_user.get("is_active", True))
+
+    if is_active is False:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    role = normalize_admin_role(admin_user.get("role"))
+
+    if role not in IDENTITY_ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    if allowed_roles and role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission for this action.")
+
+    return {
+        **identity,
+        "role": role,
+        "admin_user": admin_user,
+    }
+
+
+def upsert_admin_user_role(
+    supabase: Any,
+    target_email: str,
+    new_role: str,
+    actor: dict,
+    reason: str,
+) -> dict:
+    normalized_email = normalize_admin_email(target_email)
+    existing = fetch_admin_user_by_email(supabase, normalized_email)
+    old_role = normalize_admin_role(existing.get("role")) if existing else None
+    now_iso = now_utc_iso()
+
+    if old_role == new_role and existing:
+        return existing
+
+    if existing:
+        result = update_with_optional_columns(
+            supabase,
+            "admin_users",
+            {
+                "role": new_role,
+                "active": True,
+                "updated_at": now_iso,
+            },
+            "email",
+            normalized_email,
+            {"active", "updated_at"},
+        )
+        row = get_first_row(result) or {"email": normalized_email, "role": new_role, "active": True}
+    else:
+        result = insert_with_optional_columns(
+            supabase,
+            "admin_users",
+            {
+                "email": normalized_email,
+                "role": new_role,
+                "active": True,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            },
+            {"active", "created_at", "updated_at"},
+        )
+        row = get_first_row(result) or {"email": normalized_email, "role": new_role, "active": True}
+
+    insert_admin_role_history(supabase, normalized_email, old_role, new_role, actor, reason)
+    insert_identity_audit_log(
+        supabase,
+        actor,
+        "ADMIN_ROLE_ASSIGNED",
+        "ADMIN_USER",
+        normalized_email,
+        {"old_role": old_role, "new_role": new_role, "reason": reason.strip() or None},
+    )
+    return row
+
+
+def get_verification_request_row(supabase: Any, request_id: str) -> dict:
+    result = supabase.table("verification_requests").select("*").eq("id", request_id).limit(1).execute()
+    row = get_first_row(result)
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Verification request not found.")
+
+    return row
+
+
+def get_verification_claimed_user_id(verification_row: dict, payload: AdminVerificationDecisionRequest) -> str | None:
+    return (
+        payload.claimed_by_user_id
+        or verification_row.get("claimed_by_user_id")
+        or verification_row.get("requester_user_id")
+        or verification_row.get("user_id")
+    )
+
+
+def update_reserved_identity_verified(
+    supabase: Any,
+    verification_row: dict,
+    claimed_by_user_id: str | None,
+) -> tuple[str, dict]:
+    request_type = str(verification_row.get("request_type") or "").strip().upper()
+    requested_name = str(verification_row.get("requested_name") or "")
+    normalized_key = normalize_identity_key(requested_name)
+
+    if request_type not in {"PERSON", "BRAND"} or not normalized_key:
+        raise HTTPException(status_code=400, detail="Verification request is missing identity details.")
+
+    table_name = "reserved_people" if request_type == "PERSON" else "reserved_brands"
+    existing = find_reserved_row_by_key(supabase, table_name, normalized_key)
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Reserved identity record not found.")
+
+    update_payload = {
+        "verified": True,
+        "claimed_by_user_id": claimed_by_user_id,
+        "updated_at": now_utc_iso(),
+    }
+    result = (
+        supabase.table(table_name)
+        .update(update_payload)
+        .eq("normalized_key", normalized_key)
+        .execute()
+    )
+    row = get_first_row(result) or existing
+    return table_name, row
+
+
+def get_excel_header_map(row: tuple[Any, ...]) -> dict[str, int]:
+    return {
+        str(value or "").strip(): index
+        for index, value in enumerate(row)
+        if str(value or "").strip()
+    }
+
+
+def get_excel_cell(row: tuple[Any, ...], header_map: dict[str, int], header: str) -> str:
+    index = header_map.get(header)
+
+    if index is None or index >= len(row):
+        return ""
+
+    value = row[index]
+    return str(value or "").strip()
+
+
+def find_excel_header_row(sheet: Any, required_headers: list[str]) -> tuple[int, dict[str, int]]:
+    max_scan_row = min(sheet.max_row, 30)
+
+    for row_number in range(1, max_scan_row + 1):
+        row = tuple(cell.value for cell in sheet[row_number])
+        header_map = get_excel_header_map(row)
+
+        if all(header in header_map for header in required_headers):
+            return row_number, header_map
+
+    raise ValueError("The Excel file does not match the expected template.")
+
+
+def build_reserved_rows_from_sheet(sheet: Any, config: dict) -> list[dict]:
+    header_row_number, header_map = find_excel_header_row(sheet, config["required_headers"])
+    rows: list[dict] = []
+    seen_keys: set[str] = set()
+
+    for row in sheet.iter_rows(min_row=header_row_number + 1, values_only=True):
+        display_value = get_excel_cell(row, header_map, config["display_header"])
+        category_value = get_excel_cell(row, header_map, config["category_header"])
+        raw_key = get_excel_cell(row, header_map, config["normalized_header"])
+        normalized_key = normalize_identity_key(raw_key or display_value)
+
+        if not display_value or not normalized_key or normalized_key in seen_keys:
+            continue
+
+        seen_keys.add(normalized_key)
+        rows.append({
+            config["name_column"]: display_value,
+            config["category_column"]: category_value or None,
+            "normalized_key": normalized_key,
+            "active": True,
+            "updated_at": now_utc_iso(),
+        })
+
+    return rows
+
+
+def upsert_reserved_rows(supabase: Any, table_name: str, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+
+    try:
+        result = supabase.table(table_name).upsert(rows, on_conflict="normalized_key").execute()
+        return len(result.data or rows)
+    except Exception as error:
+        if not is_missing_column_error(error, ["active", "updated_at"]):
+            raise
+
+    stripped_rows = [
+        {key: value for key, value in row.items() if key not in {"active", "updated_at"}}
+        for row in rows
+    ]
+    result = supabase.table(table_name).upsert(stripped_rows, on_conflict="normalized_key").execute()
+    return len(result.data or stripped_rows)
+
+
+def get_reserved_import_configs() -> dict[str, dict]:
+    return {
+        "Master Clean List": {
+            "type": "people",
+            "table": "reserved_people",
+            "required_headers": [
+                "Display Name",
+                "Source Tab Category",
+                "Normalized Value (No Spaces/Lowercase)",
+            ],
+            "display_header": "Display Name",
+            "category_header": "Source Tab Category",
+            "normalized_header": "Normalized Value (No Spaces/Lowercase)",
+            "name_column": "display_name",
+            "category_column": "category",
+        },
+        "Master Clean Brand List": {
+            "type": "brands",
+            "table": "reserved_brands",
+            "required_headers": [
+                "Brand Display Name",
+                "Source Industry Tab",
+                "Normalized Key Value",
+            ],
+            "display_header": "Brand Display Name",
+            "category_header": "Source Industry Tab",
+            "normalized_header": "Normalized Key Value",
+            "name_column": "brand_name",
+            "category_column": "industry",
+        },
+        "Master Clean Org List": {
+            "type": "organizations",
+            "table": "reserved_brands",
+            "required_headers": [
+                "Organization Display Name",
+                "Source Category Tab",
+                "Normalized Key Token",
+            ],
+            "display_header": "Organization Display Name",
+            "category_header": "Source Category Tab",
+            "normalized_header": "Normalized Key Token",
+            "name_column": "brand_name",
+            "category_column": "industry",
+        },
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     landing_path = Path(__file__).resolve().parents[1] / "client" / "landing" / "index.html"
@@ -2163,6 +2960,15 @@ def health():
     return {"ok": True, "service": "Verifact backend", "version": "phase-4-step-21b"}
 
 
+@app.post("/identity/check-username")
+def identity_check_username(payload: IdentityUsernameCheckRequest):
+    try:
+        return build_reserved_username_check_response(payload.username)
+    except Exception as error:
+        print("[identity check] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not check username right now.")
+
+
 @app.get("/auth/username-availability")
 def username_availability(username: str, request: Request):
     normalized_username = normalize_profile_username_value(username)
@@ -2185,50 +2991,419 @@ def username_availability(username: str, request: Request):
             excluded_user_id = ""
 
     try:
-        supabase = get_supabase_client()
-        profile_query = (
-            supabase.table("profiles")
-            .select("id")
-            .eq("username_normalized", normalized_username)
-            .limit(1)
-        )
-
-        if excluded_user_id:
-            profile_query = profile_query.neq("id", excluded_user_id)
-
-        profile_result = profile_query.execute()
-
-        if profile_result.data:
-            return {
-                "ok": True,
-                "available": False,
-                "normalized_username": normalized_username,
-                "message": "Username is already taken",
-            }
-
-        for auth_user in fetch_auth_users_for_username_check():
-            auth_user_id = str(auth_user.get("id") or "")
-
-            if excluded_user_id and auth_user_id == excluded_user_id:
-                continue
-
-            if normalized_username in get_metadata_username_values(auth_user):
-                return {
-                    "ok": True,
-                    "available": False,
-                    "normalized_username": normalized_username,
-                    "message": "Username is already taken",
-                }
-
-        return {
-            "ok": True,
-            "available": True,
-            "normalized_username": normalized_username,
-            "message": "Username available",
-        }
+        return check_username_availability_for_save(normalized_username, excluded_user_id)
     except Exception as error:
         print("[username availability] failed:", str(error), flush=True)
         raise HTTPException(status_code=503, detail="Could not check username availability right now.")
+
+
+@app.post("/profile/ensure")
+def ensure_backend_profile(payload: ProfileEnsureRequest, request: Request):
+    identity = get_authenticated_identity(request)
+    auth_user = identity["user"]
+    user_id = identity["id"]
+    supabase = get_supabase_client()
+
+    try:
+        existing_profile = fetch_profile_row(supabase, user_id)
+
+        if existing_profile:
+            if existing_profile.get("is_deleted"):
+                raise HTTPException(status_code=403, detail="This account has been deleted.")
+
+            updates: dict[str, Any] = {}
+            email_confirmed = bool(getattr(auth_user, "email_confirmed_at", None))
+
+            if email_confirmed and not existing_profile.get("verified"):
+                updates["verified"] = True
+
+            if not existing_profile.get("public_profile_slug"):
+                updates["public_profile_slug"] = generate_backend_profile_slug(existing_profile.get("username"), user_id)
+
+            if updates:
+                updates["updated_at"] = now_utc_iso()
+                update_result = (
+                    supabase.table("profiles")
+                    .update(updates)
+                    .eq("id", user_id)
+                    .execute()
+                )
+                existing_profile = get_first_row(update_result) or {**existing_profile, **updates}
+
+            return build_profile_response(existing_profile)
+
+        preferred_username = normalize_profile_username_value(payload.username) or get_backend_preferred_username(auth_user)
+
+        if not is_valid_profile_username(preferred_username):
+            raise HTTPException(status_code=400, detail="Username must be 3-20 characters.")
+
+        availability = check_username_availability_for_save(preferred_username, user_id)
+
+        if not availability.get("available"):
+            raise HTTPException(
+                status_code=409,
+                detail=availability.get("message") or "Username is not available.",
+            )
+
+        now_iso = now_utc_iso()
+        insert_result = (
+            supabase.table("profiles")
+            .insert({
+                "id": user_id,
+                "username": preferred_username,
+                "display_name": preferred_username,
+                "public_profile_slug": generate_backend_profile_slug(preferred_username, user_id),
+                "profile_visibility": "public",
+                "verified": bool(getattr(auth_user, "email_confirmed_at", None)),
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            })
+            .execute()
+        )
+        inserted_profile = get_first_row(insert_result) or fetch_profile_row(supabase, user_id)
+        return build_profile_response(inserted_profile)
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[profile ensure] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not save your profile right now.")
+
+
+@app.patch("/profile")
+def update_backend_profile(payload: ProfileUpdateRequest, request: Request):
+    identity = get_authenticated_identity(request)
+    user_id = identity["id"]
+    supabase = get_supabase_client()
+    raw_updates = payload.dict(exclude_unset=True)
+    updates: dict[str, Any] = {}
+
+    if "username" in raw_updates:
+        normalized_username = normalize_profile_username_value(payload.username)
+
+        if not is_valid_profile_username(normalized_username):
+            raise HTTPException(status_code=400, detail="Username must be 3-20 characters.")
+
+        try:
+            availability = check_username_availability_for_save(normalized_username, user_id)
+        except Exception as error:
+            print("[profile update] username check failed:", str(error), flush=True)
+            raise HTTPException(status_code=503, detail="Could not check username right now.")
+
+        if not availability.get("available"):
+            raise HTTPException(
+                status_code=409,
+                detail=availability.get("message") or "Username is not available.",
+            )
+
+        updates["username"] = normalized_username
+        updates["display_name"] = normalized_username
+        updates["public_profile_slug"] = generate_backend_profile_slug(normalized_username, user_id)
+
+    if "display_name" in raw_updates and "username" not in raw_updates:
+        display_name = str(payload.display_name or "").strip()[:80]
+        updates["display_name"] = display_name or None
+
+    if "avatar_url" in raw_updates:
+        avatar_url = str(payload.avatar_url or "").strip() or None
+
+        if not is_valid_backend_avatar_url(avatar_url):
+            raise HTTPException(status_code=400, detail="Avatar URL must be a valid URL.")
+
+        updates["avatar_url"] = avatar_url
+
+    if "avatar_path" in raw_updates:
+        updates["avatar_path"] = str(payload.avatar_path or "").strip() or None
+
+    if "bio" in raw_updates:
+        updates["bio"] = sanitize_backend_bio(payload.bio)
+
+    if "profile_visibility" in raw_updates:
+        updates["profile_visibility"] = normalize_backend_profile_visibility(payload.profile_visibility)
+
+    if not updates:
+        return build_profile_response(fetch_profile_row(supabase, user_id))
+
+    updates["updated_at"] = now_utc_iso()
+
+    try:
+        result = (
+            supabase.table("profiles")
+            .update(updates)
+            .eq("id", user_id)
+            .execute()
+        )
+        row = get_first_row(result) or fetch_profile_row(supabase, user_id)
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Profile not found.")
+
+        return build_profile_response(row)
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[profile update] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not update your profile right now.")
+
+
+@app.post("/verification/request")
+def create_verification_request(payload: VerificationRequestPayload, request: Request):
+    request_type = payload.request_type.strip().upper()
+    requested_name = payload.requested_name.strip()
+
+    if request_type not in {"PERSON", "BRAND"}:
+        raise HTTPException(status_code=400, detail="Verification type must be PERSON or BRAND.")
+
+    if not requested_name:
+        raise HTTPException(status_code=400, detail="Requested name is required.")
+
+    requester = {"id": None, "email": None}
+    authorization = request.headers.get("authorization", "")
+
+    if authorization.lower().startswith("bearer "):
+        requester = get_authenticated_identity(request)
+
+    now_iso = now_utc_iso()
+    row_payload = {
+        "request_type": request_type,
+        "requested_name": requested_name,
+        "normalized_key": normalize_identity_key(requested_name),
+        "official_email": payload.official_email.strip() or None,
+        "official_website": payload.official_website.strip() or None,
+        "social_links": payload.social_links or [],
+        "supporting_documents": payload.supporting_documents or [],
+        "status": "Pending",
+        "requester_user_id": requester.get("id"),
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.table("verification_requests").insert(row_payload).execute()
+        row = get_first_row(result)
+        insert_identity_audit_log_best_effort(
+            supabase,
+            requester,
+            "VERIFICATION_REQUEST_CREATED",
+            "VERIFICATION_REQUEST",
+            str(row.get("id")) if row else None,
+            {"request_type": request_type, "requested_name": requested_name},
+        )
+        return {"ok": True, "request": row}
+    except Exception as error:
+        print("[verification request] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not submit verification request right now.")
+
+
+@app.post("/admin/reserved/import")
+async def admin_reserved_import(request: Request, file: UploadFile = File(...)):
+    actor = require_identity_admin(request, {"SUPER_ADMIN", "ADMIN"})
+
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Excel import is not configured right now.")
+
+    contents = await file.read()
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Excel file is required.")
+
+    try:
+        workbook = load_workbook(BytesIO(contents), read_only=True, data_only=True)
+    except Exception as error:
+        print("[reserved import] workbook load failed:", str(error), flush=True)
+        raise HTTPException(status_code=400, detail="Could not read the Excel file.")
+
+    configs = get_reserved_import_configs()
+    supabase = get_supabase_client()
+    imported: dict[str, int] = {}
+
+    try:
+        for sheet_name, config in configs.items():
+            if sheet_name not in workbook.sheetnames:
+                continue
+
+            rows = build_reserved_rows_from_sheet(workbook[sheet_name], config)
+            imported[config["type"]] = upsert_reserved_rows(supabase, config["table"], rows)
+
+        if not imported:
+            raise HTTPException(status_code=400, detail="No supported reserved identity sheet was found.")
+
+        insert_identity_audit_log(
+            supabase,
+            actor,
+            "RESERVED_IDENTITIES_IMPORTED",
+            "RESERVED_IMPORT",
+            file.filename,
+            {"filename": file.filename, "imported": imported},
+        )
+        return {"ok": True, "filename": file.filename, "imported": imported}
+    except HTTPException:
+        raise
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except Exception as error:
+        print("[reserved import] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not import reserved identities right now.")
+
+
+@app.get("/admin/verification-requests")
+def admin_list_verification_requests(request: Request, status: str = "Pending", limit: int = 100):
+    require_identity_admin(request)
+    safe_limit = max(1, min(200, int(limit or 100)))
+    request_status = status.strip() if status else "Pending"
+    supabase = get_supabase_client()
+
+    try:
+        query = (
+            supabase.table("verification_requests")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(safe_limit)
+        )
+
+        if request_status.upper() != "ALL":
+            query = query.eq("status", request_status)
+
+        result = query.execute()
+        return {"ok": True, "requests": result.data or []}
+    except Exception as error:
+        print("[admin verification] list failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not load verification requests right now.")
+
+
+@app.post("/admin/verification-requests/{request_id}/approve")
+def admin_approve_verification_request(
+    request_id: str,
+    payload: AdminVerificationDecisionRequest,
+    request: Request,
+):
+    actor = require_identity_admin(request, {"SUPER_ADMIN", "ADMIN"})
+    supabase = get_supabase_client()
+    now_iso = now_utc_iso()
+
+    try:
+        verification_row = get_verification_request_row(supabase, request_id)
+        claimed_by_user_id = get_verification_claimed_user_id(verification_row, payload)
+        reserved_table, reserved_row = update_reserved_identity_verified(
+            supabase,
+            verification_row,
+            claimed_by_user_id,
+        )
+        update_payload = {
+            "status": "Approved",
+            "reviewed_by_email": actor["email"],
+            "reviewed_at": now_iso,
+            "decision_note": payload.decision_note.strip() or None,
+            "claimed_by_user_id": claimed_by_user_id,
+            "updated_at": now_iso,
+        }
+        result = (
+            supabase.table("verification_requests")
+            .update(update_payload)
+            .eq("id", request_id)
+            .execute()
+        )
+        updated_request = get_first_row(result)
+        insert_identity_audit_log(
+            supabase,
+            actor,
+            "VERIFICATION_REQUEST_APPROVED",
+            "VERIFICATION_REQUEST",
+            request_id,
+            {
+                "reserved_table": reserved_table,
+                "reserved_identity_id": reserved_row.get("id"),
+                "claimed_by_user_id": claimed_by_user_id,
+            },
+        )
+        return {"ok": True, "request": updated_request, "reserved_identity": reserved_row}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[admin verification] approve failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not approve verification request right now.")
+
+
+@app.post("/admin/verification-requests/{request_id}/reject")
+def admin_reject_verification_request(
+    request_id: str,
+    payload: AdminVerificationDecisionRequest,
+    request: Request,
+):
+    actor = require_identity_admin(request)
+    supabase = get_supabase_client()
+    now_iso = now_utc_iso()
+
+    try:
+        get_verification_request_row(supabase, request_id)
+        result = (
+            supabase.table("verification_requests")
+            .update({
+                "status": "Rejected",
+                "reviewed_by_email": actor["email"],
+                "reviewed_at": now_iso,
+                "decision_note": payload.decision_note.strip() or None,
+                "updated_at": now_iso,
+            })
+            .eq("id", request_id)
+            .execute()
+        )
+        updated_request = get_first_row(result)
+        insert_identity_audit_log(
+            supabase,
+            actor,
+            "VERIFICATION_REQUEST_REJECTED",
+            "VERIFICATION_REQUEST",
+            request_id,
+            {"decision_note": payload.decision_note.strip() or None},
+        )
+        return {"ok": True, "request": updated_request}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[admin verification] reject failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not reject verification request right now.")
+
+
+@app.get("/admin/users")
+def admin_list_identity_users(request: Request):
+    require_identity_admin(request)
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.table("admin_users").select("*").order("email").execute()
+        return {"ok": True, "users": result.data or []}
+    except Exception as error:
+        print("[identity admin] list users failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not load admin users right now.")
+
+
+@app.post("/admin/users/assign-role")
+def admin_assign_identity_role(payload: AdminAssignRoleRequest, request: Request):
+    actor = require_identity_admin(request)
+    target_email = normalize_admin_email(payload.email)
+    new_role = normalize_admin_role(payload.role)
+
+    if not target_email or "@" not in target_email:
+        raise HTTPException(status_code=400, detail="A valid email is required.")
+
+    allowed_roles = ROLE_ASSIGNMENT_PERMISSIONS.get(actor["role"], set())
+
+    if new_role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission to assign that role.")
+
+    supabase = get_supabase_client()
+
+    try:
+        row = upsert_admin_user_role(supabase, target_email, new_role, actor, payload.reason)
+        return {"ok": True, "user": row}
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[identity admin] assign role failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not assign admin role right now.")
 
 
 @app.get("/auth/callback", response_class=HTMLResponse)
