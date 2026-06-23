@@ -29,7 +29,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -3146,6 +3146,362 @@ def get_reserved_import_configs() -> dict[str, dict]:
     }
 
 
+GENERIC_RESERVED_IMPORT_CONFIGS = {
+    "people": {
+        "action": "IMPORT_RESERVED_PEOPLE",
+        "table": "reserved_people",
+        "preferred_sheet": "Master Clean List",
+        "required_columns": [
+            "Display Name",
+            "Normalized Value (No Spaces/Lowercase)",
+            "Source Tab Category",
+        ],
+        "display_columns": ["Display Name"],
+        "normalized_columns": ["Normalized Value (No Spaces/Lowercase)"],
+        "category_columns": ["Source Tab Category"],
+        "aliases_columns": ["Aliases", "Alias", "Optional aliases", "Optional Aliases"],
+        "field_map": {
+            "display_name": "Display Name",
+            "normalized_key": "Normalized Value (No Spaces/Lowercase)",
+            "category": "Source Tab Category",
+            "aliases": "Aliases",
+            "source_import": "source_import",
+        },
+    },
+    "brands": {
+        "action": "IMPORT_RESERVED_BRANDS",
+        "table": "reserved_brands",
+        "preferred_sheet": "Master Clean Brand List",
+        "required_columns": [
+            "Brand Display Name",
+            "Normalized Key Value",
+            "Source Industry Tab",
+        ],
+        "display_columns": ["Brand Display Name", "Organization Display Name"],
+        "normalized_columns": ["Normalized Key Value", "Normalized Key Token"],
+        "category_columns": ["Source Industry Tab", "Source Category Tab"],
+        "website_columns": ["Website", "Official Website", "URL", "Url"],
+        "aliases_columns": ["Aliases", "Alias", "Optional aliases", "Optional Aliases"],
+        "field_map": {
+            "brand_name": "Brand Display Name",
+            "normalized_key": "Normalized Key Value",
+            "industry": "Source Industry Tab",
+            "website": "Website",
+            "aliases": "Aliases",
+            "source_import": "source_import",
+        },
+    },
+}
+
+
+def normalize_excel_header(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+
+
+def build_excel_column_lookup(columns: Any) -> dict[str, str]:
+    return {
+        normalize_excel_header(column): str(column)
+        for column in columns
+        if str(column or "").strip()
+    }
+
+
+def resolve_excel_column(column_lookup: dict[str, str], candidates: list[str]) -> str | None:
+    for candidate in candidates:
+        column = column_lookup.get(normalize_excel_header(candidate))
+
+        if column:
+            return column
+
+    return None
+
+
+def dataframe_has_required_columns(dataframe: Any, required_columns: list[str]) -> bool:
+    column_lookup = build_excel_column_lookup(dataframe.columns)
+    return all(resolve_excel_column(column_lookup, [column]) for column in required_columns)
+
+
+def dataframe_matches_reserved_import_config(dataframe: Any, config: dict) -> bool:
+    column_lookup = build_excel_column_lookup(dataframe.columns)
+    return bool(
+        resolve_excel_column(column_lookup, config["display_columns"])
+        and resolve_excel_column(column_lookup, config["normalized_columns"])
+        and resolve_excel_column(column_lookup, config["category_columns"])
+    )
+
+
+def find_reserved_identity_dataframe(workbook_sheets: dict[str, Any], config: dict) -> tuple[str, Any]:
+    preferred_sheet = config["preferred_sheet"]
+
+    if preferred_sheet in workbook_sheets and dataframe_matches_reserved_import_config(
+        workbook_sheets[preferred_sheet],
+        config,
+    ):
+        return preferred_sheet, workbook_sheets[preferred_sheet]
+
+    for sheet_name, dataframe in workbook_sheets.items():
+        if dataframe_matches_reserved_import_config(dataframe, config):
+            return sheet_name, dataframe
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"Could not find a worksheet with required columns: "
+            f"{', '.join(config['required_columns'])}."
+        ),
+    )
+
+
+def normalize_excel_string(value: Any) -> str:
+    if value is None:
+        return ""
+
+    try:
+        import pandas as pd
+
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+
+    return str(value).strip()
+
+
+def split_aliases(value: Any) -> list[str]:
+    raw_value = normalize_excel_string(value)
+
+    if not raw_value:
+        return []
+
+    aliases = [
+        alias.strip()
+        for alias in re.split(r"[,;\n\r|]+", raw_value)
+        if alias.strip()
+    ]
+    deduped_aliases: list[str] = []
+    seen_aliases: set[str] = set()
+
+    for alias in aliases:
+        normalized_alias = normalize_identity_key(alias)
+
+        if not normalized_alias or normalized_alias in seen_aliases:
+            continue
+
+        seen_aliases.add(normalized_alias)
+        deduped_aliases.append(alias)
+
+    return deduped_aliases
+
+
+def merge_aliases(existing_aliases: list[str], next_aliases: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen_aliases: set[str] = set()
+
+    for alias in [*existing_aliases, *next_aliases]:
+        normalized_alias = normalize_identity_key(alias)
+
+        if not normalized_alias or normalized_alias in seen_aliases:
+            continue
+
+        seen_aliases.add(normalized_alias)
+        merged.append(alias)
+
+    return merged
+
+
+def get_dataframe_value(row: Any, column_name: str | None) -> str:
+    if not column_name:
+        return ""
+
+    return normalize_excel_string(row.get(column_name))
+
+
+def build_generic_reserved_import_rows(
+    dataframe: Any,
+    config: dict,
+    filename: str,
+    sheet_name: str,
+) -> tuple[list[dict], int, list[str]]:
+    column_lookup = build_excel_column_lookup(dataframe.columns)
+    display_column = resolve_excel_column(column_lookup, config["display_columns"])
+    normalized_column = resolve_excel_column(column_lookup, config["normalized_columns"])
+    category_column = resolve_excel_column(column_lookup, config["category_columns"])
+    website_column = resolve_excel_column(column_lookup, config.get("website_columns", []))
+    aliases_column = resolve_excel_column(column_lookup, config.get("aliases_columns", []))
+    rows_by_key: dict[str, dict] = {}
+    duplicates = 0
+    errors: list[str] = []
+    source_import = f"{filename}:{sheet_name}"
+
+    for index, row in dataframe.iterrows():
+        row_number = int(index) + 2
+        display_value = get_dataframe_value(row, display_column)
+        raw_normalized_key = get_dataframe_value(row, normalized_column)
+        normalized_key = normalize_identity_key(raw_normalized_key or display_value)
+
+        if not display_value and not normalized_key:
+            continue
+
+        if not normalized_key:
+            errors.append(f"Row {row_number}: missing normalized key and display name.")
+            continue
+
+        payload = {
+            "normalized_key": normalized_key,
+            "aliases": split_aliases(get_dataframe_value(row, aliases_column)),
+            "source_import": source_import,
+        }
+
+        if config["table"] == "reserved_people":
+            payload["display_name"] = display_value
+            payload["category"] = get_dataframe_value(row, category_column) or None
+        else:
+            payload["brand_name"] = display_value
+            payload["industry"] = get_dataframe_value(row, category_column) or None
+            payload["website"] = get_dataframe_value(row, website_column) or None
+
+        if normalized_key in rows_by_key:
+            duplicates += 1
+            existing_payload = rows_by_key[normalized_key]
+            existing_payload["aliases"] = merge_aliases(existing_payload.get("aliases") or [], payload["aliases"])
+
+            for key, value in payload.items():
+                if key == "aliases":
+                    continue
+
+                if value not in ("", None):
+                    existing_payload[key] = value
+
+            continue
+
+        rows_by_key[normalized_key] = payload
+
+    return list(rows_by_key.values()), duplicates, errors
+
+
+def fetch_existing_reserved_keys(supabase: Any, table_name: str, normalized_keys: list[str]) -> set[str]:
+    existing_keys: set[str] = set()
+
+    for index in range(0, len(normalized_keys), 500):
+        batch = normalized_keys[index:index + 500]
+
+        if not batch:
+            continue
+
+        result = (
+            supabase.table(table_name)
+            .select("normalized_key")
+            .in_("normalized_key", batch)
+            .execute()
+        )
+
+        for row in result.data or []:
+            normalized_key = str(row.get("normalized_key") or "").strip()
+
+            if normalized_key:
+                existing_keys.add(normalized_key)
+
+    return existing_keys
+
+
+def upsert_generic_reserved_rows(supabase: Any, table_name: str, rows: list[dict]) -> None:
+    for index in range(0, len(rows), 500):
+        batch = rows[index:index + 500]
+
+        if not batch:
+            continue
+
+        supabase.table(table_name).upsert(batch, on_conflict="normalized_key").execute()
+
+
+def run_generic_reserved_identity_import(
+    supabase: Any,
+    actor: dict,
+    upload_file: UploadFile,
+    contents: bytes,
+    import_type: str,
+) -> dict:
+    normalized_type = str(import_type or "").strip().lower()
+    config = GENERIC_RESERVED_IMPORT_CONFIGS.get(normalized_type)
+
+    if not config:
+        raise HTTPException(status_code=400, detail="Import type must be people or brands.")
+
+    filename = upload_file.filename or "reserved-identities.xlsx"
+
+    if not filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Please upload an Excel .xlsx file.")
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Excel file is required.")
+
+    try:
+        import pandas as pd
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Excel import is not configured right now.")
+
+    try:
+        workbook_sheets = pd.read_excel(BytesIO(contents), sheet_name=None, dtype=str)
+    except Exception as error:
+        print("[generic reserved import] pandas read failed:", str(error), flush=True)
+        raise HTTPException(status_code=400, detail="Could not read the Excel file.")
+
+    sheet_name, dataframe = find_reserved_identity_dataframe(workbook_sheets, config)
+    rows, duplicates, row_errors = build_generic_reserved_import_rows(dataframe, config, filename, sheet_name)
+
+    if row_errors:
+        return {
+            "success": False,
+            "inserted": 0,
+            "updated": 0,
+            "duplicates": duplicates,
+            "errors": row_errors[:50],
+        }
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="No importable rows were found in the Excel file.")
+
+    normalized_keys = [row["normalized_key"] for row in rows]
+
+    try:
+        existing_keys = fetch_existing_reserved_keys(supabase, config["table"], normalized_keys)
+        updated = sum(1 for key in normalized_keys if key in existing_keys)
+        inserted = len(rows) - updated
+        upsert_generic_reserved_rows(supabase, config["table"], rows)
+        imported_at = now_utc_iso()
+        insert_identity_audit_log(
+            supabase,
+            actor,
+            config["action"],
+            "RESERVED_IMPORT",
+            filename,
+            {
+                "filename": filename,
+                "sheet_name": sheet_name,
+                "type": normalized_type,
+                "rows_imported": len(rows),
+                "rows_inserted": inserted,
+                "rows_updated": updated,
+                "duplicates": duplicates,
+                "imported_at": imported_at,
+                "admin_email": actor["email"],
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        print("[generic reserved import] failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not import reserved identities right now.")
+
+    return {
+        "success": True,
+        "inserted": inserted,
+        "updated": updated,
+        "duplicates": duplicates,
+        "errors": [],
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     landing_path = Path(__file__).resolve().parents[1] / "client" / "landing" / "index.html"
@@ -3507,6 +3863,23 @@ async def admin_reserved_import(request: Request, file: UploadFile = File(...)):
     except Exception as error:
         print("[reserved import] failed:", str(error), flush=True)
         raise HTTPException(status_code=503, detail="Could not import reserved identities right now.")
+
+
+@app.post("/admin/import/reserved-identities")
+async def admin_import_reserved_identities(
+    request: Request,
+    file: UploadFile = File(...),
+    import_type: str = Form(..., alias="type"),
+):
+    actor = require_admin_role(request, {"SUPER_ADMIN", "ADMIN"})
+    contents = await file.read()
+    return run_generic_reserved_identity_import(
+        get_supabase_client(),
+        actor,
+        file,
+        contents,
+        import_type,
+    )
 
 
 @app.get("/admin/verification-requests")
