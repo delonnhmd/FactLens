@@ -45,6 +45,7 @@ import { ensureProfileForUser, type Profile } from "./profileService";
 import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
 import { normalizeProfileVisibility } from "../utils/publicProfile";
 import { uploadClaimImage, type PickedOptimizedImage } from "./imageUploadService";
+import { saveClaimMentions } from "./mentionService";
 
 type ClaimAiStatus = AiCheck["status"];
 
@@ -1721,6 +1722,8 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
       hint: shareUpdateError.hint,
     });
   }
+
+  await saveClaimMentions(insertedClaimId, input.description);
 
   const refreshedClaim = await fetchClaimById(insertedClaimId);
 

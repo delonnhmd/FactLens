@@ -14,6 +14,7 @@ import { normalizeUrl } from "../utils/url";
 import { getDisplayRankTitle, parseBadgeList } from "../utils/reputation";
 import { normalizeProfileVisibility } from "../utils/publicProfile";
 import { uploadEvidenceImage, type PickedOptimizedImage } from "./imageUploadService";
+import { saveEvidenceMentions } from "./mentionService";
 
 const EVIDENCE_NOTE_MAX_LENGTH = 500;
 const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
@@ -448,6 +449,8 @@ export async function addEvidence(
       console.log("[evidence] image upload warning:", uploadError);
     }
   }
+
+  await saveEvidenceMentions(evidenceRow.id, sanitizedNote);
 
   const countResult = await recalculateEvidenceCount(claimId);
 

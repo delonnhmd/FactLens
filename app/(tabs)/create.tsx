@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Image, View, Text, TextInput, StyleSheet, Saf
 import { useRouter } from "expo-router";
 import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
+import { MentionTextInput } from "../../components/MentionTextInput";
 import { claimCategories } from "../../constants/claimCategories";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
@@ -25,6 +26,7 @@ import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from
 import { normalizeUrl } from "../../utils/url";
 import { getSourceQuality, getSourceTrustLabel } from "../../services/sourceQuality";
 import { cleanUserError } from "../../utils/debugError";
+import { CLAIM_MENTION_LIMIT, getMentionLimitError } from "../../utils/mentions";
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
@@ -67,6 +69,7 @@ export default function CreateScreen() {
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
+  const descriptionMentionLimitError = getMentionLimitError(description, CLAIM_MENTION_LIMIT, "Claim description");
   // PHASE 4 STEP 11
   // PHASE 4 STEP 11 REVISED
   const claimQuality = useMemo(
@@ -99,7 +102,13 @@ export default function CreateScreen() {
   const sourcePreviewLabel = sourcePreviewQuality
     ? getSourceTrustLabel(sourcePreviewQuality.score, sourcePreviewQuality.label)
     : null;
-  const submitDisabled = titleOverLimit || descriptionOverLimit || videoUrlInvalid || !claimQuality.canSubmit || isSubmitting;
+  const submitDisabled =
+    titleOverLimit ||
+    descriptionOverLimit ||
+    Boolean(descriptionMentionLimitError) ||
+    videoUrlInvalid ||
+    !claimQuality.canSubmit ||
+    isSubmitting;
 
   const titleCounterStyle = useMemo(
     () => [styles.counterText, titleOverLimit && styles.counterTextError],
@@ -179,6 +188,10 @@ export default function CreateScreen() {
 
     if (!validation.ok) {
       nextErrors.general = validation.errors.join("\n");
+    }
+
+    if (descriptionMentionLimitError) {
+      nextErrors.description = descriptionMentionLimitError;
     }
 
     return nextErrors;
@@ -281,7 +294,7 @@ export default function CreateScreen() {
         title: titleOverLimit ? "Title must be 160 characters or fewer." : currentErrors.title,
         description: descriptionOverLimit
           ? "Description must be 1000 characters or fewer."
-          : currentErrors.description,
+          : descriptionMentionLimitError || currentErrors.description,
         videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
         general: !claimQuality.canSubmit ? claimQuality.warnings.join("\n") : currentErrors.general,
       }));
@@ -462,11 +475,11 @@ export default function CreateScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <TextInput
+            <MentionTextInput
               value={description}
               onChangeText={(value) => updateField("description", value)}
               placeholder="Add context, what was said, and why it matters."
-              style={[styles.input, styles.textArea, (errors.description || descriptionOverLimit) && styles.inputError]}
+              inputStyle={[styles.input, styles.textArea, (errors.description || descriptionOverLimit) && styles.inputError]}
               placeholderTextColor={appTheme.colors.muted}
               editable={!isSubmitting}
               multiline

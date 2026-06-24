@@ -25,6 +25,8 @@ import { AiCheckBadge } from "../../../components/AiCheckBadge";
 import { PhaseStatusRow } from "../../../components/PhaseStatusRow";
 import { VerdictBanner } from "../../../components/VerdictBanner";
 import { VoteBreakdownBars } from "../../../components/VoteBreakdownBars";
+import { MentionText } from "../../../components/MentionText";
+import { MentionTextInput } from "../../../components/MentionTextInput";
 import { useAuth } from "../../../context/AuthContext";
 import { useClaims } from "../../../context/ClaimsContext";
 import type { AppTheme } from "../../../context/DisplaySettingsContext";
@@ -64,6 +66,7 @@ import {
   pickImageFromLibrary,
   type PickedOptimizedImage,
 } from "../../../services/imageUploadService";
+import { EVIDENCE_MENTION_LIMIT, getMentionLimitError } from "../../../utils/mentions";
 
 // PHASE 2 STEP 4
 type EvidenceFieldName = "url" | "note";
@@ -355,6 +358,11 @@ export default function ClaimDetailScreen() {
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
+  const evidenceNoteMentionLimitError = getMentionLimitError(
+    evidenceNote,
+    EVIDENCE_MENTION_LIMIT,
+    "Evidence note",
+  );
   // PHASE 3 STEP 6
   const userReport = claim && currentUser ? claim.reports.find((report) => report.userId === currentUser.id) : undefined;
 
@@ -683,6 +691,8 @@ export default function ClaimDetailScreen() {
       nextErrors.note = "Short note must be at least 10 characters.";
     } else if (trimmedNote.length > EVIDENCE_NOTE_MAX_LENGTH) {
       nextErrors.note = `Evidence note must be ${EVIDENCE_NOTE_MAX_LENGTH} characters or fewer.`;
+    } else if (evidenceNoteMentionLimitError) {
+      nextErrors.note = evidenceNoteMentionLimitError;
     }
 
     return nextErrors;
@@ -1012,7 +1022,7 @@ export default function ClaimDetailScreen() {
               <Text style={styles.title}>{claim.title}</Text>
               <StatusBadge status={claim.status} />
             </View>
-            <Text style={styles.description}>{claim.description}</Text>
+            <MentionText text={claim.description} style={styles.description} />
             <View style={styles.metaWrap}>
               {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
               {/* PHASE 5 election positioning UI */}
@@ -1297,11 +1307,11 @@ export default function ClaimDetailScreen() {
 
           <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>Short note</Text>
-            <TextInput
+            <MentionTextInput
               value={evidenceNote}
               onChangeText={(value) => updateEvidenceField("note", value)}
               placeholder="Explain what this source adds"
-              style={[styles.input, styles.textArea, evidenceErrors.note && styles.inputError]}
+              inputStyle={[styles.input, styles.textArea, evidenceErrors.note && styles.inputError]}
               placeholderTextColor={appTheme.colors.muted}
               multiline
               maxLength={EVIDENCE_NOTE_MAX_LENGTH}
@@ -1478,7 +1488,7 @@ export default function ClaimDetailScreen() {
                         />
                       </TouchableOpacity>
                     ) : null}
-                    <Text style={styles.evidenceNote} numberOfLines={6}>{item.note}</Text>
+                    <MentionText text={item.note} style={styles.evidenceNote} numberOfLines={6} />
                     <TouchableOpacity
                       style={styles.openSourceButton}
                       activeOpacity={0.8}

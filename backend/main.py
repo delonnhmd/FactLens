@@ -2065,6 +2065,12 @@ class ProfileUpdateRequest(BaseModel):
     profile_visibility: str | None = None
 
 
+class MentionTagsRequest(BaseModel):
+    target_type: Literal["claim", "evidence"]
+    target_id: str = ""
+    text: str = ""
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -2421,6 +2427,201 @@ def get_backend_preferred_username(auth_user: Any) -> str:
             return normalized
 
     return generate_backend_fallback_username(email, user_id)
+
+
+MENTION_USERNAME_PATTERN = re.compile(r"@([A-Za-z0-9_]+)")
+
+
+def normalize_mention_search_query(value: str) -> str:
+    return re.sub(r"[%(),]", " ", str(value or "").strip().lstrip("@"))[:32].strip()
+
+
+def extract_backend_mentions(text: str, limit: int) -> list[str]:
+    usernames: list[str] = []
+    seen: set[str] = set()
+
+    for match in MENTION_USERNAME_PATTERN.finditer(text or ""):
+        username = normalize_profile_username_value(match.group(1))
+
+        if not is_valid_profile_username(username) or username in seen:
+            continue
+
+        seen.add(username)
+        usernames.append(username)
+
+        if len(usernames) >= limit:
+            break
+
+    return usernames
+
+
+def safe_execute_table_query(query: Any, context: str) -> list[dict]:
+    try:
+        result = query.execute()
+        return result.data or []
+    except Exception as error:
+        print(f"[mentions] {context} query warning:", error, flush=True)
+        return []
+
+
+def map_profile_mention_result(row: dict) -> dict | None:
+    if row.get("is_suspended") or row.get("is_deleted"):
+        return None
+
+    user_id = str(row.get("id") or "")
+    username = get_review_safe_backend_username(row.get("username"), user_id)
+
+    if not user_id or not username:
+        return None
+
+    trust_score = row.get("trust_score") or 50
+    rank_title = resolve_display_rank(calculate_rank_title(trust_score), row.get("highest_rank_achieved") or row.get("rank_title"))
+
+    return {
+        "type": "user",
+        "id": user_id,
+        "username": username,
+        "display_name": get_review_safe_backend_display_name(row.get("display_name"), row.get("username"), user_id),
+        "rank_title": rank_title,
+        "avatar_url": row.get("avatar_url"),
+        "verified": bool(row.get("verified")),
+    }
+
+
+def map_organization_mention_result(row: dict) -> dict | None:
+    slug = normalize_profile_username_value(row.get("slug"))
+
+    if not slug:
+        return None
+
+    return {
+        "type": "organization",
+        "id": str(row.get("id") or ""),
+        "username": slug,
+        "display_name": str(row.get("name") or slug),
+        "avatar_url": row.get("avatar_url"),
+        "verified": bool(row.get("verified")),
+    }
+
+
+def search_profile_mentions(supabase: Any, query: str, limit: int) -> list[dict]:
+    select_fields = "id,username,display_name,avatar_url,verified,trust_score,rank_title,highest_rank_achieved,is_suspended,is_deleted"
+    rows_by_id: dict[str, dict] = {}
+
+    for column, search_value in (("username", normalize_profile_username_value(query)), ("display_name", query)):
+        if not search_value:
+            continue
+
+        rows = safe_execute_table_query(
+            supabase.table("profiles").select(select_fields).ilike(column, f"%{search_value}%").limit(limit),
+            f"profile {column}",
+        )
+
+        for row in rows:
+            row_id = str(row.get("id") or "")
+
+            if row_id:
+                rows_by_id[row_id] = row
+
+    return [result for row in rows_by_id.values() if (result := map_profile_mention_result(row))]
+
+
+def search_organization_mentions(supabase: Any, query: str, limit: int) -> list[dict]:
+    rows_by_id: dict[str, dict] = {}
+
+    for column, search_value in (("slug", normalize_profile_username_value(query)), ("name", query)):
+        if not search_value:
+            continue
+
+        rows = safe_execute_table_query(
+            supabase.table("organizations").select("id,name,slug,description,avatar_url,verified,created_at").ilike(column, f"%{search_value}%").limit(limit),
+            f"organization {column}",
+        )
+
+        for row in rows:
+            row_id = str(row.get("id") or "")
+
+            if row_id:
+                rows_by_id[row_id] = row
+
+    return [result for row in rows_by_id.values() if (result := map_organization_mention_result(row))]
+
+
+def fetch_mention_targets_by_username(supabase: Any, usernames: list[str]) -> tuple[dict[str, dict], dict[str, dict]]:
+    profiles_by_username: dict[str, dict] = {}
+    organizations_by_slug: dict[str, dict] = {}
+
+    if not usernames:
+        return profiles_by_username, organizations_by_slug
+
+    profile_rows = safe_execute_table_query(
+        supabase.table("profiles")
+        .select("id,username,username_normalized,display_name,is_suspended,is_deleted")
+        .in_("username_normalized", usernames),
+        "profile exact",
+    )
+
+    if not profile_rows:
+        profile_rows = safe_execute_table_query(
+            supabase.table("profiles")
+            .select("id,username,display_name,is_suspended,is_deleted")
+            .in_("username", usernames),
+            "profile exact fallback",
+        )
+
+    for row in profile_rows:
+        if row.get("is_suspended") or row.get("is_deleted"):
+            continue
+
+        username = normalize_profile_username_value(row.get("username_normalized") or row.get("username"))
+
+        if username:
+            profiles_by_username[username] = row
+
+    organization_rows = safe_execute_table_query(
+        supabase.table("organizations").select("id,name,slug,verified").in_("slug", usernames),
+        "organization exact",
+    )
+
+    for row in organization_rows:
+        slug = normalize_profile_username_value(row.get("slug"))
+
+        if slug:
+            organizations_by_slug[slug] = row
+
+    return profiles_by_username, organizations_by_slug
+
+
+def insert_mention_tag_row(supabase: Any, table_name: str, payload: dict) -> bool:
+    try:
+        supabase.table(table_name).insert(payload).execute()
+        return True
+    except Exception as error:
+        message = str(error).lower()
+
+        if "duplicate" in message or "23505" in message:
+            return False
+
+        print("[mentions] tag insert warning:", error, flush=True)
+        return False
+
+
+def append_mention_notification(supabase: Any, target_user_id: str, notification: dict) -> None:
+    try:
+        result = (
+            supabase.table("profiles")
+            .select("notifications")
+            .eq("id", target_user_id)
+            .limit(1)
+            .execute()
+        )
+        row = (result.data or [None])[0] or {}
+        existing_notifications = row.get("notifications")
+        notifications = existing_notifications if isinstance(existing_notifications, list) else []
+        next_notifications = [notification, *notifications][:50]
+        supabase.table("profiles").update({"notifications": next_notifications}).eq("id", target_user_id).execute()
+    except Exception as error:
+        print("[mentions] notification warning:", error, flush=True)
 
 
 def sanitize_backend_bio(value: str | None) -> str | None:
@@ -3596,6 +3797,107 @@ def public_claim_page(claim_id: str):
 def health():
     # PHASE 4 STEP 21B
     return {"ok": True, "service": "Verifact backend", "version": "phase-4-step-21b"}
+
+
+@app.get("/search/mentions")
+def search_mentions(request: Request, q: str = "", limit: int = 8):
+    enforce_rate_limit(request, "search_mentions", 180, AI_RATE_LIMIT_WINDOW_SECONDS)
+    query = normalize_mention_search_query(q)
+    safe_limit = max(1, min(8, int(limit or 8)))
+
+    if not query:
+        return {"results": []}
+
+    supabase = get_supabase_client()
+    results = [
+        *search_profile_mentions(supabase, query, safe_limit),
+        *search_organization_mentions(supabase, query, safe_limit),
+    ]
+    results.sort(key=lambda item: (not bool(item.get("verified")), str(item.get("username") or "")))
+
+    return {"results": results[:safe_limit]}
+
+
+@app.post("/mentions/tags")
+def save_mention_tags(request: Request, payload: MentionTagsRequest):
+    authenticated_user_id = get_authenticated_user_id(request)
+    target_id = str(payload.target_id or "").strip()
+
+    if not target_id:
+        raise HTTPException(status_code=400, detail="Missing target id.")
+
+    mention_limit = 5 if payload.target_type == "claim" else 3
+    usernames = extract_backend_mentions(payload.text, mention_limit)
+
+    if not usernames:
+        return {"ok": True, "created": 0}
+
+    supabase = get_supabase_client()
+    actor_profile = fetch_profile_row(supabase, authenticated_user_id) or {}
+    actor_username = get_review_safe_backend_username(actor_profile.get("username"), authenticated_user_id)
+    claim_id = target_id
+
+    if payload.target_type == "evidence":
+        evidence_rows = safe_execute_table_query(
+            supabase.table("evidence").select("id,claim_id").eq("id", target_id).limit(1),
+            "evidence target",
+        )
+        evidence_row = (evidence_rows or [None])[0]
+
+        if not evidence_row:
+            raise HTTPException(status_code=404, detail="Evidence not found.")
+
+        claim_id = str(evidence_row.get("claim_id") or "")
+
+    profiles_by_username, organizations_by_slug = fetch_mention_targets_by_username(supabase, usernames)
+    created_count = 0
+
+    for username in usernames:
+        profile_row = profiles_by_username.get(username)
+
+        if profile_row:
+            tagged_user_id = str(profile_row.get("id") or "")
+            table_name = "claim_tags" if payload.target_type == "claim" else "evidence_tags"
+            tag_payload = {
+                "tagged_user_id": tagged_user_id,
+                "tagged_username": username,
+                **({"claim_id": target_id} if payload.target_type == "claim" else {"evidence_id": target_id}),
+            }
+
+            if insert_mention_tag_row(supabase, table_name, tag_payload):
+                created_count += 1
+
+                if tagged_user_id != authenticated_user_id:
+                    append_mention_notification(
+                        supabase,
+                        tagged_user_id,
+                        {
+                            "type": "mention",
+                            "message": (
+                                f"@{actor_username} mentioned you in a claim"
+                                if payload.target_type == "claim"
+                                else f"@{actor_username} mentioned you in evidence"
+                            ),
+                            "claim_id": claim_id,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "read": False,
+                        },
+                    )
+
+        organization_row = organizations_by_slug.get(username)
+
+        if organization_row:
+            table_name = "claim_tags" if payload.target_type == "claim" else "evidence_tags"
+            tag_payload = {
+                "tagged_org_id": str(organization_row.get("id") or ""),
+                "tagged_username": username,
+                **({"claim_id": target_id} if payload.target_type == "claim" else {"evidence_id": target_id}),
+            }
+
+            if insert_mention_tag_row(supabase, table_name, tag_payload):
+                created_count += 1
+
+    return {"ok": True, "created": created_count}
 
 
 @app.post("/identity/check-username")

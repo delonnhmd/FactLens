@@ -15,6 +15,7 @@ import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/clai
 import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
 import { useAppTheme, useDisplaySettings } from "../hooks/useTheme";
 import type { AppTheme } from "../context/DisplaySettingsContext";
+import { MentionText } from "./MentionText";
 
 // PHASE 4 STEP 18
 // Source trust label update
@@ -314,9 +315,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             {claim.title}
           </Text>
 
-          <Text style={styles.description}>
-            {claim.description}
-          </Text>
+          <MentionText text={claim.description} style={styles.description} />
 
           {thumbnailUrl ? (
             <TouchableOpacity
