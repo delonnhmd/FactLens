@@ -10,6 +10,7 @@ interface HeaderProps {
   title: string;
   subtitle?: string;
   rightIcon?: ComponentProps<typeof Ionicons>["name"];
+  rightBadgeCount?: number;
   onRightIconPress?: () => void;
   onRightIconLongPress?: () => void;
   rightAccessibilityLabel?: string;
@@ -20,6 +21,7 @@ export function Header({
   title,
   subtitle,
   rightIcon,
+  rightBadgeCount = 0,
   onRightIconPress,
   onRightIconLongPress,
   rightAccessibilityLabel = "Header action",
@@ -27,6 +29,7 @@ export function Header({
 }: HeaderProps) {
   const appTheme = useAppTheme();
   const styles = createStyles(appTheme);
+  const visibleBadgeCount = Math.max(0, rightBadgeCount);
 
   return (
     <View style={styles.container}>
@@ -46,6 +49,11 @@ export function Header({
           accessibilityHint={rightAccessibilityHint}
         >
           <Ionicons name={rightIcon} size={22} color={appTheme.colors.chipActiveText} />
+          {visibleBadgeCount > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{visibleBadgeCount > 9 ? "9+" : visibleBadgeCount}</Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       ) : (
         <View style={styles.actionSlot} />
@@ -87,6 +95,27 @@ function createStyles(theme: AppTheme) {
     height: 44,
     justifyContent: "center",
     minWidth: 44,
+    position: "relative",
+  },
+  badge: {
+    alignItems: "center",
+    backgroundColor: "#E24B4A",
+    borderColor: theme.colors.navy,
+    borderRadius: 9,
+    borderWidth: 1,
+    height: 18,
+    justifyContent: "center",
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: "absolute",
+    right: 5,
+    top: 6,
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 12,
   },
   });
 }

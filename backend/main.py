@@ -2606,20 +2606,29 @@ def insert_mention_tag_row(supabase: Any, table_name: str, payload: dict) -> boo
         return False
 
 
-def append_mention_notification(supabase: Any, target_user_id: str, notification: dict) -> None:
+def truncate_notification_body(value: Any, limit: int = 60) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    return text[:limit]
+
+
+def insert_notification_record(
+    supabase: Any,
+    target_user_id: str,
+    notification_type: str,
+    title: str,
+    body: str,
+    claim_id: str | None = None,
+) -> None:
+    payload = {
+        "user_id": target_user_id,
+        "type": notification_type,
+        "title": title,
+        "body": body,
+        "claim_id": claim_id,
+    }
+
     try:
-        result = (
-            supabase.table("profiles")
-            .select("notifications")
-            .eq("id", target_user_id)
-            .limit(1)
-            .execute()
-        )
-        row = (result.data or [None])[0] or {}
-        existing_notifications = row.get("notifications")
-        notifications = existing_notifications if isinstance(existing_notifications, list) else []
-        next_notifications = [notification, *notifications][:50]
-        supabase.table("profiles").update({"notifications": next_notifications}).eq("id", target_user_id).execute()
+        supabase.table("notifications").insert(payload).execute()
     except Exception as error:
         print("[mentions] notification warning:", error, flush=True)
 
@@ -3836,10 +3845,21 @@ def save_mention_tags(request: Request, payload: MentionTagsRequest):
     actor_profile = fetch_profile_row(supabase, authenticated_user_id) or {}
     actor_username = get_review_safe_backend_username(actor_profile.get("username"), authenticated_user_id)
     claim_id = target_id
+    notification_body = truncate_notification_body(payload.text)
+
+    if payload.target_type == "claim":
+        claim_rows = safe_execute_table_query(
+            supabase.table("claims").select("id,title").eq("id", target_id).limit(1),
+            "claim target",
+        )
+        claim_row = (claim_rows or [None])[0]
+
+        if claim_row:
+            notification_body = truncate_notification_body(claim_row.get("title"))
 
     if payload.target_type == "evidence":
         evidence_rows = safe_execute_table_query(
-            supabase.table("evidence").select("id,claim_id").eq("id", target_id).limit(1),
+            supabase.table("evidence").select("id,claim_id,note").eq("id", target_id).limit(1),
             "evidence target",
         )
         evidence_row = (evidence_rows or [None])[0]
@@ -3848,6 +3868,7 @@ def save_mention_tags(request: Request, payload: MentionTagsRequest):
             raise HTTPException(status_code=404, detail="Evidence not found.")
 
         claim_id = str(evidence_row.get("claim_id") or "")
+        notification_body = truncate_notification_body(evidence_row.get("note"))
 
     profiles_by_username, organizations_by_slug = fetch_mention_targets_by_username(supabase, usernames)
     created_count = 0
@@ -3868,20 +3889,17 @@ def save_mention_tags(request: Request, payload: MentionTagsRequest):
                 created_count += 1
 
                 if tagged_user_id != authenticated_user_id:
-                    append_mention_notification(
+                    insert_notification_record(
                         supabase,
                         tagged_user_id,
-                        {
-                            "type": "mention",
-                            "message": (
-                                f"@{actor_username} mentioned you in a claim"
-                                if payload.target_type == "claim"
-                                else f"@{actor_username} mentioned you in evidence"
-                            ),
-                            "claim_id": claim_id,
-                            "created_at": datetime.now(timezone.utc).isoformat(),
-                            "read": False,
-                        },
+                        "mention_claim" if payload.target_type == "claim" else "mention_evidence",
+                        (
+                            f"@{actor_username} mentioned you"
+                            if payload.target_type == "claim"
+                            else f"@{actor_username} mentioned you in evidence"
+                        ),
+                        notification_body,
+                        claim_id or None,
                     )
 
         organization_row = organizations_by_slug.get(username)

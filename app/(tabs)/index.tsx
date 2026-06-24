@@ -14,13 +14,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { ClaimCard } from "../../components/ClaimCard";
 import { EmptyState } from "../../components/EmptyState";
 import { ClaimListSkeleton } from "../../components/Skeleton";
 import { claimCategories } from "../../constants/claimCategories";
 import { CLAIMS_LOAD_ERROR_MESSAGE } from "../../services/claimService";
+import { fetchUnreadNotificationCount } from "../../services/notificationService";
+import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useAppTheme } from "../../hooks/useTheme";
@@ -50,6 +52,7 @@ export default function HomeScreen() {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const { contentBottomPadding, handleScroll } = useScrollAwareTabBar();
+  const { currentUser } = useAuth();
   const contentContainerStyle = useMemo(
     () => [styles.content, { paddingBottom: contentBottomPadding }],
     [contentBottomPadding, styles.content],
@@ -80,6 +83,7 @@ export default function HomeScreen() {
   const [feedHasMore, setFeedHasMore] = useState(true);
   const [feedOffset, setFeedOffset] = useState(0);
   const [feedError, setFeedError] = useState("");
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const debouncedQuery = useDebounce(query, 400);
   // PHASE 2 STEP 10
   const [refreshing, setRefreshing] = useState(false);
@@ -87,6 +91,16 @@ export default function HomeScreen() {
   const filteredFetchInFlightRef = useRef(false);
 
   const filteredFeedActive = debouncedQuery.trim().length > 0 || Boolean(activeCategory);
+
+  const refreshUnreadNotifications = useCallback(async () => {
+    if (!currentUser?.id) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+
+    const nextCount = await fetchUnreadNotificationCount(currentUser.id);
+    setUnreadNotificationCount(nextCount);
+  }, [currentUser?.id]);
 
   const visibleClaims = useMemo(() => {
     const baseClaims = filteredFeedActive ? feedClaims : claims;
@@ -155,6 +169,16 @@ export default function HomeScreen() {
 
     void loadFilteredClaims(0, true);
   }, [loadFilteredClaims]);
+
+  useEffect(() => {
+    void refreshUnreadNotifications();
+  }, [refreshUnreadNotifications]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshUnreadNotifications();
+    }, [refreshUnreadNotifications]),
+  );
 
   const handleClaimPress = useCallback(
     (claimId: string) => {
@@ -301,7 +325,15 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Verifact" subtitle="Verify news with community evidence" />
+      <Header
+        title="Verifact"
+        subtitle="Verify news with community evidence"
+        rightIcon="notifications-outline"
+        rightBadgeCount={unreadNotificationCount}
+        onRightIconPress={() => router.push("/notifications")}
+        rightAccessibilityLabel="Notifications"
+        rightAccessibilityHint="Opens your notifications"
+      />
       <FlatList
         data={visibleClaims}
         keyExtractor={(claim) => claim.id}
