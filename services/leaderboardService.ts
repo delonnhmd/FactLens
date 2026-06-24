@@ -2,6 +2,7 @@
 // PHASE 5 STEP 1B
 import { API_CONFIG } from "../constants/apiConfig";
 import { parseBadgeList, type ReputationBadge } from "../utils/reputation";
+import { getReviewSafeDisplayName, getReviewSafeUsername } from "../utils/username";
 
 export type LeaderboardScope = "monthly" | "all_time";
 
@@ -34,11 +35,13 @@ export interface LeaderboardResult {
 }
 
 function mapLeaderboardRow(row: LeaderboardRow, scope: LeaderboardScope): LeaderboardUser {
+  const username = getReviewSafeUsername(row.username, row.id);
+
   return {
     id: row.id,
-    username: row.username,
-    displayName: row.display_name || row.username,
-    rankTitle: row.highest_rank_achieved || row.rank_title || "Claim Checker",
+    username,
+    displayName: getReviewSafeDisplayName(row.display_name, row.username, row.id),
+    rankTitle: row.highest_rank_achieved || row.rank_title || "New Scout",
     points: scope === "monthly" ? row.monthly_reputation_points ?? 0 : row.reputation_points ?? 0,
     trustScore: row.trust_score ?? 50,
     badges: parseBadgeList(row.badge_list),

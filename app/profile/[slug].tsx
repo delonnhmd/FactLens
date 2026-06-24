@@ -20,12 +20,16 @@ export default function PublicProfileScreen() {
   const [profile, setProfile] = useState<PublicProfileCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [fetchStatus, setFetchStatus] = useState<404 | 500 | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
     setError("");
+    setFetchStatus(null);
+    setProfile(null);
 
     fetchPublicProfileBySlug(slug ?? "")
       .then((result) => {
@@ -34,7 +38,8 @@ export default function PublicProfileScreen() {
         }
 
         setProfile(result.profile);
-        setError(result.error ? cleanUserError(result.error) : "");
+        setFetchStatus(result.status ?? null);
+        setError(result.error ?? "");
       })
       .finally(() => {
         if (mounted) {
@@ -45,7 +50,7 @@ export default function PublicProfileScreen() {
     return () => {
       mounted = false;
     };
-  }, [slug]);
+  }, [retryNonce, slug]);
 
   const displayName = profile?.displayName || profile?.username || "Contributor";
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
@@ -91,13 +96,38 @@ export default function PublicProfileScreen() {
 
         {loading ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Loading profile...</Text>
+            <Text style={styles.title}>Loading contributor profile...</Text>
           </View>
         ) : null}
 
         {!loading && error ? (
           <View style={styles.card}>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorTitle}>
+              {fetchStatus === 404 ? "Contributor profile unavailable" : "Could not load profile"}
+            </Text>
+            <Text style={styles.errorSubtext}>
+              {fetchStatus === 404
+                ? "This profile may have been removed or is not available."
+                : "Check your connection and try again."}
+            </Text>
+            <TouchableOpacity
+              style={styles.errorActionButton}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={fetchStatus === 404 ? "Back to leaderboard" : "Try again"}
+              onPress={() => {
+                if (fetchStatus === 404) {
+                  router.back();
+                  return;
+                }
+
+                setRetryNonce((value) => value + 1);
+              }}
+            >
+              <Text style={styles.errorActionText}>
+                {fetchStatus === 404 ? "Back to leaderboard" : "Try again"}
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -348,6 +378,33 @@ const styles = StyleSheet.create({
   errorText: {
     color: theme.colors.danger,
     fontSize: 14,
+    fontWeight: "500",
+  },
+  errorTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: "500",
+    marginBottom: 6,
+  },
+  errorSubtext: {
+    color: theme.colors.subtext,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: theme.spacing.md,
+  },
+  errorActionButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 10,
+  },
+  errorActionText: {
+    color: "#FFFFFF",
+    fontSize: 13,
     fontWeight: "500",
   },
   reportButton: {

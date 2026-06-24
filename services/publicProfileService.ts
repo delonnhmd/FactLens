@@ -3,7 +3,7 @@
 import { supabase } from "../lib/supabase";
 import { normalizeProfileSlug, normalizeProfileVisibility, type ProfileVisibility } from "../utils/publicProfile";
 import { getDisplayRankTitle, parseBadgeList, type ReputationBadge } from "../utils/reputation";
-import { normalizeUsername } from "../utils/username";
+import { getReviewSafeDisplayName, getReviewSafeUsername, normalizeUsername } from "../utils/username";
 
 export interface PublicProfileCard {
   id: string;
@@ -47,15 +47,21 @@ interface PublicProfileRow {
 
 export interface PublicProfileResult {
   profile: PublicProfileCard | null;
+  status?: 404 | 500;
   error?: string;
 }
 
 const PUBLIC_PROFILE_SELECT =
   "id,username,display_name,avatar_url,bio,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list,evidence_count,correct_votes,created_at,is_deleted,deleted_at";
 
+function isUuid(input: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.trim());
+}
+
 function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
   const isDeleted = Boolean(row.is_deleted);
   const visibility = normalizeProfileVisibility(row.profile_visibility);
+  const username = getReviewSafeUsername(row.username, row.id);
   const rankTitle = getDisplayRankTitle({
     trustScore: row.trust_score ?? 50,
     rankTitle: row.rank_title,
@@ -64,11 +70,11 @@ function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
 
   return {
     id: row.id,
-    username: isDeleted ? "deleted_user" : row.username,
-    displayName: isDeleted ? "Deleted User" : row.display_name ?? null,
+    username: isDeleted ? "deleted_user" : username,
+    displayName: isDeleted ? "Deleted User" : getReviewSafeDisplayName(row.display_name, row.username, row.id),
     avatarUrl: isDeleted ? null : row.avatar_url ?? null,
     bio: visibility === "private" || isDeleted ? null : row.bio ?? null,
-    publicProfileSlug: isDeleted ? null : row.public_profile_slug ?? row.username,
+    publicProfileSlug: isDeleted ? null : row.public_profile_slug ?? username,
     profileVisibility: isDeleted ? "private" : visibility,
     rankTitle,
     highestRankAchieved: row.highest_rank_achieved ?? rankTitle,
@@ -83,14 +89,17 @@ function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
 }
 
 export async function fetchPublicProfileBySlug(slugOrUsername: string): Promise<PublicProfileResult> {
-  const normalizedSlug = normalizeProfileSlug(slugOrUsername);
-  const normalizedUsername = normalizeUsername(slugOrUsername);
+  const trimmedIdentifier = slugOrUsername.trim();
+  const normalizedSlug = normalizeProfileSlug(trimmedIdentifier);
+  const normalizedUsername = normalizeUsername(trimmedIdentifier);
+  const profileId = isUuid(trimmedIdentifier) ? trimmedIdentifier : "";
 
-  if (!normalizedSlug && !normalizedUsername) {
-    return { profile: null, error: "Profile not found." };
+  if (!profileId && !normalizedSlug && !normalizedUsername) {
+    return { profile: null, status: 404, error: "Contributor profile unavailable" };
   }
 
   const profileFilters = [
+    ...(profileId ? [`id.eq.${profileId}`] : []),
     ...(normalizedSlug ? [`public_profile_slug.eq.${normalizedSlug}`] : []),
     ...(normalizedUsername ? [`username.eq.${normalizedUsername}`] : []),
   ];
@@ -99,7 +108,7 @@ export async function fetchPublicProfileBySlug(slugOrUsername: string): Promise<
     .from("profiles")
     .select(PUBLIC_PROFILE_SELECT)
     .or(profileFilters.join(","))
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.log("[public profile] load error:", {
@@ -108,11 +117,14 @@ export async function fetchPublicProfileBySlug(slugOrUsername: string): Promise<
       details: error.details,
       hint: error.hint,
     });
-    return { profile: null, error: "Could not load this profile." };
+    return { profile: null, status: 500, error: "Could not load profile" };
   }
 
+  const row = Array.isArray(data) ? data[0] : null;
+
   return {
-    profile: data ? mapPublicProfileRow(data as PublicProfileRow) : null,
-    error: data ? undefined : "Profile not found.",
+    profile: row ? mapPublicProfileRow(row as PublicProfileRow) : null,
+    status: row ? undefined : 404,
+    error: row ? undefined : "Contributor profile unavailable",
   };
 }

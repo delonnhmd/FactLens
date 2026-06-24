@@ -141,7 +141,15 @@ export default function LeaderboardScreen() {
                   currentUser?.id === user.id && styles.currentUserRow,
                 ]}
                 activeOpacity={0.85}
-                onPress={() => router.push(`/profile/${user.username}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${user.displayName} contributor profile`}
+                onPress={() => {
+                  console.log("[leaderboard] open contributor profile:", {
+                    userId: user.id,
+                    username: user.username,
+                  });
+                  router.push(`/profile/${user.id}`);
+                }}
               >
                 <View
                   style={[

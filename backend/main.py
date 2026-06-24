@@ -15,6 +15,7 @@
 # PHASE 4 STEP 18
 # PHASE 4 STEP 27
 import json
+import hashlib
 import os
 import re
 import sys
@@ -2376,24 +2377,44 @@ def generate_backend_profile_slug(username: str, user_id: str) -> str:
     return f"{base_slug}-{suffix}"[:48] if suffix else base_slug
 
 
+def generate_backend_default_username(seed: str) -> str:
+    digest = hashlib.md5(str(seed or "user").encode("utf-8")).hexdigest()
+    return f"user_{1000 + (int(digest[:8], 16) % 9000):04d}"
+
+
 def generate_backend_fallback_username(email: str, user_id: str) -> str:
-    email_prefix = normalize_profile_username_value((email or "").split("@", 1)[0])
+    return generate_backend_default_username(user_id or email or "user")
 
-    if not is_valid_profile_username(email_prefix):
-        email_prefix = "user"
 
-    suffix = user_id.replace("-", "")[-6:].lower() or "000000"
-    max_base_length = max(3, 20 - len(suffix) - 1)
-    return f"{email_prefix[:max_base_length]}_{suffix}"[:20]
+def is_backend_generated_placeholder_username(value: str | None) -> bool:
+    normalized = normalize_profile_username_value(value or "")
+    return bool(normalized and re.fullmatch(r"[a-z][a-z0-9]{2,12}_[a-f0-9]{6}", normalized))
+
+
+def get_review_safe_backend_username(username: str | None, user_id: str | None) -> str:
+    normalized = normalize_profile_username_value(username or "")
+
+    if not is_valid_profile_username(normalized) or is_backend_generated_placeholder_username(normalized):
+        return generate_backend_default_username(user_id or username or "user")
+
+    return normalized
+
+
+def get_review_safe_backend_display_name(display_name: str | None, username: str | None, user_id: str | None) -> str:
+    trimmed_display_name = str(display_name or "").strip()
+
+    if trimmed_display_name and not is_backend_generated_placeholder_username(trimmed_display_name):
+        return trimmed_display_name
+
+    return get_review_safe_backend_username(username, user_id)
 
 
 def get_backend_preferred_username(auth_user: Any) -> str:
     email = str(getattr(auth_user, "email", "") or "")
     user_id = str(getattr(auth_user, "id", "") or "")
     metadata_username = read_auth_user_metadata_string(auth_user, "username")
-    email_prefix = email.split("@", 1)[0] if email else ""
 
-    for value in (metadata_username, email_prefix, generate_backend_fallback_username(email, user_id)):
+    for value in (metadata_username, generate_backend_fallback_username(email, user_id)):
         normalized = normalize_profile_username_value(value)
 
         if is_valid_profile_username(normalized):
@@ -4144,7 +4165,7 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
 
     result = (
         supabase.table("profiles")
-        .select("id, username, trust_score, trust_tier, rank_title, highest_rank_achieved, reputation_points, monthly_reputation_points, badge_list")
+        .select("id, username, display_name, public_profile_slug, trust_score, trust_tier, rank_title, highest_rank_achieved, reputation_points, monthly_reputation_points, badge_list")
         .order(order_column, desc=True)
         .order("trust_score", desc=True)
         .limit(safe_limit)
@@ -4154,6 +4175,8 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
     rows = result.data or []
     users = []
     for index, row in enumerate(rows):
+        user_id = row.get("id")
+        safe_username = get_review_safe_backend_username(row.get("username"), user_id)
         trust_score = row.get("trust_score") or 50
         current_rank = calculate_rank_title(trust_score)
         display_rank = resolve_display_rank(current_rank, row.get("highest_rank_achieved") or row.get("rank_title"))
@@ -4161,8 +4184,10 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
         badge_count = len(badges) if isinstance(badges, list) else 0
         users.append({
             "rank_position": index + 1,
-            "id": row.get("id"),
-            "username": row.get("username"),
+            "id": user_id,
+            "username": safe_username,
+            "display_name": get_review_safe_backend_display_name(row.get("display_name"), row.get("username"), user_id),
+            "public_profile_slug": row.get("public_profile_slug") or generate_backend_profile_slug(safe_username, str(user_id or "")),
             "rank_title": display_rank,
             "current_rank_title": current_rank,
             "highest_rank_achieved": row.get("highest_rank_achieved") or display_rank,

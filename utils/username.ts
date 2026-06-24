@@ -2,6 +2,7 @@
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 20;
 const USERNAME_ALLOWED_PATTERN = /^[a-z0-9_]+$/;
+const GENERATED_PLACEHOLDER_PATTERN = /^[a-z][a-z0-9]{2,12}_[a-f0-9]{6}$/;
 
 function stripUsernamePrefix(input: string): string {
   return input.trim().replace(/^@+/, "");
@@ -39,11 +40,51 @@ export function getUsernameValidationError(input: string | null | undefined): st
   return "";
 }
 
-export function generateFallbackUsername(email: string | null | undefined, userId: string): string {
-  const emailPrefix = normalizeUsername((email ?? "").split("@")[0]);
-  const baseUsername = emailPrefix || "user";
-  const suffix = userId.replace(/-/g, "").slice(-6).toLowerCase() || "000000";
-  const maxBaseLength = Math.max(USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH - suffix.length - 1);
+function getStableFourDigits(seed: string): string {
+  const safeSeed = seed.trim() || "user";
+  let hash = 0;
 
-  return `${baseUsername.slice(0, maxBaseLength)}_${suffix}`.slice(0, USERNAME_MAX_LENGTH);
+  for (let index = 0; index < safeSeed.length; index += 1) {
+    hash = (hash * 31 + safeSeed.charCodeAt(index)) >>> 0;
+  }
+
+  return String(1000 + (hash % 9000)).padStart(4, "0");
+}
+
+export function generateDefaultUsername(seed: string | null | undefined): string {
+  return `user_${getStableFourDigits(seed ?? "")}`;
+}
+
+export function generateFallbackUsername(email: string | null | undefined, userId: string): string {
+  return generateDefaultUsername(userId || email || "");
+}
+
+export function isGeneratedPlaceholderUsername(input: string | null | undefined): boolean {
+  const normalized = normalizeUsername(input);
+
+  return Boolean(normalized && GENERATED_PLACEHOLDER_PATTERN.test(normalized));
+}
+
+export function getReviewSafeUsername(input: string | null | undefined, seed: string | null | undefined): string {
+  const normalized = normalizeUsername(input);
+
+  if (!normalized || isGeneratedPlaceholderUsername(normalized)) {
+    return generateDefaultUsername(seed || input || "");
+  }
+
+  return normalized;
+}
+
+export function getReviewSafeDisplayName(
+  displayName: string | null | undefined,
+  username: string | null | undefined,
+  seed: string | null | undefined,
+): string {
+  const trimmedDisplayName = (displayName ?? "").trim();
+
+  if (trimmedDisplayName && !isGeneratedPlaceholderUsername(trimmedDisplayName)) {
+    return trimmedDisplayName;
+  }
+
+  return getReviewSafeUsername(username, seed);
 }
