@@ -144,11 +144,18 @@ export default function LeaderboardScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Open ${user.displayName} contributor profile`}
                 onPress={() => {
-                  console.log("[leaderboard] open contributor profile:", {
+                  console.log("Navigating to contributor with params:", {
                     userId: user.id,
                     username: user.username,
                   });
-                  router.push(`/profile/${user.id}`);
+                  router.push({
+                    pathname: "/profile/[slug]",
+                    params: {
+                      slug: user.id,
+                      userId: user.id,
+                      username: user.username,
+                    },
+                  });
                 }}
               >
                 <View

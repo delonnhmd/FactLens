@@ -15,12 +15,17 @@ import { cleanUserError } from "../../utils/debugError";
 export default function PublicProfileScreen() {
   const router = useRouter();
   const { currentUser, isVerified } = useAuth();
-  const params = useLocalSearchParams<{ slug?: string }>();
+  const params = useLocalSearchParams<{ slug?: string; userId?: string; username?: string }>();
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
+  const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const username = Array.isArray(params.username) ? params.username[0] : params.username;
+  const queryIdentifier = userId || slug || username || "";
+  const paramsDebug = JSON.stringify({ slug, userId, username });
   const [profile, setProfile] = useState<PublicProfileCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [fetchStatus, setFetchStatus] = useState<404 | 500 | null>(null);
+  const [fetchReason, setFetchReason] = useState<"not_found" | "network" | "server_error" | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
@@ -29,9 +34,15 @@ export default function PublicProfileScreen() {
     setLoading(true);
     setError("");
     setFetchStatus(null);
+    setFetchReason(null);
     setProfile(null);
 
-    fetchPublicProfileBySlug(slug ?? "")
+    console.log("=== CONTRIBUTOR PAGE DEBUG ===");
+    console.log("Route params received:", paramsDebug);
+    console.log("Current user:", currentUser?.id);
+    console.log("Querying profiles with:", queryIdentifier);
+
+    fetchPublicProfileBySlug(queryIdentifier, { userId, username })
       .then((result) => {
         if (!mounted) {
           return;
@@ -39,6 +50,7 @@ export default function PublicProfileScreen() {
 
         setProfile(result.profile);
         setFetchStatus(result.status ?? null);
+        setFetchReason(result.reason ?? null);
         setError(result.error ?? "");
       })
       .finally(() => {
@@ -50,7 +62,7 @@ export default function PublicProfileScreen() {
     return () => {
       mounted = false;
     };
-  }, [retryNonce, slug]);
+  }, [currentUser?.id, paramsDebug, queryIdentifier, retryNonce, userId, username]);
 
   const displayName = profile?.displayName || profile?.username || "Contributor";
   const initial = displayName.slice(0, 1).toUpperCase() || "U";
@@ -108,7 +120,9 @@ export default function PublicProfileScreen() {
             <Text style={styles.errorSubtext}>
               {fetchStatus === 404
                 ? "This profile may have been removed or is not available."
-                : "Check your connection and try again."}
+                : fetchReason === "network"
+                  ? "Could not connect. Check your internet and try again."
+                  : "Please try again."}
             </Text>
             <TouchableOpacity
               style={styles.errorActionButton}

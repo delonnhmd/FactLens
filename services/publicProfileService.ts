@@ -48,6 +48,7 @@ interface PublicProfileRow {
 export interface PublicProfileResult {
   profile: PublicProfileCard | null;
   status?: 404 | 500;
+  reason?: "not_found" | "network" | "server_error";
   error?: string;
 }
 
@@ -56,6 +57,18 @@ const PUBLIC_PROFILE_SELECT =
 
 function isUuid(input: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.trim());
+}
+
+function isNetworkError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("networkerror") ||
+    normalizedMessage.includes("failed to fetch") ||
+    normalizedMessage.includes("fetch") ||
+    normalizedMessage.includes("network")
+  );
 }
 
 function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
@@ -88,43 +101,134 @@ function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
   };
 }
 
-export async function fetchPublicProfileBySlug(slugOrUsername: string): Promise<PublicProfileResult> {
-  const trimmedIdentifier = slugOrUsername.trim();
-  const normalizedSlug = normalizeProfileSlug(trimmedIdentifier);
-  const normalizedUsername = normalizeUsername(trimmedIdentifier);
+async function queryProfileByField(
+  field: "id" | "public_profile_slug" | "username",
+  value: string,
+): Promise<{ row: PublicProfileRow | null; error: unknown; status?: number }> {
+  console.log("Querying profiles with:", { field, value });
+
+  const { data, error, status } = await supabase
+    .from("profiles")
+    .select(PUBLIC_PROFILE_SELECT)
+    .eq(field, value)
+    .maybeSingle();
+
+  console.log("Supabase response status:", status);
+  console.log("Supabase data:", JSON.stringify(data));
+  console.log("Supabase error:", JSON.stringify(error));
+
+  return {
+    row: data ? (data as PublicProfileRow) : null,
+    error,
+    status,
+  };
+}
+
+function getProfileFetchError(error: unknown): PublicProfileResult {
+  const typedError = error as { code?: string; message?: string; details?: string; hint?: string };
+
+  console.log("[public profile] load error:", {
+    code: typedError?.code,
+    message: typedError?.message,
+    details: typedError?.details,
+    hint: typedError?.hint,
+  });
+
+  if (typedError?.code === "PGRST301" || typedError?.code === "PGRST116") {
+    return {
+      profile: null,
+      status: 404,
+      reason: "not_found",
+      error: "Contributor profile unavailable.",
+    };
+  }
+
+  return {
+    profile: null,
+    status: 500,
+    reason: "server_error",
+    error: "Could not load profile. Please try again.",
+  };
+}
+
+export async function fetchPublicProfileBySlug(
+  slugOrUsername: string,
+  options: { userId?: string | null; username?: string | null } = {},
+): Promise<PublicProfileResult> {
+  const trimmedIdentifier = (options.userId || slugOrUsername || options.username || "").trim();
+  const fallbackUsername = (options.username || slugOrUsername || "").trim();
+  const normalizedSlug = normalizeProfileSlug(slugOrUsername || fallbackUsername);
+  const normalizedUsername = normalizeUsername(fallbackUsername);
   const profileId = isUuid(trimmedIdentifier) ? trimmedIdentifier : "";
 
   if (!profileId && !normalizedSlug && !normalizedUsername) {
-    return { profile: null, status: 404, error: "Contributor profile unavailable" };
+    return {
+      profile: null,
+      status: 404,
+      reason: "not_found",
+      error: "Contributor profile unavailable.",
+    };
   }
 
-  const profileFilters = [
-    ...(profileId ? [`id.eq.${profileId}`] : []),
-    ...(normalizedSlug ? [`public_profile_slug.eq.${normalizedSlug}`] : []),
-    ...(normalizedUsername ? [`username.eq.${normalizedUsername}`] : []),
+  console.log("=== CONTRIBUTOR PAGE DEBUG ===");
+  console.log("Fetching contributor profile for:", {
+    slugOrUsername,
+    profileId,
+    normalizedSlug,
+    normalizedUsername,
+  });
+
+  const lookups: Array<{ field: "id" | "public_profile_slug" | "username"; value: string }> = [
+    ...(profileId ? [{ field: "id" as const, value: profileId }] : []),
+    ...(normalizedSlug && normalizedSlug !== profileId
+      ? [{ field: "public_profile_slug" as const, value: normalizedSlug }]
+      : []),
+    ...(normalizedUsername ? [{ field: "username" as const, value: normalizedUsername }] : []),
   ];
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select(PUBLIC_PROFILE_SELECT)
-    .or(profileFilters.join(","))
-    .limit(1);
+  try {
+    for (const lookup of lookups) {
+      const result = await queryProfileByField(lookup.field, lookup.value);
 
-  if (error) {
-    console.log("[public profile] load error:", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
-    return { profile: null, status: 500, error: "Could not load profile" };
+      if (result.error) {
+        console.log("=== END DEBUG ===");
+        return getProfileFetchError(result.error);
+      }
+
+      if (result.row) {
+        console.log("=== END DEBUG ===");
+        return {
+          profile: mapPublicProfileRow(result.row),
+        };
+      }
+    }
+
+    console.log("No profile found for identifier:", trimmedIdentifier || slugOrUsername || fallbackUsername);
+    console.log("=== END DEBUG ===");
+    return {
+      profile: null,
+      status: 404,
+      reason: "not_found",
+      error: "Contributor profile unavailable.",
+    };
+  } catch (error) {
+    console.log("Unexpected contributor profile error:", error instanceof Error ? error.message : error);
+    console.log("=== END DEBUG ===");
+
+    if (isNetworkError(error)) {
+      return {
+        profile: null,
+        status: 500,
+        reason: "network",
+        error: "Could not connect. Check your internet and try again.",
+      };
+    }
+
+    return {
+      profile: null,
+      status: 500,
+      reason: "server_error",
+      error: "Could not load profile. Please try again.",
+    };
   }
-
-  const row = Array.isArray(data) ? data[0] : null;
-
-  return {
-    profile: row ? mapPublicProfileRow(row as PublicProfileRow) : null,
-    status: row ? undefined : 404,
-    error: row ? undefined : "Contributor profile unavailable",
-  };
 }
