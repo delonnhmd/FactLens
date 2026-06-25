@@ -2105,6 +2105,11 @@ def normalize_profile_username_value(value: Any) -> str:
     return str(value or "").strip().lstrip("@").lower()
 
 
+def normalize_public_profile_slug_value(value: Any) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower())
+    return normalized.strip("-")[:48]
+
+
 def is_valid_profile_username(value: str) -> bool:
     return bool(re.fullmatch(r"[a-z0-9_]{3,20}", value))
 
@@ -2659,6 +2664,93 @@ def build_profile_response(row: dict | None) -> dict:
 def fetch_profile_row(supabase: Any, user_id: str) -> dict | None:
     result = supabase.table("profiles").select("*").eq("id", user_id).limit(1).execute()
     return get_first_row(result)
+
+
+def lookup_public_profile_row(
+    supabase: Any,
+    identifier: str,
+    username: str | None = None,
+) -> dict | None:
+    trimmed_identifier = str(identifier or "").strip()
+    normalized_slug = normalize_public_profile_slug_value(trimmed_identifier)
+    normalized_username = normalize_profile_username_value(username or trimmed_identifier)
+    lookups: list[tuple[str, str]] = []
+
+    if is_uuid(trimmed_identifier):
+        lookups.append(("id", trimmed_identifier))
+
+    if normalized_slug:
+        lookups.append(("public_profile_slug", normalized_slug))
+
+    if normalized_username:
+        lookups.extend((
+            ("username_normalized", normalized_username),
+            ("username", normalized_username),
+        ))
+
+    seen: set[tuple[str, str]] = set()
+
+    for column_name, value in lookups:
+        if not value or (column_name, value) in seen:
+            continue
+
+        seen.add((column_name, value))
+
+        try:
+            result = (
+                supabase.table("profiles")
+                .select("*")
+                .eq(column_name, value)
+                .limit(1)
+                .execute()
+            )
+        except Exception as error:
+            if is_missing_column_error(error, [column_name]):
+                print(f"[public profile] lookup skipped missing column {column_name}", flush=True)
+                continue
+
+            print("[public profile] lookup warning:", error, flush=True)
+            continue
+
+        row = get_first_row(result)
+
+        if row:
+            return row
+
+    return None
+
+
+def build_public_profile_api_row(row: dict) -> dict:
+    user_id = str(row.get("id") or "")
+    username = get_review_safe_backend_username(row.get("username"), user_id)
+    display_name = get_review_safe_backend_display_name(row.get("display_name"), row.get("username"), user_id)
+    trust_score = row.get("trust_score") or 50
+    current_rank = calculate_rank_title(trust_score)
+    rank_title = resolve_display_rank(
+        current_rank,
+        row.get("highest_rank_achieved") or row.get("rank_title"),
+    )
+
+    return {
+        "id": user_id,
+        "username": username,
+        "display_name": display_name,
+        "avatar_url": row.get("avatar_url"),
+        "bio": row.get("bio"),
+        "public_profile_slug": row.get("public_profile_slug") or generate_backend_profile_slug(username, user_id),
+        "profile_visibility": normalize_backend_profile_visibility(row.get("profile_visibility")),
+        "trust_score": trust_score,
+        "rank_title": rank_title,
+        "highest_rank_achieved": row.get("highest_rank_achieved") or rank_title,
+        "reputation_points": row.get("reputation_points") or row.get("reputation_score") or 0,
+        "monthly_reputation_points": row.get("monthly_reputation_points") or 0,
+        "badge_list": row.get("badge_list") if isinstance(row.get("badge_list"), list) else [],
+        "evidence_count": row.get("evidence_count") or 0,
+        "correct_votes": row.get("correct_votes") or 0,
+        "created_at": row.get("created_at"),
+        "is_deleted": bool(row.get("is_deleted")),
+        "deleted_at": row.get("deleted_at"),
+    }
 
 
 def get_authenticated_identity(request: Request) -> dict:
@@ -3806,6 +3898,25 @@ def public_claim_page(claim_id: str):
 def health():
     # PHASE 4 STEP 21B
     return {"ok": True, "service": "Verifact backend", "version": "phase-4-step-21b"}
+
+
+@app.get("/public-profile/{identifier}")
+def public_profile(identifier: str, request: Request, username: str = ""):
+    enforce_rate_limit(request, "public_profile", 180, AI_RATE_LIMIT_WINDOW_SECONDS)
+    supabase = get_supabase_client()
+    profile_row = lookup_public_profile_row(supabase, identifier, username)
+
+    if not profile_row:
+        return {
+            "ok": False,
+            "reason": "not_found",
+            "message": "Contributor profile unavailable.",
+        }
+
+    return {
+        "ok": True,
+        "profile": build_public_profile_api_row(profile_row),
+    }
 
 
 @app.get("/search/mentions")

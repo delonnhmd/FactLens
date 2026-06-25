@@ -1,6 +1,7 @@
 // PHASE 5 STEP 1E
 // PHASE 5 STEP 4
 import { supabase } from "../lib/supabase";
+import { getBackendUrl } from "../constants/apiConfig";
 import { normalizeProfileSlug, normalizeProfileVisibility, type ProfileVisibility } from "../utils/publicProfile";
 import { getDisplayRankTitle, parseBadgeList, type ReputationBadge } from "../utils/reputation";
 import { getReviewSafeDisplayName, getReviewSafeUsername, normalizeUsername } from "../utils/username";
@@ -54,6 +55,7 @@ export interface PublicProfileResult {
 
 const PUBLIC_PROFILE_SELECT =
   "id,username,display_name,avatar_url,bio,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list,evidence_count,correct_votes,created_at,is_deleted,deleted_at";
+const PUBLIC_PROFILE_MINIMAL_SELECT = "id,username,display_name,avatar_url,created_at";
 
 function isUuid(input: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.trim());
@@ -107,11 +109,42 @@ async function queryProfileByField(
 ): Promise<{ row: PublicProfileRow | null; error: unknown; status?: number }> {
   console.log("Querying profiles with:", { field, value });
 
-  const { data, error, status } = await supabase
+  const result = await supabase
     .from("profiles")
     .select(PUBLIC_PROFILE_SELECT)
     .eq(field, value)
     .maybeSingle();
+  let data: unknown = result.data;
+  let error = result.error;
+  let status = result.status;
+
+  if (error && isSchemaCacheError(error)) {
+    console.log("[public profile] retrying minimal profile select after schema error:", {
+      field,
+      value,
+      code: error.code,
+      message: error.message,
+    });
+
+    const fallbackResult = await supabase
+      .from("profiles")
+      .select(PUBLIC_PROFILE_MINIMAL_SELECT)
+      .eq(field, value)
+      .maybeSingle();
+
+    data = fallbackResult.data;
+    error = fallbackResult.error;
+    status = fallbackResult.status;
+
+    if (error && isSchemaCacheError(error) && field !== "id") {
+      console.log("[public profile] skipping unavailable lookup field:", field);
+      return {
+        row: null,
+        error: null,
+        status,
+      };
+    }
+  }
 
   console.log("Supabase response status:", status);
   console.log("Supabase data:", JSON.stringify(data));
@@ -122,6 +155,17 @@ async function queryProfileByField(
     error,
     status,
   };
+}
+
+function isSchemaCacheError(error: { code?: string; message?: string; details?: string } | null): boolean {
+  const message = `${error?.code ?? ""} ${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+
+  return (
+    message.includes("schema cache") ||
+    message.includes("could not find") ||
+    message.includes("column") ||
+    message.includes("pgrst204")
+  );
 }
 
 function getProfileFetchError(error: unknown): PublicProfileResult {
@@ -151,6 +195,63 @@ function getProfileFetchError(error: unknown): PublicProfileResult {
   };
 }
 
+async function fetchPublicProfileFromBackend(
+  identifier: string,
+  username?: string | null,
+): Promise<PublicProfileResult | null> {
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl || !identifier.trim()) {
+    return null;
+  }
+
+  const params = new URLSearchParams();
+
+  if (username?.trim()) {
+    params.set("username", username.trim());
+  }
+
+  const url = `${backendUrl}/public-profile/${encodeURIComponent(identifier.trim())}${
+    params.toString() ? `?${params.toString()}` : ""
+  }`;
+
+  try {
+    const response = await fetch(url);
+    const json = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      profile?: PublicProfileRow;
+      reason?: string;
+      message?: string;
+    };
+
+    console.log("[public profile] backend response:", {
+      status: response.status,
+      ok: json.ok,
+      reason: json.reason,
+    });
+
+    if (response.ok && json.ok && json.profile) {
+      return {
+        profile: mapPublicProfileRow(json.profile),
+      };
+    }
+
+    if (response.ok && json.reason === "not_found") {
+      return {
+        profile: null,
+        status: 404,
+        reason: "not_found",
+        error: "Contributor profile unavailable.",
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.log("[public profile] backend fetch warning:", error);
+    return null;
+  }
+}
+
 export async function fetchPublicProfileBySlug(
   slugOrUsername: string,
   options: { userId?: string | null; username?: string | null } = {},
@@ -177,6 +278,13 @@ export async function fetchPublicProfileBySlug(
     normalizedSlug,
     normalizedUsername,
   });
+
+  const backendResult = await fetchPublicProfileFromBackend(trimmedIdentifier, options.username);
+
+  if (backendResult?.profile || backendResult?.reason === "not_found") {
+    console.log("=== END DEBUG ===");
+    return backendResult;
+  }
 
   const lookups: Array<{ field: "id" | "public_profile_slug" | "username"; value: string }> = [
     ...(profileId ? [{ field: "id" as const, value: profileId }] : []),

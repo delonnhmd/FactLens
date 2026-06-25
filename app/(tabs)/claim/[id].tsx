@@ -882,12 +882,25 @@ export default function ClaimDetailScreen() {
       new Date(secondEvidence.createdAt).getTime() - new Date(firstEvidence.createdAt).getTime(),
   );
   // PHASE 5 STEP 1E
-  const openContributorProfile = (slugOrUsername?: string | null) => {
-    if (!slugOrUsername) {
+  const openContributorProfile = (
+    slugOrUsername?: string | null,
+    userId?: string | null,
+    username?: string | null,
+  ) => {
+    const identifier = userId || slugOrUsername || username;
+
+    if (!identifier) {
       return;
     }
 
-    router.push(`/profile/${slugOrUsername}`);
+    router.push({
+      pathname: "/profile/[slug]",
+      params: {
+        slug: identifier,
+        ...(userId ? { userId } : {}),
+        ...(username ? { username } : {}),
+      },
+    });
   };
   // PHASE 3 STEP 1
   // PHASE 2 STEP 5
@@ -1134,7 +1147,7 @@ export default function ClaimDetailScreen() {
           <TouchableOpacity
             style={styles.authorHeaderRow}
             activeOpacity={0.85}
-            onPress={() => openContributorProfile(claim.author.publicProfileSlug || claim.authorUsername)}
+            onPress={() => openContributorProfile(claim.author.publicProfileSlug || claim.authorUsername, claim.author.id, claim.authorUsername)}
           >
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
@@ -1440,7 +1453,7 @@ export default function ClaimDetailScreen() {
                       <TouchableOpacity
                         style={styles.evidenceContributorRow}
                         activeOpacity={0.85}
-                        onPress={() => openContributorProfile(item.contributorProfileSlug || item.contributorUsername)}
+                        onPress={() => openContributorProfile(item.contributorProfileSlug || item.contributorUsername, item.userId, item.contributorUsername)}
                       >
                         <Text style={styles.evidenceContributorText} numberOfLines={1}>
                           @{item.contributorUsername}    {item.contributorRankTitle ?? "Claim Checker"}
