@@ -64,6 +64,18 @@ Copy the full file into the Supabase SQL Editor and run it.
 
 The generated SQL has separate sections for people, brands, and organizations. Organization rows are still upserted into `reserved_brands`, because the app's username protection checks `reserved_people` and `reserved_brands`.
 
+System and placeholder usernames live in:
+
+```text
+C:\FactLens\supabase\imports\reserved-identities\people\reserved_system_usernames.txt
+```
+
+If the full import was already run and you only need to add those system usernames, run:
+
+```text
+C:\FactLens\supabase\sql\032_reserved_system_usernames.sql
+```
+
 To preview the uploads without sending data:
 
 ```powershell

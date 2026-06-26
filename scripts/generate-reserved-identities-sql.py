@@ -11,6 +11,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 IMPORT_ROOT = ROOT / "supabase" / "imports" / "reserved-identities"
 OUTPUT_PATH = IMPORT_ROOT / "generated" / "import_reserved_identities.sql"
+SYSTEM_USERNAMES_PATH = IMPORT_ROOT / "people" / "reserved_system_usernames.txt"
 
 
 def normalize_identity_key(value: object) -> str:
@@ -61,6 +62,21 @@ def read_people_rows() -> list[dict]:
             "category": category,
             "source_import": "reserved_usernames_list.xlsx:Master Clean List",
         }
+
+    if SYSTEM_USERNAMES_PATH.exists():
+        for line in SYSTEM_USERNAMES_PATH.read_text(encoding="utf-8").splitlines():
+            display_name = clean_string(line)
+            normalized_key = normalize_identity_key(display_name)
+
+            if not display_name or not normalized_key or normalized_key in rows_by_key:
+                continue
+
+            rows_by_key[normalized_key] = {
+                "display_name": display_name,
+                "normalized_key": normalized_key,
+                "category": "System Reserved Usernames",
+                "source_import": "reserved_system_usernames.txt",
+            }
 
     return list(rows_by_key.values())
 
