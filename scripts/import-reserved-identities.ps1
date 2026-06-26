@@ -106,6 +106,14 @@ function Assert-RealAccessToken {
   if ($AccessToken.Trim() -in $placeholderTokens) {
     throw "The token value is still a placeholder. Use -AdminEmail `"md.noithat@gmail.com`" to sign in, or paste a real Supabase access token."
   }
+
+  if ($AccessToken.Trim().StartsWith("sbp_") -or $AccessToken.Trim().StartsWith("sb_secret_")) {
+    throw "This looks like a Supabase dashboard/API token, not a logged-in user access token. Use -AdminEmail `"md.noithat@gmail.com`" or paste the Supabase Auth access_token for an active SUPER_ADMIN or ADMIN user."
+  }
+
+  if ($AccessToken.Trim().Split(".").Count -ne 3) {
+    throw "This does not look like a Supabase Auth JWT access_token. Use -AdminEmail `"md.noithat@gmail.com`" or paste the access_token from a logged-in SUPER_ADMIN or ADMIN session."
+  }
 }
 
 if (-not $ImportRoot) {

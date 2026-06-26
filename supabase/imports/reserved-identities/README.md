@@ -36,6 +36,14 @@ If you already have a logged-in admin access token:
 .\scripts\import-reserved-identities.ps1 -Token "PASTE_REAL_ADMIN_ACCESS_TOKEN"
 ```
 
+The `-Token` value must be a Supabase Auth `access_token` for a logged-in `SUPER_ADMIN` or `ADMIN` user. It usually starts with `eyJ`.
+
+Do not use:
+
+- Supabase dashboard personal access tokens that start with `sbp_`
+- Supabase service role keys
+- Supabase anon keys
+
 To preview the uploads without sending data:
 
 ```powershell
