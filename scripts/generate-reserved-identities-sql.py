@@ -67,44 +67,50 @@ def read_people_rows() -> list[dict]:
 
 def read_brand_rows() -> list[dict]:
     rows_by_key: dict[str, dict] = {}
-    configs = [
-        {
-            "path": IMPORT_ROOT / "brands" / "reserved_brands_list.xlsx",
-            "sheet": "Master Clean Brand List",
-            "display_column": "Brand Display Name",
-            "category_column": "Source Industry Tab",
-            "normalized_column": "Normalized Key Value",
-        },
-        {
-            "path": IMPORT_ROOT / "organizations" / "reserved_organizations_list.xlsx",
-            "sheet": "Master Clean Org List",
-            "display_column": "Organization Display Name",
-            "category_column": "Source Category Tab",
-            "normalized_column": "Normalized Key Token",
-        },
-    ]
+    path = IMPORT_ROOT / "brands" / "reserved_brands_list.xlsx"
+    dataframe = pd.read_excel(path, sheet_name="Master Clean Brand List", dtype=str)
+    source_import = "reserved_brands_list.xlsx:Master Clean Brand List"
 
-    for config in configs:
-        dataframe = pd.read_excel(config["path"], sheet_name=config["sheet"], dtype=str)
-        source_import = f"{config['path'].name}:{config['sheet']}"
+    for _, row in dataframe.iterrows():
+        brand_name = clean_string(row.get("Brand Display Name"))
+        industry = clean_string(row.get("Source Industry Tab"))
+        normalized_key = normalize_identity_key(clean_string(row.get("Normalized Key Value")) or brand_name)
 
-        for _, row in dataframe.iterrows():
-            brand_name = clean_string(row.get(config["display_column"]))
-            industry = clean_string(row.get(config["category_column"]))
-            normalized_key = normalize_identity_key(
-                clean_string(row.get(config["normalized_column"])) or brand_name
-            )
+        if not brand_name or not normalized_key:
+            continue
 
-            if not brand_name or not normalized_key:
-                continue
+        rows_by_key[normalized_key] = {
+            "brand_name": brand_name,
+            "normalized_key": normalized_key,
+            "industry": industry,
+            "website": "",
+            "source_import": source_import,
+        }
 
-            rows_by_key[normalized_key] = {
-                "brand_name": brand_name,
-                "normalized_key": normalized_key,
-                "industry": industry,
-                "website": "",
-                "source_import": source_import,
-            }
+    return list(rows_by_key.values())
+
+
+def read_organization_rows() -> list[dict]:
+    path = IMPORT_ROOT / "organizations" / "reserved_organizations_list.xlsx"
+    dataframe = pd.read_excel(path, sheet_name="Master Clean Org List", dtype=str)
+    rows_by_key: dict[str, dict] = {}
+    source_import = "reserved_organizations_list.xlsx:Master Clean Org List"
+
+    for _, row in dataframe.iterrows():
+        organization_name = clean_string(row.get("Organization Display Name"))
+        industry = clean_string(row.get("Source Category Tab"))
+        normalized_key = normalize_identity_key(clean_string(row.get("Normalized Key Token")) or organization_name)
+
+        if not organization_name or not normalized_key:
+            continue
+
+        rows_by_key[normalized_key] = {
+            "brand_name": organization_name,
+            "normalized_key": normalized_key,
+            "industry": industry,
+            "website": "",
+            "source_import": source_import,
+        }
 
     return list(rows_by_key.values())
 
@@ -156,10 +162,31 @@ def build_dynamic_upsert_block(
     return "\n".join(lines)
 
 
-def build_sql(people_rows: list[dict], brand_rows: list[dict]) -> str:
+def build_reserved_brands_upsert_block(temp_table_name: str) -> str:
+    return build_dynamic_upsert_block(
+        "reserved_brands",
+        temp_table_name,
+        ["brand_name", "normalized_key", "industry"],
+        [
+            ("active", "active", True),
+            ("source_import", "source_import", True),
+            ("website", "website", True),
+            ("created_at", "created_at", False),
+            ("updated_at", "updated_at", True),
+        ],
+    )
+
+
+def build_sql(people_rows: list[dict], brand_rows: list[dict], organization_rows: list[dict]) -> str:
     generated_at = datetime.now(timezone.utc).isoformat()
     people_values = ",\n".join(tuple_lines(people_rows, ["display_name", "normalized_key", "category", "source_import"]))
     brand_values = ",\n".join(tuple_lines(brand_rows, ["brand_name", "normalized_key", "industry", "website", "source_import"]))
+    organization_values = ",\n".join(
+        tuple_lines(
+            organization_rows,
+            ["brand_name", "normalized_key", "industry", "website", "source_import"],
+        )
+    )
 
     return f"""-- Generated reserved identity import.
 -- Generated at: {generated_at}
@@ -209,18 +236,25 @@ insert into import_reserved_brands (brand_name, normalized_key, industry, websit
 values
 {brand_values};
 
-{build_dynamic_upsert_block(
-    "reserved_brands",
-    "import_reserved_brands",
-    ["brand_name", "normalized_key", "industry"],
-    [
-        ("active", "active", True),
-        ("source_import", "source_import", True),
-        ("website", "website", True),
-        ("created_at", "created_at", False),
-        ("updated_at", "updated_at", True),
-    ],
-)}
+{build_reserved_brands_upsert_block("import_reserved_brands")}
+
+-- Organizations are imported into reserved_brands because username checks use reserved_people and reserved_brands.
+create temp table import_reserved_organizations (
+  brand_name text,
+  normalized_key text primary key,
+  industry text,
+  website text,
+  source_import text,
+  active boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+) on commit drop;
+
+insert into import_reserved_organizations (brand_name, normalized_key, industry, website, source_import)
+values
+{organization_values};
+
+{build_reserved_brands_upsert_block("import_reserved_organizations")}
 
 notify pgrst, 'reload schema';
 
@@ -231,19 +265,24 @@ commit;
 def main() -> None:
     people_rows = read_people_rows()
     brand_rows = read_brand_rows()
+    organization_rows = read_organization_rows()
 
     if not people_rows:
         raise RuntimeError("No people rows found.")
 
     if not brand_rows:
-        raise RuntimeError("No brand or organization rows found.")
+        raise RuntimeError("No brand rows found.")
+
+    if not organization_rows:
+        raise RuntimeError("No organization rows found.")
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(build_sql(people_rows, brand_rows), encoding="utf-8")
+    OUTPUT_PATH.write_text(build_sql(people_rows, brand_rows, organization_rows), encoding="utf-8")
 
     print(f"Wrote {OUTPUT_PATH}")
     print(f"People rows: {len(people_rows)}")
-    print(f"Brand/org rows: {len(brand_rows)}")
+    print(f"Brand rows: {len(brand_rows)}")
+    print(f"Organization rows: {len(organization_rows)}")
 
 
 if __name__ == "__main__":

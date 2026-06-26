@@ -62,6 +62,8 @@ C:\FactLens\supabase\imports\reserved-identities\generated\import_reserved_ident
 
 Copy the full file into the Supabase SQL Editor and run it.
 
+The generated SQL has separate sections for people, brands, and organizations. Organization rows are still upserted into `reserved_brands`, because the app's username protection checks `reserved_people` and `reserved_brands`.
+
 To preview the uploads without sending data:
 
 ```powershell
