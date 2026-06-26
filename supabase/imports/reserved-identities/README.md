@@ -25,7 +25,15 @@ This route requires a `SUPER_ADMIN` or `ADMIN` bearer token.
 From the repo root:
 
 ```powershell
-.\scripts\import-reserved-identities.ps1 -Token "PASTE_ADMIN_SUPABASE_ACCESS_TOKEN"
+.\scripts\import-reserved-identities.ps1 -AdminEmail "md.noithat@gmail.com"
+```
+
+The script will prompt for that Supabase user's password and then upload with the returned access token.
+
+If you already have a logged-in admin access token:
+
+```powershell
+.\scripts\import-reserved-identities.ps1 -Token "PASTE_REAL_ADMIN_ACCESS_TOKEN"
 ```
 
 To preview the uploads without sending data:
