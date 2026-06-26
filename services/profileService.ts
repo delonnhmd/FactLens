@@ -115,6 +115,8 @@ export interface ProfileResult {
 export interface UsernameAvailabilityResult {
   available: boolean;
   normalizedUsername: string;
+  reserved?: boolean;
+  warning?: string;
   error?: string;
 }
 
@@ -242,51 +244,98 @@ export async function checkUsernameAvailability(
     return {
       available: false,
       normalizedUsername,
-      error: "Could not check username availability right now.",
+      error: "We could not verify this username right now. Please try again.",
     };
   }
 
   try {
-    const { data: sessionData } = currentUserId ? await supabase.auth.getSession() : { data: { session: null } };
-    const accessToken = sessionData.session?.access_token;
-    const response = await fetch(
-      `${backendUrl}/auth/username-availability?username=${encodeURIComponent(normalizedUsername)}`,
-      {
-        headers: accessToken
-          ? {
-              Authorization: `Bearer ${accessToken}`,
-            }
-          : undefined,
+    const response = await fetch(`${backendUrl}/identity/check-username`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ username: normalizedUsername }),
+    });
     const json = (await response.json().catch(() => ({}))) as {
-      ok?: boolean;
       available?: boolean;
-      normalized_username?: string;
+      reserved?: boolean;
+      normalized_key?: string;
       message?: string;
+      warning?: string;
       detail?: unknown;
     };
 
-    if (!response.ok || !json.ok || typeof json.available !== "boolean") {
+    if (!response.ok || typeof json.available !== "boolean") {
       const detail = typeof json.detail === "string" ? json.detail : null;
 
       return {
         available: false,
         normalizedUsername,
-        error: json.message || detail || "Could not check username availability right now.",
+        reserved: Boolean(json.reserved),
+        error: json.message || detail || "We could not verify this username right now. Please try again.",
       };
     }
 
-    return {
+    if (json.reserved) {
+      return {
+        available: false,
+        normalizedUsername,
+        reserved: true,
+        error:
+          json.message ||
+          "This username is reserved. If you represent this person or organization, please apply for verification.",
+      };
+    }
+
+    const identityResult: UsernameAvailabilityResult = {
       available: json.available,
-      normalizedUsername: json.normalized_username || normalizedUsername,
-      error: json.available ? undefined : json.message || USERNAME_TAKEN_MESSAGE,
+      normalizedUsername,
+      reserved: Boolean(json.reserved),
+      warning: json.warning,
     };
+
+    if (!currentUserId || !identityResult.available) {
+      return identityResult;
+    }
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const legacyResponse = await fetch(
+        `${backendUrl}/auth/username-availability?username=${encodeURIComponent(normalizedUsername)}`,
+        {
+          headers: accessToken
+            ? {
+                Authorization: `Bearer ${accessToken}`,
+              }
+            : undefined,
+        },
+      );
+      const legacyJson = (await legacyResponse.json().catch(() => ({}))) as {
+        ok?: boolean;
+        available?: boolean;
+        normalized_username?: string;
+        message?: string;
+      };
+
+      if (legacyResponse.ok && legacyJson.ok && typeof legacyJson.available === "boolean" && !legacyJson.available) {
+        return {
+          available: false,
+          normalizedUsername: legacyJson.normalized_username || normalizedUsername,
+          reserved: false,
+          error: legacyJson.message || USERNAME_TAKEN_MESSAGE,
+        };
+      }
+    } catch {
+      return identityResult;
+    }
+
+    return identityResult;
   } catch {
     return {
       available: false,
       normalizedUsername,
-      error: "Could not check username availability right now.",
+      error: "We could not verify this username right now. Please try again.",
     };
   }
 }

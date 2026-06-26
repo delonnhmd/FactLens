@@ -2284,11 +2284,89 @@ def find_reserved_identity_match(value: Any) -> dict | None:
     return None
 
 
+def query_reserved_identity_table_for_username(
+    supabase: Any,
+    table_name: str,
+    normalized_key: str,
+) -> tuple[bool, str | None]:
+    try:
+        result = (
+            supabase.table(table_name)
+            .select("id")
+            .eq("normalized_key", normalized_key)
+            .eq("active", True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as error:
+        error_message = str(error)
+        print(f"[identity check] {table_name} normalized_key query failed:", error_message, flush=True)
+        return False, error_message
+
+    if result.data:
+        return True, None
+
+    try:
+        alias_result = (
+            supabase.table(table_name)
+            .select("id")
+            .contains("aliases", [normalized_key])
+            .eq("active", True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as error:
+        error_message = str(error)
+        print(f"[identity check] {table_name} aliases query skipped:", error_message, flush=True)
+        return False, None
+
+    return bool(alias_result.data), None
+
+
 def build_reserved_username_check_response(username: str) -> dict:
     normalized_key = normalize_identity_key(username)
-    match = find_reserved_identity_match(username)
 
-    if match:
+    if not normalized_key:
+        raise HTTPException(status_code=400, detail="Username is required.")
+
+    print("[identity check] incoming username:", str(username or ""), flush=True)
+    print("[identity check] normalized username:", normalized_key, flush=True)
+
+    try:
+        supabase = get_supabase_client()
+    except Exception as error:
+        error_message = str(error)
+        print("[identity check] supabase client unavailable:", error_message, flush=True)
+        print("[identity check] people_match false", flush=True)
+        print("[identity check] brand_match false", flush=True)
+        print("[identity check] error:", error_message, flush=True)
+        return {
+            "available": True,
+            "reserved": False,
+            "message": None,
+            "normalized_key": normalized_key,
+            "warning": "Reserved identity check temporarily unavailable.",
+        }
+
+    people_match, people_error = query_reserved_identity_table_for_username(
+        supabase,
+        "reserved_people",
+        normalized_key,
+    )
+    brand_match, brand_error = query_reserved_identity_table_for_username(
+        supabase,
+        "reserved_brands",
+        normalized_key,
+    )
+    error_messages = [message for message in [people_error, brand_error] if message]
+
+    print("[identity check] people_match", bool(people_match), flush=True)
+    print("[identity check] brand_match", bool(brand_match), flush=True)
+
+    if error_messages:
+        print("[identity check] error:", " | ".join(error_messages), flush=True)
+
+    if people_match or brand_match:
         return {
             "available": False,
             "reserved": True,
@@ -2296,11 +2374,17 @@ def build_reserved_username_check_response(username: str) -> dict:
             "message": RESERVED_USERNAME_MESSAGE,
         }
 
-    return {
+    response = {
         "available": True,
         "reserved": False,
+        "message": None,
         "normalized_key": normalized_key,
     }
+
+    if error_messages:
+        response["warning"] = "Reserved identity check temporarily unavailable."
+
+    return response
 
 
 def check_username_availability_for_save(username: str, excluded_user_id: str = "") -> dict:
@@ -4033,9 +4117,18 @@ def save_mention_tags(request: Request, payload: MentionTagsRequest):
 def identity_check_username(payload: IdentityUsernameCheckRequest):
     try:
         return build_reserved_username_check_response(payload.username)
+    except HTTPException:
+        raise
     except Exception as error:
         print("[identity check] failed:", str(error), flush=True)
-        raise HTTPException(status_code=503, detail="Could not check username right now.")
+        normalized_key = normalize_identity_key(payload.username)
+        return {
+            "available": True,
+            "reserved": False,
+            "message": None,
+            "normalized_key": normalized_key,
+            "warning": "Reserved identity check temporarily unavailable.",
+        }
 
 
 @app.get("/auth/username-availability")

@@ -150,7 +150,7 @@ export default function ProfileScreen() {
           }
 
           setUsernameAvailabilityStatus("unavailable");
-          setUsernameAvailabilityMessage("Could not check username availability right now.");
+          setUsernameAvailabilityMessage("We could not verify this username right now. Please try again.");
         });
     }, 450);
 
