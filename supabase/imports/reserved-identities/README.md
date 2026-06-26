@@ -44,6 +44,24 @@ Do not use:
 - Supabase service role keys
 - Supabase anon keys
 
+## Supabase SQL Editor Import
+
+Use this option if you log in to the Supabase Dashboard with GitHub and do not have an app-user password.
+
+Generate the SQL file from the local Excel files:
+
+```powershell
+python .\scripts\generate-reserved-identities-sql.py
+```
+
+Then open this generated file:
+
+```text
+C:\FactLens\supabase\imports\reserved-identities\generated\import_reserved_identities.sql
+```
+
+Copy the full file into the Supabase SQL Editor and run it.
+
 To preview the uploads without sending data:
 
 ```powershell
