@@ -1919,6 +1919,7 @@ RESERVED_USERNAME_MESSAGE = (
     "This username is reserved. If you represent this person or organization, "
     "please apply for verification."
 )
+USERNAME_TAKEN_MESSAGE = "Username is already taken"
 IDENTITY_ADMIN_ROLES = {"SUPER_ADMIN", "ADMIN", "MODERATOR"}
 ROLE_ASSIGNMENT_PERMISSIONS = {
     "SUPER_ADMIN": {"ADMIN", "MODERATOR"},
@@ -2288,11 +2289,11 @@ def query_reserved_identity_table_for_username(
     supabase: Any,
     table_name: str,
     normalized_key: str,
-) -> tuple[bool, str | None]:
+) -> tuple[dict | None, str | None]:
     try:
         result = (
             supabase.table(table_name)
-            .select("id")
+            .select("*")
             .eq("normalized_key", normalized_key)
             .eq("active", True)
             .limit(1)
@@ -2301,15 +2302,15 @@ def query_reserved_identity_table_for_username(
     except Exception as error:
         error_message = str(error)
         print(f"[identity check] {table_name} normalized_key query failed:", error_message, flush=True)
-        return False, error_message
+        return None, error_message
 
     if result.data:
-        return True, None
+        return get_first_row(result), None
 
     try:
         alias_result = (
             supabase.table(table_name)
-            .select("id")
+            .select("*")
             .contains("aliases", [normalized_key])
             .eq("active", True)
             .limit(1)
@@ -2318,9 +2319,21 @@ def query_reserved_identity_table_for_username(
     except Exception as error:
         error_message = str(error)
         print(f"[identity check] {table_name} aliases query skipped:", error_message, flush=True)
-        return False, None
+        return None, None
 
-    return bool(alias_result.data), None
+    return get_first_row(alias_result), None
+
+
+def is_system_reserved_username_row(row: dict | None) -> bool:
+    if not row:
+        return False
+
+    category = str(row.get("category") or "").strip().lower()
+    source_import = str(row.get("source_import") or "").strip().lower()
+    return (
+        category == "system reserved usernames"
+        or source_import in {"reserved_system_usernames.txt", "032_reserved_system_usernames.sql"}
+    )
 
 
 def build_reserved_username_check_response(username: str) -> dict:
@@ -2348,30 +2361,34 @@ def build_reserved_username_check_response(username: str) -> dict:
             "warning": "Reserved identity check temporarily unavailable.",
         }
 
-    people_match, people_error = query_reserved_identity_table_for_username(
+    people_row, people_error = query_reserved_identity_table_for_username(
         supabase,
         "reserved_people",
         normalized_key,
     )
-    brand_match, brand_error = query_reserved_identity_table_for_username(
+    brand_row, brand_error = query_reserved_identity_table_for_username(
         supabase,
         "reserved_brands",
         normalized_key,
     )
     error_messages = [message for message in [people_error, brand_error] if message]
+    people_match = bool(people_row)
+    brand_match = bool(brand_row)
 
-    print("[identity check] people_match", bool(people_match), flush=True)
-    print("[identity check] brand_match", bool(brand_match), flush=True)
+    print("[identity check] people_match", people_match, flush=True)
+    print("[identity check] brand_match", brand_match, flush=True)
 
     if error_messages:
         print("[identity check] error:", " | ".join(error_messages), flush=True)
 
     if people_match or brand_match:
+        system_reserved_username = is_system_reserved_username_row(people_row) and not brand_match
+
         return {
             "available": False,
-            "reserved": True,
+            "reserved": not system_reserved_username,
             "normalized_key": normalized_key,
-            "message": RESERVED_USERNAME_MESSAGE,
+            "message": USERNAME_TAKEN_MESSAGE if system_reserved_username else RESERVED_USERNAME_MESSAGE,
         }
 
     response = {
@@ -2401,13 +2418,13 @@ def check_username_availability_for_save(username: str, excluded_user_id: str = 
 
     reserved_check = build_reserved_username_check_response(normalized_username)
 
-    if reserved_check.get("reserved"):
+    if not reserved_check.get("available"):
         return {
             "ok": True,
             "available": False,
-            "reserved": True,
+            "reserved": bool(reserved_check.get("reserved")),
             "normalized_username": normalized_username,
-            "message": RESERVED_USERNAME_MESSAGE,
+            "message": reserved_check.get("message") or USERNAME_TAKEN_MESSAGE,
         }
 
     supabase = get_supabase_client()
@@ -2429,7 +2446,7 @@ def check_username_availability_for_save(username: str, excluded_user_id: str = 
             "available": False,
             "reserved": False,
             "normalized_username": normalized_username,
-            "message": "Username is already taken",
+            "message": USERNAME_TAKEN_MESSAGE,
         }
 
     for auth_user in fetch_auth_users_for_username_check():
@@ -2444,7 +2461,7 @@ def check_username_availability_for_save(username: str, excluded_user_id: str = 
                 "available": False,
                 "reserved": False,
                 "normalized_username": normalized_username,
-                "message": "Username is already taken",
+                "message": USERNAME_TAKEN_MESSAGE,
             }
 
     return {

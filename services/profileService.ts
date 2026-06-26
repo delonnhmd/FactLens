@@ -287,6 +287,16 @@ export async function checkUsernameAvailability(
       };
     }
 
+    if (!json.available) {
+      return {
+        available: false,
+        normalizedUsername,
+        reserved: false,
+        warning: json.warning,
+        error: json.message || USERNAME_TAKEN_MESSAGE,
+      };
+    }
+
     const identityResult: UsernameAvailabilityResult = {
       available: json.available,
       normalizedUsername,
