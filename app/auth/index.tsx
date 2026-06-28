@@ -19,7 +19,11 @@ import { RESET_PASSWORD_URL } from "../../constants/launchConfig";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { supabase, supabaseConfigError } from "../../lib/supabase";
-import { checkUsernameAvailability } from "../../services/profileService";
+import {
+  checkUsernameAvailability,
+  getUsernameAvailabilityDisplay,
+  type UsernameAvailabilityTone,
+} from "../../services/profileService";
 import { getUsernameValidationError } from "../../utils/username";
 
 type AuthMode = "LOGIN" | "SIGN_UP";
@@ -42,6 +46,8 @@ export default function AuthScreen() {
   const [resetError, setResetError] = useState("");
   const [usernameAvailabilityStatus, setUsernameAvailabilityStatus] = useState<UsernameAvailabilityStatus>("idle");
   const [usernameAvailabilityMessage, setUsernameAvailabilityMessage] = useState("");
+  // PHASE 5 PRE-LAUNCH: drives the availability message color (gray / amber / red / green).
+  const [usernameAvailabilityTone, setUsernameAvailabilityTone] = useState<UsernameAvailabilityTone | null>(null);
 
   const signingUp = mode === "SIGN_UP";
   const usernameSubmitBlocked =
@@ -56,12 +62,14 @@ export default function AuthScreen() {
     if (!signingUp) {
       setUsernameAvailabilityStatus("idle");
       setUsernameAvailabilityMessage("");
+      setUsernameAvailabilityTone(null);
       return;
     }
 
     if (!username.trim()) {
       setUsernameAvailabilityStatus("idle");
       setUsernameAvailabilityMessage("");
+      setUsernameAvailabilityTone(null);
       return;
     }
 
@@ -70,12 +78,14 @@ export default function AuthScreen() {
     if (validationError) {
       setUsernameAvailabilityStatus("invalid");
       setUsernameAvailabilityMessage(validationError);
+      setUsernameAvailabilityTone("error");
       return;
     }
 
     let active = true;
     setUsernameAvailabilityStatus("checking");
     setUsernameAvailabilityMessage("Checking username...");
+    setUsernameAvailabilityTone(null);
 
     const timer = setTimeout(() => {
       checkUsernameAvailability(username)
@@ -84,14 +94,11 @@ export default function AuthScreen() {
             return;
           }
 
-          if (result.available) {
-            setUsernameAvailabilityStatus("available");
-            setUsernameAvailabilityMessage("Username available");
-            return;
-          }
-
-          setUsernameAvailabilityStatus("unavailable");
-          setUsernameAvailabilityMessage(result.error ?? "Username already taken");
+          // PHASE 5 PRE-LAUNCH: distinct message + tone for available / system / protected / taken.
+          const display = getUsernameAvailabilityDisplay(result);
+          setUsernameAvailabilityStatus(result.available ? "available" : "unavailable");
+          setUsernameAvailabilityMessage(display.text);
+          setUsernameAvailabilityTone(display.tone);
         })
         .catch(() => {
           if (!active) {
@@ -100,6 +107,7 @@ export default function AuthScreen() {
 
           setUsernameAvailabilityStatus("unavailable");
           setUsernameAvailabilityMessage("We could not verify this username right now. Please try again.");
+          setUsernameAvailabilityTone("error");
         });
     }, 450);
 
@@ -285,7 +293,11 @@ export default function AuthScreen() {
                 <Text
                   style={[
                     styles.availabilityText,
-                    usernameAvailabilityStatus === "available" ? styles.availableText : styles.unavailableText,
+                    usernameAvailabilityTone === "available" && styles.availableText,
+                    usernameAvailabilityTone === "system" && styles.systemReservedText,
+                    usernameAvailabilityTone === "protected" && styles.protectedText,
+                    (usernameAvailabilityTone === "taken" || usernameAvailabilityTone === "error") &&
+                      styles.unavailableText,
                   ]}
                 >
                   {usernameAvailabilityMessage}
@@ -446,6 +458,14 @@ const styles = StyleSheet.create({
   },
   unavailableText: {
     color: theme.colors.danger,
+  },
+  // PHASE 5 PRE-LAUNCH
+  systemReservedText: {
+    color: theme.colors.muted,
+  },
+  protectedText: {
+    color: theme.colors.warningBorder,
+    fontSize: 12,
   },
   button: {
     alignItems: "center",

@@ -112,9 +112,20 @@ export interface ProfileResult {
   message?: string;
 }
 
+// PHASE 5 PRE-LAUNCH: three distinct username unavailability categories.
+export type UsernameAvailabilityType =
+  | "available"
+  | "system_reserved"
+  | "protected"
+  | "taken"
+  | "invalid"
+  | "error";
+
 export interface UsernameAvailabilityResult {
   available: boolean;
   normalizedUsername: string;
+  // PHASE 5 PRE-LAUNCH
+  type: UsernameAvailabilityType;
   reserved?: boolean;
   warning?: string;
   error?: string;
@@ -122,6 +133,46 @@ export interface UsernameAvailabilityResult {
 
 export const USERNAME_TAKEN_MESSAGE = "Username is already taken";
 export const USERNAME_NOT_AVAILABLE_MESSAGE = "Username is not available";
+// PHASE 5 PRE-LAUNCH
+export const USERNAME_SYSTEM_RESERVED_MESSAGE = "Unavailable";
+export const USERNAME_PROTECTED_MESSAGE =
+  "This username is reserved. If you represent this person or organization, please apply at support@verifact.pennyfloat.com";
+export const USERNAME_TAKEN_SHORT_MESSAGE = "Username is taken";
+
+export type UsernameAvailabilityTone = "available" | "system" | "protected" | "taken" | "error";
+
+export interface UsernameAvailabilityDisplay {
+  text: string;
+  tone: UsernameAvailabilityTone;
+}
+
+// PHASE 5 PRE-LAUNCH: centralizes the message + color tone for each availability type.
+export function getUsernameAvailabilityDisplay(
+  result: UsernameAvailabilityResult,
+): UsernameAvailabilityDisplay {
+  switch (result.type) {
+    case "available":
+      return {
+        text: result.normalizedUsername
+          ? `✓ @${result.normalizedUsername} is available`
+          : "Username available",
+        tone: "available",
+      };
+    case "system_reserved":
+      return { text: USERNAME_SYSTEM_RESERVED_MESSAGE, tone: "system" };
+    case "protected":
+      return { text: result.error || USERNAME_PROTECTED_MESSAGE, tone: "protected" };
+    case "taken":
+      return { text: USERNAME_TAKEN_SHORT_MESSAGE, tone: "taken" };
+    case "invalid":
+      return { text: result.error || "Username must be 3-20 characters.", tone: "error" };
+    default:
+      return {
+        text: result.error || "We could not verify this username right now. Please try again.",
+        tone: "error",
+      };
+  }
+}
 
 // PHASE 3 STEP 28
 function getUserVerifiedForProfile(user: SupabaseUser): boolean {
@@ -234,6 +285,7 @@ export async function checkUsernameAvailability(
     return {
       available: false,
       normalizedUsername,
+      type: "invalid",
       error: validationError || "Username must be 3-20 characters.",
     };
   }
@@ -244,6 +296,7 @@ export async function checkUsernameAvailability(
     return {
       available: false,
       normalizedUsername,
+      type: "error",
       error: "We could not verify this username right now. Please try again.",
     };
   }
@@ -271,35 +324,40 @@ export async function checkUsernameAvailability(
       return {
         available: false,
         normalizedUsername,
+        type: "error",
         reserved: Boolean(json.reserved),
         error: json.message || detail || "We could not verify this username right now. Please try again.",
       };
     }
 
+    // PHASE 5 PRE-LAUNCH: a reserved hit means a protected celebrity/politician/organization name.
     if (json.reserved) {
       return {
         available: false,
         normalizedUsername,
+        type: "protected",
         reserved: true,
-        error:
-          json.message ||
-          "This username is reserved. If you represent this person or organization, please apply for verification.",
+        error: USERNAME_PROTECTED_MESSAGE,
       };
     }
 
+    // PHASE 5 PRE-LAUNCH: not available + not reserved from the identity check means a
+    // system/placeholder reserved username (e.g. "admin", "verifact").
     if (!json.available) {
       return {
         available: false,
         normalizedUsername,
+        type: "system_reserved",
         reserved: false,
         warning: json.warning,
-        error: json.message || USERNAME_TAKEN_MESSAGE,
+        error: USERNAME_SYSTEM_RESERVED_MESSAGE,
       };
     }
 
     const identityResult: UsernameAvailabilityResult = {
       available: json.available,
       normalizedUsername,
+      type: "available",
       reserved: Boolean(json.reserved),
       warning: json.warning,
     };
@@ -329,11 +387,13 @@ export async function checkUsernameAvailability(
       };
 
       if (legacyResponse.ok && legacyJson.ok && typeof legacyJson.available === "boolean" && !legacyJson.available) {
+        // PHASE 5 PRE-LAUNCH: already taken by another user's profile.
         return {
           available: false,
           normalizedUsername: legacyJson.normalized_username || normalizedUsername,
+          type: "taken",
           reserved: false,
-          error: legacyJson.message || USERNAME_TAKEN_MESSAGE,
+          error: USERNAME_TAKEN_MESSAGE,
         };
       }
     } catch {
@@ -345,6 +405,7 @@ export async function checkUsernameAvailability(
     return {
       available: false,
       normalizedUsername,
+      type: "error",
       error: "We could not verify this username right now. Please try again.",
     };
   }

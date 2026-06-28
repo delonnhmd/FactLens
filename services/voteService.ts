@@ -473,6 +473,65 @@ export async function voteOnClaim(
   };
 }
 
+// PHASE 5 PRE-LAUNCH: aggregate a user's votes into True / Fake / Not sure counts for the profile.
+export interface UserVotingActivity {
+  totalVotes: number;
+  trueVotes: number;
+  fakeVotes: number;
+  notSureVotes: number;
+}
+
+const EMPTY_VOTING_ACTIVITY: UserVotingActivity = {
+  totalVotes: 0,
+  trueVotes: 0,
+  fakeVotes: 0,
+  notSureVotes: 0,
+};
+
+export async function fetchUserVotingActivity(userId: string): Promise<UserVotingActivity> {
+  if (!userId) {
+    return { ...EMPTY_VOTING_ACTIVITY };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("votes")
+      .select("vote_type")
+      .eq("user_id", userId)
+      .limit(1000);
+
+    if (error || !Array.isArray(data)) {
+      // Never surface an error here — show zeros instead.
+      return { ...EMPTY_VOTING_ACTIVITY };
+    }
+
+    let trueVotes = 0;
+    let fakeVotes = 0;
+    let notSureVotes = 0;
+
+    for (const row of data) {
+      const option = toAppVoteOption(row?.vote_type);
+
+      if (option === "TRUE") {
+        trueVotes += 1;
+      } else if (option === "FAKE") {
+        fakeVotes += 1;
+      } else if (option === "NOT_SURE") {
+        notSureVotes += 1;
+      }
+    }
+
+    return {
+      totalVotes: data.length,
+      trueVotes,
+      fakeVotes,
+      notSureVotes,
+    };
+  } catch {
+    return { ...EMPTY_VOTING_ACTIVITY };
+  }
+}
+
 export async function removeVote(claimId: string, userId: string): Promise<ClaimVoteResult> {
   const { error } = await supabase.from("votes").delete().eq("claim_id", claimId).eq("user_id", userId);
 

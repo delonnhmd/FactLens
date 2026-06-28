@@ -16,7 +16,14 @@ import { useAppTheme } from "../../hooks/useTheme";
 import { getAuthProfile } from "../../services/authProfile";
 import { deleteCurrentAccount } from "../../services/accountService";
 import { fetchReputationEvents, type ReputationEvent } from "../../services/reputationEventService";
-import { checkUsernameAvailability, updateProfile, USERNAME_TAKEN_MESSAGE } from "../../services/profileService";
+import {
+  checkUsernameAvailability,
+  getUsernameAvailabilityDisplay,
+  updateProfile,
+  USERNAME_TAKEN_MESSAGE,
+  type UsernameAvailabilityTone,
+} from "../../services/profileService";
+import { fetchUserVotingActivity, type UserVotingActivity } from "../../services/voteService";
 import { formatPoints, getDisplayRankInfo, getRankProgress, getTopBadges } from "../../utils/reputation";
 import { cleanUserError } from "../../utils/debugError";
 import { getUsernameValidationError } from "../../utils/username";
@@ -62,6 +69,10 @@ export default function ProfileScreen() {
   const [usernameSaving, setUsernameSaving] = useState(false);
   const [usernameAvailabilityStatus, setUsernameAvailabilityStatus] = useState<UsernameAvailabilityStatus>("idle");
   const [usernameAvailabilityMessage, setUsernameAvailabilityMessage] = useState("");
+  // PHASE 5 PRE-LAUNCH: availability message color (gray / amber / red / green).
+  const [usernameAvailabilityTone, setUsernameAvailabilityTone] = useState<UsernameAvailabilityTone | null>(null);
+  // PHASE 5 PRE-LAUNCH: voting activity stats (replaces the reputation activity error).
+  const [votingActivity, setVotingActivity] = useState<UserVotingActivity | null>(null);
   // PHASE 5 STEP 6
   const [selectedAvatar, setSelectedAvatar] = useState<PickedOptimizedImage | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
@@ -96,9 +107,14 @@ export default function ProfileScreen() {
   const highestRank = profile?.highest_rank_achieved || rankInfo.title;
   const avatarPreviewUri = selectedAvatar?.uri || profile?.avatar_url || null;
   const showAvatarImage = Boolean(avatarPreviewUri && !avatarLoadFailed);
+  // PHASE 5 PRE-LAUNCH: typed username matches the current one (nothing to save).
+  const isSameAsCurrentUsername =
+    usernameDraft.trim().length > 0 &&
+    usernameDraft.toLowerCase().trim() === (username ?? "").toLowerCase().trim();
   const usernameSaveDisabled =
     usernameSaving ||
     !usernameDraft.trim() ||
+    isSameAsCurrentUsername ||
     usernameAvailabilityStatus === "checking" ||
     usernameAvailabilityStatus === "unavailable" ||
     usernameAvailabilityStatus === "invalid";
@@ -111,6 +127,15 @@ export default function ProfileScreen() {
     if (!profile || !currentUser || !usernameDraft.trim()) {
       setUsernameAvailabilityStatus("idle");
       setUsernameAvailabilityMessage("");
+      setUsernameAvailabilityTone(null);
+      return;
+    }
+
+    // PHASE 5 PRE-LAUNCH: typed username equals the current one — show a subtle hint, skip the check.
+    if (isSameAsCurrentUsername) {
+      setUsernameAvailabilityStatus("idle");
+      setUsernameAvailabilityMessage("This is already your username");
+      setUsernameAvailabilityTone("system");
       return;
     }
 
@@ -119,12 +144,14 @@ export default function ProfileScreen() {
     if (validationError) {
       setUsernameAvailabilityStatus("invalid");
       setUsernameAvailabilityMessage(validationError);
+      setUsernameAvailabilityTone("error");
       return;
     }
 
     let active = true;
     setUsernameAvailabilityStatus("checking");
     setUsernameAvailabilityMessage("Checking username...");
+    setUsernameAvailabilityTone(null);
 
     const timer = setTimeout(() => {
       checkUsernameAvailability(usernameDraft, currentUser.id)
@@ -133,16 +160,11 @@ export default function ProfileScreen() {
             return;
           }
 
-          if (result.available) {
-            setUsernameAvailabilityStatus("available");
-            setUsernameAvailabilityMessage("Username available");
-            return;
-          }
-
-          setUsernameAvailabilityStatus("unavailable");
-          setUsernameAvailabilityMessage(
-            result.error === USERNAME_TAKEN_MESSAGE ? "Username already taken" : result.error ?? "Username already taken",
-          );
+          // PHASE 5 PRE-LAUNCH: distinct message + tone per availability category.
+          const display = getUsernameAvailabilityDisplay(result);
+          setUsernameAvailabilityStatus(result.available ? "available" : "unavailable");
+          setUsernameAvailabilityMessage(display.text);
+          setUsernameAvailabilityTone(display.tone);
         })
         .catch(() => {
           if (!active) {
@@ -151,6 +173,7 @@ export default function ProfileScreen() {
 
           setUsernameAvailabilityStatus("unavailable");
           setUsernameAvailabilityMessage("We could not verify this username right now. Please try again.");
+          setUsernameAvailabilityTone("error");
         });
     }, 450);
 
@@ -364,10 +387,17 @@ export default function ProfileScreen() {
         }
       });
 
+    // PHASE 5 PRE-LAUNCH: load the user's True / Fake / Not sure voting counts (never errors).
+    fetchUserVotingActivity(currentUser?.id ?? "").then((activity) => {
+      if (isMounted) {
+        setVotingActivity(activity);
+      }
+    });
+
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, profile?.id]);
+  }, [isAuthenticated, profile?.id, currentUser?.id]);
 
   function getActivityTitle(event: ReputationEvent): string {
     switch (event.event_type) {
@@ -589,7 +619,11 @@ export default function ProfileScreen() {
                   <Text
                     style={[
                       styles.availabilityText,
-                      usernameAvailabilityStatus === "available" ? styles.availableText : styles.unavailableText,
+                      usernameAvailabilityTone === "available" && styles.availableText,
+                      usernameAvailabilityTone === "system" && styles.systemReservedText,
+                      usernameAvailabilityTone === "protected" && styles.protectedText,
+                      (usernameAvailabilityTone === "taken" || usernameAvailabilityTone === "error") &&
+                        styles.unavailableText,
                     ]}
                   >
                     {usernameAvailabilityMessage}
@@ -657,13 +691,46 @@ export default function ProfileScreen() {
                   )}
                 </View>
 
+                {/* PHASE 5 PRE-LAUNCH: voting activity stats */}
+                <View style={styles.activitySection}>
+                  <Text style={styles.detailLabel}>Voting Activity</Text>
+                  {votingActivity && votingActivity.totalVotes > 0 ? (
+                    <View style={styles.votingActivityGrid}>
+                      <View style={styles.votingActivityBox}>
+                        <Text style={[styles.votingActivityCount, styles.votingActivityTrue]}>
+                          {votingActivity.trueVotes}
+                        </Text>
+                        <Text style={styles.votingActivityLabel}>True</Text>
+                        <Text style={styles.votingActivityHint}>votes</Text>
+                      </View>
+                      <View style={styles.votingActivityBox}>
+                        <Text style={[styles.votingActivityCount, styles.votingActivityFake]}>
+                          {votingActivity.fakeVotes}
+                        </Text>
+                        <Text style={styles.votingActivityLabel}>Fake</Text>
+                        <Text style={styles.votingActivityHint}>votes</Text>
+                      </View>
+                      <View style={styles.votingActivityBox}>
+                        <Text style={[styles.votingActivityCount, styles.votingActivityNotSure]}>
+                          {votingActivity.notSureVotes}
+                        </Text>
+                        <Text style={styles.votingActivityLabel}>Not Sure</Text>
+                        <Text style={styles.votingActivityHint}>votes</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.votingActivityEmpty}>
+                      No voting activity yet.{"\n"}Cast your first vote to start building your record.
+                    </Text>
+                  )}
+                </View>
+
                 <View style={styles.activitySection}>
                   <View style={styles.sectionHeaderRow}>
                     <Text style={styles.detailLabel}>Reputation Activity</Text>
                     {activityLoading ? <Text style={styles.activityStatusText}>Loading...</Text> : null}
                   </View>
-                  {activityError ? <Text style={styles.errorText}>{activityError}</Text> : null}
-                  {!activityLoading && !activityError && reputationEvents.length === 0 ? (
+                  {!activityLoading && reputationEvents.length === 0 ? (
                     <Text style={styles.detailValue}>No reputation activity yet.</Text>
                   ) : null}
                   {reputationEvents.slice(0, 8).map((event, index) => (
@@ -912,6 +979,13 @@ function createStyles(theme: AppTheme) {
   unavailableText: {
     color: theme.colors.danger,
   },
+  // PHASE 5 PRE-LAUNCH
+  systemReservedText: {
+    color: theme.colors.muted,
+  },
+  protectedText: {
+    color: theme.colors.warningBorder,
+  },
   smallButton: {
     alignItems: "center",
     alignSelf: "flex-start",
@@ -1048,6 +1122,50 @@ function createStyles(theme: AppTheme) {
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: 0.5,
     paddingVertical: theme.spacing.md,
+  },
+  // PHASE 5 PRE-LAUNCH: voting activity grid
+  votingActivityGrid: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  votingActivityBox: {
+    alignItems: "center",
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    flex: 1,
+    paddingVertical: theme.spacing.md,
+  },
+  votingActivityCount: {
+    fontSize: 22,
+    fontWeight: "500",
+  },
+  votingActivityTrue: {
+    color: theme.colors.success,
+  },
+  votingActivityFake: {
+    color: theme.colors.danger,
+  },
+  votingActivityNotSure: {
+    color: theme.colors.warningBorder,
+  },
+  votingActivityLabel: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  votingActivityHint: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+  },
+  votingActivityEmpty: {
+    color: theme.colors.subtext,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: theme.spacing.sm,
   },
   sectionHeaderRow: {
     alignItems: "center",

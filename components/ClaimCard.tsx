@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -39,6 +39,23 @@ interface ClaimCardProps {
   onPress?: () => void;
   onVote: (claimId: string, vote: VoteOption) => void | string | Promise<void | string>;
   onReport: (claimId: string, reason: ReportReason, note: string) => void | Promise<void>;
+}
+
+// PHASE 5 PRE-LAUNCH: feed cards truncate long descriptions to ~100 words.
+const FEED_DESCRIPTION_WORD_LIMIT = 100;
+
+function truncateDescription(text: string, wordLimit = FEED_DESCRIPTION_WORD_LIMIT): string {
+  if (!text) {
+    return "";
+  }
+
+  const words = text.trim().split(/\s+/);
+
+  if (words.length <= wordLimit) {
+    return text;
+  }
+
+  return `${words.slice(0, wordLimit).join(" ")}...`;
 }
 
 function getRelativeTime(createdAt: string): string {
@@ -192,6 +209,11 @@ function getSourcePillStyle(score: number, label: string, styles: ReturnType<typ
 function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  // PHASE 5 PRE-LAUNCH: collapse long descriptions until "Read more" is tapped.
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const descriptionWordCount = claim.description ? claim.description.trim().split(/\s+/).length : 0;
+  const descriptionIsLong = descriptionWordCount > FEED_DESCRIPTION_WORD_LIMIT;
+  const displayDescription = descriptionExpanded ? claim.description : truncateDescription(claim.description);
   const sourceQuality = useMemo(() => getSourceQuality(claim.sourceUrl), [claim.sourceUrl]);
   const sourceDomain = getSourceDomain(claim.sourceUrl);
   // PHASE 4 STEP 18
@@ -315,7 +337,18 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             {claim.title}
           </Text>
 
-          <MentionText text={claim.description} style={styles.description} />
+          <MentionText text={displayDescription} style={styles.description} />
+          {descriptionIsLong && !descriptionExpanded ? (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setDescriptionExpanded(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Read more"
+              accessibilityHint="Expands the full claim description"
+            >
+              <Text style={styles.readMore}>Read more</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {thumbnailUrl ? (
             <TouchableOpacity
@@ -467,6 +500,13 @@ function createStyles(theme: AppTheme) {
     fontWeight: "400",
     lineHeight: Math.round(18 * (theme.typography.body.fontSize / 16)),
     flexShrink: 1,
+  },
+  // PHASE 5 PRE-LAUNCH
+  readMore: {
+    color: theme.colors.link,
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
+    fontWeight: "500",
+    marginTop: 4,
   },
   // PHASE 5 STEP 6
   claimThumbnail: {

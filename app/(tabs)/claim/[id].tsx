@@ -352,6 +352,8 @@ export default function ClaimDetailScreen() {
   const [voteSubmitting, setVoteSubmitting] = useState(false);
   // PHASE 3 STEP 12
   const [liveUpdatesOn, setLiveUpdatesOn] = useState(false);
+  // PHASE 5 PRE-LAUNCH: AI pre-check section collapsed by default, expands on tap.
+  const [aiExpanded, setAiExpanded] = useState(false);
   // PHASE 4 STEP 15
   const detailFetchInFlightRef = useRef(false);
   const evidenceFetchInFlightRef = useRef(false);
@@ -1036,6 +1038,26 @@ export default function ClaimDetailScreen() {
               <StatusBadge status={claim.status} />
             </View>
             <MentionText text={claim.description} style={styles.description} />
+            {/* PHASE 5 PRE-LAUNCH: show the claim image inline, right under the description. */}
+            {claim.media.imageUrl ? (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => {
+                  Linking.openURL(claim.media.imageUrl || "").catch(() => {
+                    Alert.alert("Could not open image.");
+                  });
+                }}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Open claim image"
+              >
+                <Image
+                  source={{ uri: claim.media.imageUrl }}
+                  style={styles.claimHeroImage}
+                  resizeMode="cover"
+                  onError={(event) => console.log("Image load error:", event.nativeEvent.error)}
+                />
+              </TouchableOpacity>
+            ) : null}
             <View style={styles.metaWrap}>
               {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
               {/* PHASE 5 election positioning UI */}
@@ -1070,7 +1092,23 @@ export default function ClaimDetailScreen() {
               />
             </View>
             <View style={styles.aiDetailPanel}>
-              <Text style={styles.aiDetailTitle}>AI pre-check</Text>
+              {/* PHASE 5 PRE-LAUNCH: tappable header toggles the full details. */}
+              <TouchableOpacity
+                style={styles.aiDetailHeaderRow}
+                activeOpacity={0.7}
+                onPress={() => setAiExpanded((current) => !current)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: aiExpanded }}
+                accessibilityLabel="AI pre-check"
+                accessibilityHint={aiExpanded ? "Collapse AI pre-check details" : "Expand AI pre-check details"}
+              >
+                <Text style={styles.aiDetailTitle}>AI pre-check</Text>
+                <Ionicons
+                  name={aiExpanded ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color={appTheme.colors.ai}
+                />
+              </TouchableOpacity>
               <View style={styles.aiDetailGrid}>
                 <View style={styles.aiDetailItem}>
                   <Text style={styles.aiDetailLabel}>Confidence</Text>
@@ -1089,55 +1127,59 @@ export default function ClaimDetailScreen() {
                   <Text style={styles.aiDetailValue}>{formatClaimType(claim.claimType)}</Text>
                 </View>
               </View>
-              <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color, styles)]}>{displayedSourceMessage.text}</Text>
-              {/* PHASE 4 STEP 22 */}
-              <View style={styles.sourceSupportPanel}>
-                <Text style={styles.sourceSupportKicker}>Source support signal</Text>
-                <View style={styles.sourceSupportRow}>
-                  <Ionicons
-                    name={claim.sourceReadStatus === "read" ? "document-text-outline" : "warning-outline"}
-                    size={15}
-                    color={claim.sourceReadStatus === "read" ? appTheme.colors.success : appTheme.colors.warning}
-                  />
-                  <Text style={styles.sourceSupportText}>{sourceReadStatusLabel}</Text>
-                </View>
-                {sourceReviewUnavailable ? (
-                  <Text style={styles.sourceSupportTitle} numberOfLines={2}>
-                    {SOURCE_REVIEW_UNAVAILABLE_TITLE}
-                  </Text>
-                ) : sourcePageTitle ? (
-                  <Text style={styles.sourceSupportTitle} numberOfLines={2}>
-                    {sourcePageTitle}
-                  </Text>
-                ) : null}
-                {sourceReviewUnavailable ? null : (
-                  <View style={styles.sourceSupportRow}>
-                    <Ionicons name={sourceSupportIcon} size={15} color={sourceSupportColor} />
-                    <Text style={[styles.sourceSupportText, sourceSupportTextStyle]}>{sourceSupportLabel}</Text>
+              {aiExpanded ? (
+                <>
+                  <Text style={[styles.sourceMessage, getSourceMessageStyle(displayedSourceMessage.color, styles)]}>{displayedSourceMessage.text}</Text>
+                  {/* PHASE 4 STEP 22 */}
+                  <View style={styles.sourceSupportPanel}>
+                    <Text style={styles.sourceSupportKicker}>Source support signal</Text>
+                    <View style={styles.sourceSupportRow}>
+                      <Ionicons
+                        name={claim.sourceReadStatus === "read" ? "document-text-outline" : "warning-outline"}
+                        size={15}
+                        color={claim.sourceReadStatus === "read" ? appTheme.colors.success : appTheme.colors.warning}
+                      />
+                      <Text style={styles.sourceSupportText}>{sourceReadStatusLabel}</Text>
+                    </View>
+                    {sourceReviewUnavailable ? (
+                      <Text style={styles.sourceSupportTitle} numberOfLines={2}>
+                        {SOURCE_REVIEW_UNAVAILABLE_TITLE}
+                      </Text>
+                    ) : sourcePageTitle ? (
+                      <Text style={styles.sourceSupportTitle} numberOfLines={2}>
+                        {sourcePageTitle}
+                      </Text>
+                    ) : null}
+                    {sourceReviewUnavailable ? null : (
+                      <View style={styles.sourceSupportRow}>
+                        <Ionicons name={sourceSupportIcon} size={15} color={sourceSupportColor} />
+                        <Text style={[styles.sourceSupportText, sourceSupportTextStyle]}>{sourceSupportLabel}</Text>
+                      </View>
+                    )}
+                    {sourceSupportSummary ? (
+                      <Text style={styles.sourceSupportSummary} numberOfLines={5}>{sourceSupportSummary}</Text>
+                    ) : (
+                      <Text style={styles.sourceSupportSummary}>Source support has not been summarized yet.</Text>
+                    )}
+                    {sourceReviewUnavailable ? (
+                      <Text style={styles.sourceSupportDisclaimer}>{SOURCE_REVIEW_UNAVAILABLE_NOTE}</Text>
+                    ) : null}
+                    <Text style={styles.sourceSupportDisclaimer}>
+                      This only checks whether the source appears to support the claim. It is not a final truth decision.
+                    </Text>
                   </View>
-                )}
-                {sourceSupportSummary ? (
-                  <Text style={styles.sourceSupportSummary} numberOfLines={5}>{sourceSupportSummary}</Text>
-                ) : (
-                  <Text style={styles.sourceSupportSummary}>Source support has not been summarized yet.</Text>
-                )}
-                {sourceReviewUnavailable ? (
-                  <Text style={styles.sourceSupportDisclaimer}>{SOURCE_REVIEW_UNAVAILABLE_NOTE}</Text>
-                ) : null}
-                <Text style={styles.sourceSupportDisclaimer}>
-                  This only checks whether the source appears to support the claim. It is not a final truth decision.
-                </Text>
-              </View>
-              <Text style={styles.aiText} numberOfLines={2}>{aiRiskSummary}</Text>
-              {isNotFactCheckable ? (
-                <Text style={styles.notFactCheckableWarning}>
-                  This appears to be an opinion or non-factual post. Verifact cannot verify it as True or Fake.
-                </Text>
+                  <Text style={styles.aiText} numberOfLines={2}>{aiRiskSummary}</Text>
+                  {isNotFactCheckable ? (
+                    <Text style={styles.notFactCheckableWarning}>
+                      This appears to be an opinion or non-factual post. Verifact cannot verify it as True or Fake.
+                    </Text>
+                  ) : null}
+                  <Text style={styles.aiDisclaimer}>
+                    AI pre-check is only a risk signal. Community voting decides the final result.
+                  </Text>
+                  {aiReviewStatusMessage ? <Text style={aiReviewStatusStyle}>{aiReviewStatusMessage}</Text> : null}
+                </>
               ) : null}
-              <Text style={styles.aiDisclaimer}>
-                AI pre-check is only a risk signal. Community voting decides the final result.
-              </Text>
-              {aiReviewStatusMessage ? <Text style={aiReviewStatusStyle}>{aiReviewStatusMessage}</Text> : null}
             </View>
           </View>
         </View>
@@ -1184,21 +1226,9 @@ export default function ClaimDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.label}>Media</Text>
-          {mediaUrl || claim.media.imageUrl ? (
+          {/* PHASE 5 PRE-LAUNCH: the claim image now renders inline above; this card is video-only. */}
+          {mediaUrl ? (
             <View style={styles.mediaList}>
-              {/* PHASE 3 STEP 7 */}
-              {claim.media.imageUrl ? (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={() => {
-                    Linking.openURL(claim.media.imageUrl || "").catch(() => {
-                      Alert.alert("Could not open image.");
-                    });
-                  }}
-                >
-                  <Image source={{ uri: claim.media.imageUrl }} style={styles.detailImage} resizeMode="cover" />
-                </TouchableOpacity>
-              ) : null}
               {/* PHASE 3 STEP 8 */}
               {mediaUrl && mediaPlatform ? (
                 <View style={styles.videoDetailPanel}>
@@ -1231,7 +1261,7 @@ export default function ClaimDetailScreen() {
               ) : null}
             </View>
           ) : (
-            <Text style={styles.placeholder}>No image or video attached yet.</Text>
+            <Text style={styles.placeholder}>No video attached yet.</Text>
           )}
         </View>
 
@@ -1847,6 +1877,12 @@ function createStyles(theme: AppTheme) {
     fontSize: 12,
     fontWeight: "500",
   },
+  // PHASE 5 PRE-LAUNCH
+  aiDetailHeaderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   aiDetailGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -2108,6 +2144,15 @@ function createStyles(theme: AppTheme) {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.sm,
     height: 260,
+    width: "100%",
+  },
+  // PHASE 5 PRE-LAUNCH: inline claim image under the description.
+  claimHeroImage: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    height: 220,
+    marginBottom: 10,
+    marginTop: 10,
     width: "100%",
   },
   videoDetailPanel: {
