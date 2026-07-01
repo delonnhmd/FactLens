@@ -28,6 +28,15 @@
           "backgroundColor": "#0D1B3E",
           "imageWidth": 200
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
       ]
     ],
     "web": {
@@ -42,7 +51,10 @@
     },
     "android": {
       "package": "com.pennyfloat.verifact",
-      "versionCode": 3,
+      "versionCode": 4,
+      "permissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
