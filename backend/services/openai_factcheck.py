@@ -252,17 +252,26 @@ def _normalize_evidence_rows(evidence_rows: list[dict] | None = None) -> list[di
     normalized_rows: list[dict] = []
 
     for row in (evidence_rows or [])[:10]:
-        normalized_rows.append(
-            {
-                "id": str(row.get("id") or ""),
-                "url": str(row.get("url") or ""),
-                "note": str(row.get("note") or "")[:500],
-                "evidence_type": str(row.get("evidence_type") or "UNCLEAR"),
-                "source_quality_label": row.get("source_quality_label"),
-                "source_quality_score": row.get("source_quality_score"),
-                "created_at": str(row.get("created_at") or ""),
-            }
-        )
+        normalized_row = {
+            "id": str(row.get("id") or ""),
+            "url": str(row.get("url") or ""),
+            "note": str(row.get("note") or "")[:500],
+            "evidence_type": str(row.get("evidence_type") or "UNCLEAR"),
+            "source_quality_label": row.get("source_quality_label"),
+            "source_quality_score": row.get("source_quality_score"),
+            "created_at": str(row.get("created_at") or ""),
+        }
+
+        # PHASE 6 STEP 2 — offline citations carry structured citation fields
+        # instead of a fetchable page; pass them through so the model can reason
+        # about them (e.g. anachronism checks). URL rows are unaffected.
+        reference_type = str(row.get("reference_type") or "url").strip().lower()
+        if reference_type != "url":
+            normalized_row["reference_type"] = reference_type
+            normalized_row["citation"] = row.get("citation")
+            normalized_row["citation_verified"] = row.get("citation_verified")
+
+        normalized_rows.append(normalized_row)
 
     return normalized_rows
 
@@ -566,6 +575,10 @@ def _build_prompt(
         "Never invent evidence. Mention evidence in ai_summary only when you used it. "
         "Set evidence_used_count to the number of provided community evidence links you considered. "
         "No live search is available in this call, so source_count must count only the main source and provided community evidence that you actually use. "
+        # PHASE 6 STEP 2 — offline citation handling (append-only).
+        "Some community evidence items are offline print citations (reference_type of book, newspaper, journal, or document) with a structured citation object and citation_verified flag instead of a fetched web page. "
+        "This is an offline print source. Check for anachronisms (publication predates the claimed event) and flag plausibility concerns in red_flags. Do not assume the cited content supports the claim. "
+        "Treat citation_verified=true as confirming the source EXISTS, not that it supports the claim; citation_verified=false or null means existence is unconfirmed, so give it minimal weight. "
         f"Verifact AI Teaching Library: {ai_library_json}"
     )
     user_prompt = (

@@ -43,6 +43,15 @@ try:
     from services.ai_library_loader import load_verifact_ai_library
     from services.source_page_fetcher import fetch_source_page
     from services.source_credibility import score_source_url
+    from services.embedding_service import (
+        classify_claim_stance,
+        generate_claim_embedding,
+    )
+    from services.citation_service import (
+        score_citation_source,
+        validate_citation,
+        verify_citation_exists,
+    )
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
@@ -51,6 +60,15 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
     from backend.services.ai_library_loader import load_verifact_ai_library
     from backend.services.source_page_fetcher import fetch_source_page
     from backend.services.source_credibility import score_source_url
+    from backend.services.embedding_service import (
+        classify_claim_stance,
+        generate_claim_embedding,
+    )
+    from backend.services.citation_service import (
+        score_citation_source,
+        validate_citation,
+        verify_citation_exists,
+    )
 
 
 load_dotenv()
@@ -1915,6 +1933,21 @@ SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
 CLAIM_AI_COOLDOWNS: dict[str, float] = {}
 
+# PHASE 6 STEP 1 — Duplicate claim detection tuning.
+# Statuses a claim can have while it is still worth voting on. A duplicate is
+# only useful to suggest if the user can still act on it, so we never surface
+# finalized/locked claims. NOTE: the client creates claims with status "ACTIVE"
+# (see services/claimService.ts), while the DB column default is "OPEN"; both are
+# included so the feature works regardless of which path created the row.
+DUPLICATE_VOTABLE_STATUSES = ["ACTIVE", "OPEN", "PENDING", "EARLY_VERDICT", "REVIEWING"]
+# Similarity floor to be considered a candidate at all (spec: > 0.85).
+DUPLICATE_SIMILARITY_THRESHOLD = 0.85
+# At/above this, embeddings alone are trusted and the stance check is skipped.
+DUPLICATE_STANCE_SKIP_SIMILARITY = 0.95
+DUPLICATE_MATCH_LIMIT = 3
+# Duplicate check fires on every submission; allow a generous per-IP budget.
+DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS = 120
+
 RESERVED_USERNAME_MESSAGE = (
     "This username is reserved. If you represent this person or organization, "
     "please apply for verification."
@@ -1984,6 +2017,31 @@ class AiPrecheckRequest(BaseModel):
 # PHASE 4 STEP 3
 class AiPrecheckRetryRequest(BaseModel):
     claim_id: str = ""
+
+
+# PHASE 6 STEP 1 — Duplicate detection request bodies.
+class DuplicateCheckRequest(BaseModel):
+    title: str = ""
+    description: str = ""
+
+
+# PHASE 6 STEP 1 — Fire-and-forget embedding storage for a just-created claim.
+class ClaimEmbedRequest(BaseModel):
+    claim_id: str = ""
+
+
+# PHASE 6 STEP 2 — Offline citation evidence submission (books/newspapers/journals/documents).
+class CitationEvidenceRequest(BaseModel):
+    claim_id: str = ""
+    evidence_type: str = ""
+    reference_type: str = ""
+    citation: dict[str, Any] = {}
+    note: str = ""
+
+
+# PHASE 6 STEP 2 — Citation dispute submission.
+class CitationDisputeRequest(BaseModel):
+    reason: str = ""
 
 
 # PHASE 5 STEP 1B
@@ -5190,7 +5248,8 @@ def fetch_evidence_rows(claim_id: str) -> list[dict]:
     supabase = get_supabase_client()
     response = (
         supabase.table("evidence")
-        .select("id, url, note, evidence_type, source_quality_label, source_quality_score, created_at")
+        # PHASE 6 STEP 2 — also pull citation fields so offline sources reach the AI.
+        .select("id, url, note, evidence_type, source_quality_label, source_quality_score, created_at, reference_type, citation, citation_verified")
         .eq("claim_id", claim_id)
         .order("created_at", desc=True)
         .limit(10)
@@ -5640,6 +5699,321 @@ def build_precheck_payload_from_claim(claim: dict) -> AiPrecheckRequest:
         source_url=str(claim.get("source_url") or ""),
         category=str(claim.get("category") or ""),
     )
+
+
+# PHASE 6 STEP 1 — Duplicate claim detection.
+def store_claim_embedding(claim_id: str) -> bool:
+    """Generate and persist the embedding for an already-saved claim.
+
+    WHY separate from claim creation: claims are inserted client-side (Supabase),
+    so the embedding — which needs the server-only OpenAI key and service-role
+    write access — is filled in by a follow-up backend call. Returns True on a
+    stored embedding, False on any soft failure (missing claim / embedding error),
+    which the caller treats as non-fatal.
+    """
+    claim = fetch_claim_row(claim_id)
+
+    if not claim:
+        print("[claims/embed] claim not found:", claim_id, flush=True)
+        return False
+
+    embedding = generate_claim_embedding(
+        title=str(claim.get("title") or ""),
+        description=str(claim.get("description") or ""),
+    )
+
+    if embedding is None:
+        # Embedding failure must never be treated as an error worth surfacing;
+        # the backfill script will pick this claim up later.
+        print("[claims/embed] embedding unavailable for claim:", claim_id, flush=True)
+        return False
+
+    supabase = get_supabase_client()
+    supabase.table("claims").update({"embedding": embedding}).eq("id", claim_id).execute()
+    print("[claims/embed] stored embedding for claim:", claim_id, flush=True)
+    return True
+
+
+@app.post("/api/claims/embed")
+def api_claims_embed(payload: ClaimEmbedRequest, request: Request):
+    """Fire-and-forget endpoint the client calls after creating a claim.
+
+    Always returns 200 with {"ok": bool}: the frontend does not await the result,
+    and an embedding failure must never look like a claim-creation failure.
+    """
+    claim_id = payload.claim_id.strip()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    enforce_rate_limit(
+        request,
+        "claims_embed",
+        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    get_authenticated_user_id(request)
+
+    try:
+        stored = store_claim_embedding(claim_id)
+    except Exception as error:
+        # Fail soft — never bubble a 500 into the post flow.
+        print(f"[claims/embed] failure: {error}", flush=True)
+        return {"ok": False}
+
+    return {"ok": stored}
+
+
+@app.post("/api/claims/check-duplicate")
+def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request):
+    """Suggest existing claims that semantically match the one being submitted.
+
+    Runs BEFORE the claim is saved so the frontend can offer "vote on this
+    instead". Fails OPEN: any failure returns an empty duplicate list with 200 so
+    it can never block a user from posting.
+
+    Two-stage matching keeps precision high without paying for an LLM call on
+    every candidate:
+      * 0.85 < sim < 0.95 -> ask gpt-4.1-mini if it's the SAME assertion, and drop
+        NO / OPPOSITE (this is what stops "voted for" matching "voted against").
+      * sim >= 0.95        -> trust the embedding, skip the stance check.
+    """
+    enforce_rate_limit(
+        request,
+        "check_duplicate",
+        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    get_authenticated_user_id(request)
+
+    title = payload.title.strip()
+    description = payload.description.strip()
+
+    embedding = generate_claim_embedding(title=title, description=description)
+
+    if embedding is None:
+        # Fail open: no embedding -> no suggestions, but posting is never blocked.
+        return {"duplicates": []}
+
+    try:
+        supabase = get_supabase_client()
+        response = supabase.rpc(
+            "match_claims",
+            {
+                "query_embedding": embedding,
+                "match_threshold": DUPLICATE_SIMILARITY_THRESHOLD,
+                "match_count": DUPLICATE_MATCH_LIMIT,
+                "allowed_statuses": DUPLICATE_VOTABLE_STATUSES,
+            },
+        ).execute()
+        candidates = response.data or []
+    except Exception as error:
+        print(f"[check-duplicate] vector search failed: {error}", flush=True)
+        return {"duplicates": []}
+
+    duplicates = []
+
+    for candidate in candidates:
+        similarity = float(candidate.get("similarity") or 0.0)
+        candidate_title = str(candidate.get("title") or "")
+
+        # Ambiguous band: confirm the assertion actually matches before suggesting.
+        if similarity < DUPLICATE_STANCE_SKIP_SIMILARITY:
+            stance = classify_claim_stance(title, candidate_title)
+            if stance in {"NO", "OPPOSITE"}:
+                print(
+                    f"[check-duplicate] excluded by stance ({stance}): "
+                    f"{candidate.get('id')} sim={similarity:.3f}",
+                    flush=True,
+                )
+                continue
+
+        duplicates.append(
+            {
+                "claim_id": str(candidate.get("id") or ""),
+                "title": candidate_title,
+                "similarity": similarity,
+                "vote_count": int(candidate.get("vote_count") or 0),
+                "verdict_status": str(candidate.get("verdict_status") or ""),
+            }
+        )
+
+    return {"duplicates": duplicates}
+
+
+# PHASE 6 STEP 2 — Offline reference citations.
+# Evidence types accepted, mirroring the existing evidence table CHECK constraint.
+CITATION_EVIDENCE_TYPES = {"SUPPORTS_TRUE", "SUPPORTS_FAKE", "ADDS_CONTEXT", "UNCLEAR"}
+CITATION_DISPUTE_MIN_REASON_CHARS = 20
+
+
+def fetch_evidence_row(evidence_id: str) -> "dict | None":
+    """Fetch a single evidence row by id, or None. New helper (URL path untouched)."""
+    supabase = get_supabase_client()
+    response = supabase.table("evidence").select("*").eq("id", evidence_id).limit(1).execute()
+    rows = response.data or []
+
+    if isinstance(rows, dict):
+        return rows
+
+    return rows[0] if rows else None
+
+
+@app.post("/api/evidence/citation")
+def api_evidence_citation(payload: CitationEvidenceRequest, request: Request):
+    """Submit an OFFLINE citation as evidence (book/newspaper/journal/document).
+
+    WHY a new endpoint rather than the client-side Supabase insert used for URL
+    evidence: offline citations need server-only work — schema validation,
+    external existence checks, and consistent trust weighting — that cannot run
+    on the client. URL evidence is completely unchanged; it still goes through the
+    existing client path. Verification is fail-open: it never blocks submission.
+    """
+    enforce_rate_limit(request, "evidence_citation", AI_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    user_id = get_authenticated_user_id(request)
+
+    claim_id = payload.claim_id.strip()
+    reference_type = payload.reference_type.strip().lower()
+    evidence_type = payload.evidence_type.strip().upper()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    if evidence_type not in CITATION_EVIDENCE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid evidence_type.")
+
+    # This endpoint is offline-only; 'url' evidence must keep using the existing path.
+    if not reference_type or reference_type == "url":
+        raise HTTPException(
+            status_code=400,
+            detail="reference_type must be one of: book, newspaper, journal, document.",
+        )
+
+    # 1. Shape validation — reject missing required fields with a clear message.
+    is_valid, validation_error = validate_citation(reference_type, payload.citation)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=validation_error)
+
+    # 2. Existence check (fail-open: None on any timeout/failure).
+    citation_verified = verify_citation_exists(reference_type, payload.citation)
+
+    # 3. Trust weighting for the offline source (never touches URL scoring).
+    scored = score_citation_source(reference_type, payload.citation, citation_verified)
+
+    # NOTE: evidence.url is NOT NULL (pre-existing constraint we do not alter), so
+    # offline citations store an empty string for url. Flagged in the migration.
+    insert_payload = {
+        "claim_id": claim_id,
+        "user_id": user_id,
+        "evidence_type": evidence_type,
+        "url": "",
+        "note": payload.note.strip(),
+        "reference_type": reference_type,
+        "citation": payload.citation,
+        "citation_verified": citation_verified,
+        "source_quality_label": scored["source_quality_label"],
+        "source_quality_score": scored["source_quality_score"],
+        "source_quality_reason": scored["source_quality_reason"],
+    }
+
+    supabase = get_supabase_client()
+    result = supabase.table("evidence").insert(insert_payload).execute()
+    inserted = get_first_row(result)
+
+    # Keep claims.evidence_count in sync, exactly like the URL client path does.
+    try:
+        supabase.rpc("recalculate_claim_evidence_count", {"target_claim_id": claim_id}).execute()
+    except Exception as error:
+        print(f"[evidence/citation] evidence count recalc failed: {error}", flush=True)
+
+    return {
+        "ok": True,
+        "evidence": inserted,
+        "citation_verified": citation_verified,
+        "source_quality": scored["source_quality"],
+        "source_quality_score": scored["source_quality_score"],
+        "source_quality_reason": scored["source_quality_reason"],
+    }
+
+
+@app.post("/api/evidence/{evidence_id}/dispute")
+def api_evidence_dispute(evidence_id: str, payload: CitationDisputeRequest, request: Request):
+    """Open a community dispute against an offline citation.
+
+    WHY the guard rails: disputes are a trust mechanism, so they must be
+    meaningful (>= 20 chars), targeted at disputable content (offline citations,
+    not URLs which are self-verifiable), and not self-serving (you can't dispute
+    your own citation). One-per-user is enforced by the DB unique constraint.
+    """
+    enforce_rate_limit(request, "evidence_dispute", AI_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    user_id = get_authenticated_user_id(request)
+
+    reason = payload.reason.strip()
+    if len(reason) < CITATION_DISPUTE_MIN_REASON_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dispute reason must be at least {CITATION_DISPUTE_MIN_REASON_CHARS} characters.",
+        )
+
+    evidence = fetch_evidence_row(evidence_id.strip())
+    if not evidence:
+        raise HTTPException(status_code=404, detail="Evidence not found.")
+
+    if str(evidence.get("reference_type") or "url").strip().lower() == "url":
+        raise HTTPException(status_code=400, detail="URL evidence cannot be disputed as a citation.")
+
+    if str(evidence.get("user_id") or "") == user_id:
+        raise HTTPException(status_code=403, detail="You cannot dispute your own citation.")
+
+    supabase = get_supabase_client()
+
+    try:
+        result = (
+            supabase.table("citation_disputes")
+            .insert(
+                {
+                    "evidence_id": evidence_id,
+                    "disputer_id": user_id,
+                    "reason": reason,
+                }
+            )
+            .execute()
+        )
+    except Exception as error:
+        # The unique (evidence_id, disputer_id) constraint surfaces here as a
+        # duplicate-key error; translate it into a clean 409.
+        message = str(error).lower()
+        if "duplicate" in message or "unique" in message or "23505" in message:
+            raise HTTPException(status_code=409, detail="You have already disputed this citation.")
+        print(f"[evidence/dispute] insert failed: {error}", flush=True)
+        raise HTTPException(status_code=500, detail="Could not record dispute.")
+
+    inserted = get_first_row(result)
+    return {"ok": True, "dispute": inserted}
+
+
+@app.get("/api/evidence/{evidence_id}/disputes")
+def api_evidence_disputes(evidence_id: str, request: Request):
+    """List disputes (with status) for a given evidence row.
+
+    Read-only view backing the community dispute UI and manual admin resolution.
+    """
+    enforce_rate_limit(request, "evidence_disputes_list", SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    get_authenticated_user_id(request)
+
+    supabase = get_supabase_client()
+    response = (
+        supabase.table("citation_disputes")
+        .select("id, evidence_id, disputer_id, reason, status, created_at")
+        .eq("evidence_id", evidence_id.strip())
+        .order("created_at", desc=True)
+        .execute()
+    )
+    disputes = response.data or []
+    if isinstance(disputes, dict):
+        disputes = [disputes]
+
+    return {"disputes": disputes}
 
 
 # PHASE 4 STEP 9
