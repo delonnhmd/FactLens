@@ -19,6 +19,7 @@
 // PHASE 5 STEP 6
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
+import { getBackendUrl } from "../constants/apiConfig";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
@@ -1613,6 +1614,36 @@ export async function fetchClaimById(id: string): Promise<ClaimResult> {
   };
 }
 
+// PHASE 6 STEP 1 — Fire-and-forget: ask the backend to embed a new claim.
+// WHY fire-and-forget: embeddings need the server-only OpenAI key, and the user
+// should never wait on (or be blocked by) this. We intentionally do not await it
+// and swallow every error — a missing embedding is backfilled later.
+function requestClaimEmbedding(claimId: string): void {
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return;
+  }
+
+  void (async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      await fetch(`${backendUrl}/api/claims/embed`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ claim_id: claimId }),
+      });
+    } catch (embeddingError) {
+      console.log("[create claim] embedding request warning:", embeddingError);
+    }
+  })();
+}
+
 export async function createClaim(input: CreateClaimInput): Promise<ClaimResult> {
   // PHASE 3 STEP 29
   // PHASE 4 STEP 13
@@ -1682,6 +1713,9 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
       error: "Claim was saved, but Supabase did not return a claim id.",
     };
   }
+
+  // PHASE 6 STEP 1 — kick off embedding generation without blocking the post.
+  requestClaimEmbedding(insertedClaimId);
 
   const shareUrl = generateClaimShareUrl(insertedClaimId);
   const mediaUpdatePayload: Record<string, unknown> = {
@@ -1772,6 +1806,11 @@ export async function updateClaim(id: string, updates: ClaimUpdates): Promise<Cl
       claim: null,
       error: getClaimServiceErrorMessage(error.message, "save"),
     };
+  }
+
+  // PHASE 6 STEP 1 — refresh the embedding when the claim's text actually changed.
+  if (updates.title !== undefined || updates.description !== undefined) {
+    requestClaimEmbedding(id);
   }
 
   const [rowWithProfile] = await mergeAuthorProfilesIntoRows(data ? [data as ClaimRow] : []);
