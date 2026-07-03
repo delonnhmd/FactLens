@@ -2,6 +2,11 @@
 // PHASE 3 STEP 28
 // PHASE 5 STEP 5 PRE-LAUNCH
 // PHASE 5 STEP 6
+// PHASE 6 STEP 4 — topic cluster awareness (additive blocks only).
+// Frontend changes: JS-only, no native modules changed, no app.json changed.
+// Deploy with: eas update --channel preview
+// Do NOT run eas build — Apple review is in progress.
+// Backend changes deploy to Render independently.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
@@ -21,6 +26,9 @@ import {
   type PickedOptimizedImage,
 } from "../../services/imageUploadService";
 import { analyzeClaimDraft } from "../../utils/claimQuality";
+// PHASE 6 STEP 4 (NEW)
+import { useDebounce } from "../../hooks/useDebounce";
+import { checkTopicClusterForDraft, type TopicClusterInfo } from "../../services/topicService";
 import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
@@ -66,6 +74,14 @@ export default function CreateScreen() {
   const [profileGateError, setProfileGateError] = useState("");
   const [profileGateMessage, setProfileGateMessage] = useState("");
   const profileAutoFixAttempted = useRef(false);
+  // PHASE 6 STEP 4 (NEW): topic cluster awareness — informational only, never
+  // blocks submit or changes validation. NOTE: the spec's "titleAiCheck" does
+  // not exist in this screen; the backend's pre-save check endpoint
+  // (/api/claims/check-duplicate, which now also returns topic_cluster) is
+  // called here with a debounced title instead.
+  const [topicCluster, setTopicCluster] = useState<TopicClusterInfo | null>(null);
+  const [topicClusterDismissed, setTopicClusterDismissed] = useState(false);
+  const debouncedTopicTitle = useDebounce(title, 800);
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
@@ -77,6 +93,34 @@ export default function CreateScreen() {
     [title, description, sourceUrl, category],
   );
   const showClaimQualityBox = Boolean(title.trim() || description.trim() || sourceUrl.trim());
+  // PHASE 6 STEP 4 (NEW): look up the nearest topic cluster once the user
+  // pauses typing a meaningful title. Fire-and-forget; failures show nothing.
+  // Only the debounced title feeds the lookup (not the description) so the
+  // check doesn't re-fire on every description keystroke.
+  useEffect(() => {
+    const trimmedTopicTitle = debouncedTopicTitle.trim();
+
+    if (trimmedTopicTitle.length < 15) {
+      setTopicCluster(null);
+      setTopicClusterDismissed(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTopicClusterDismissed(false);
+
+    void (async () => {
+      const cluster = await checkTopicClusterForDraft(trimmedTopicTitle, "");
+
+      if (!cancelled) {
+        setTopicCluster(cluster);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedTopicTitle]);
   // PHASE 3 STEP 8
   const trimmedVideoUrl = videoUrl.trim();
   const normalizedVideoUrl = normalizeUrl(videoUrl);
@@ -500,6 +544,9 @@ export default function CreateScreen() {
             <ClaimQualityBox
               analysis={claimQuality}
               onUseSuggestedTitle={(rewrittenTitle) => updateField("title", rewrittenTitle)}
+              // PHASE 6 STEP 4 (NEW): informational topic card, dismissible.
+              topicCluster={topicClusterDismissed ? null : topicCluster}
+              onDismissTopicCluster={() => setTopicClusterDismissed(true)}
             />
           ) : null}
 

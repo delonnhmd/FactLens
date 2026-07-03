@@ -20,7 +20,7 @@ import os
 import re
 import sys
 from io import BytesIO
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 from time import monotonic
@@ -52,6 +52,18 @@ try:
         validate_citation,
         verify_citation_exists,
     )
+    # PHASE 6 STEP 3 — AI SEO tagging (NEW)
+    from services.seo_service import (
+        fetch_latest_claim_seo,
+        generate_claim_seo,
+    )
+    # PHASE 6 STEP 4 — Topic clustering (NEW)
+    from services.topic_cluster_service import (
+        CLUSTER_MATCH_THRESHOLD,
+        fetch_topic_row,
+        find_or_create_topic_cluster,
+        update_cluster_stats,
+    )
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
@@ -68,6 +80,18 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         score_citation_source,
         validate_citation,
         verify_citation_exists,
+    )
+    # PHASE 6 STEP 3 — AI SEO tagging (NEW)
+    from backend.services.seo_service import (
+        fetch_latest_claim_seo,
+        generate_claim_seo,
+    )
+    # PHASE 6 STEP 4 — Topic clustering (NEW)
+    from backend.services.topic_cluster_service import (
+        CLUSTER_MATCH_THRESHOLD,
+        fetch_topic_row,
+        find_or_create_topic_cluster,
+        update_cluster_stats,
     )
 
 
@@ -2152,6 +2176,9 @@ class AiPrecheckResponse(BaseModel):
     red_flags: list[str] | None = None
     ai_summary: str | None = None
     ai_status: AiStatus | None = None
+    # PHASE 6 STEP 3 — natural-truth classification (NEW, optional)
+    naturally_true_category: str | None = None
+    verdict_signal: str | None = None
     error: str | None = None
     # PHASE 4 STEP 5B
     details: str | None = None
@@ -4838,6 +4865,24 @@ def profile_reputation_events(request: Request, limit: int = 50):
 # PHASE 5 STEP 4
 @app.delete("/account")
 def delete_account(request: Request):
+    """Account deletion = anonymization, never destruction.
+
+    GDPR Article 17 / CCPA: personal data erased, public contributions
+    preserved as legitimate public interest record per Article 17(3)(d).
+    Claims, votes, and evidence keep their foreign keys to the (anonymized)
+    profile row; only PII is scrubbed. The profile row itself is never
+    deleted, so no cascade toward claims can ever fire.
+
+    PHASE 6 STEP 3 inspection notes (behavior unchanged, documented):
+    - PII scrubbed on profiles: username, display_name, avatar_url, bio,
+      public_profile_slug (profile_visibility forced private). email is NOT a
+      profiles column — it lives in auth.users and is scrubbed via the GoTrue
+      admin API below. No other PII columns exist on profiles (remaining
+      columns are ids, timestamps, and reputation/trust metrics, which are
+      intentionally preserved).
+    - Kept untouched: id, created_at, reputation/accuracy scores, vote
+      history, claim authorship foreign keys.
+    """
     authenticated_user_id = get_authenticated_user_id(request)
     supabase = get_supabase_client()
     deleted_username = f"deleted_{authenticated_user_id.replace('-', '')[-8:]}"
@@ -4867,7 +4912,20 @@ def delete_account(request: Request):
     if not result.data:
         raise HTTPException(status_code=404, detail="Account profile not found.")
 
-    return {"ok": True, "mode": "anonymized"}
+    # PHASE 6 STEP 3 (NEW, additive): scrub auth-level PII and invalidate all
+    # active sessions. Non-fatal by design — the profile anonymization above
+    # already succeeded and must not be rolled back by an auth API hiccup.
+    try:
+        scrub_auth_user_and_sign_out(authenticated_user_id)
+    except Exception as error:
+        print("[account delete] auth scrub failed (non-fatal):", str(error), flush=True)
+
+    # Existing keys unchanged for current clients; message added additively.
+    return {
+        "ok": True,
+        "mode": "anonymized",
+        "message": "Account deleted. Your contributions remain as part of the public record.",
+    }
 
 
 # PHASE 5 STEP 2
@@ -5411,6 +5469,11 @@ def build_claim_ai_update_payload(analysis: dict) -> dict:
         "source_count": source_count,
         "red_flags": normalize_red_flags(analysis.get("red_flags")),
         "ai_summary": analysis["ai_summary"],
+        # PHASE 6 STEP 3 — natural-truth classification, stored alongside
+        # ai_status on claims (nullable; fallback/error paths yield None).
+        # Requires migration 036 before deploy.
+        "naturally_true_category": analysis.get("naturally_true_category"),
+        "verdict_signal": analysis.get("verdict_signal"),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -5510,7 +5573,7 @@ def update_claim_ai_fields(claim_id: str, ai_result: dict, endpoint_label: str) 
 
         fetch_result = (
             supabase.table("claims")
-            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, source_read_status, source_page_title, source_supports_claim, source_support_summary, evidence_used_count, red_flags, ai_summary, source_count, updated_at")
+            .select("id, claim_type, ai_status, ai_confidence, source_quality, source_domain, source_score, source_reason, source_read_status, source_page_title, source_supports_claim, source_support_summary, evidence_used_count, red_flags, ai_summary, source_count, naturally_true_category, verdict_signal, updated_at")
             .eq("id", claim_id)
             .execute()
         )
@@ -5642,6 +5705,9 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "red_flags": red_flags,
         "ai_summary": updated_claim.get("ai_summary"),
         "source_count": updated_claim.get("source_count"),
+        # PHASE 6 STEP 3
+        "naturally_true_category": updated_claim.get("naturally_true_category"),
+        "verdict_signal": updated_claim.get("verdict_signal"),
         "updated_at": updated_claim.get("updated_at"),
     }
 
@@ -5667,6 +5733,9 @@ def build_ai_precheck_response(claim_id: str, update_result: dict) -> dict:
         "red_flags": red_flags,
         "ai_summary": updated_claim.get("ai_summary"),
         "ai_status": updated_claim.get("ai_status"),
+        # PHASE 6 STEP 3
+        "naturally_true_category": updated_claim.get("naturally_true_category"),
+        "verdict_signal": updated_claim.get("verdict_signal"),
         "error": None,
         "details": None,
         "hint": None,
@@ -5761,6 +5830,25 @@ def api_claims_embed(payload: ClaimEmbedRequest, request: Request):
         print(f"[claims/embed] failure: {error}", flush=True)
         return {"ok": False}
 
+    # TOPIC CLUSTER — additive, never blocks claim creation (PHASE 6 STEP 4).
+    # INSPECTION NOTE: there is no backend claim-creation endpoint — claims are
+    # inserted client-side (services/claimService.ts createClaim), and this
+    # fire-and-forget endpoint is the client's follow-up call right after the
+    # INSERT succeeds. That makes it the claim-creation hook. It also just
+    # stored the claim's embedding, which find_or_create_topic_cluster reuses
+    # instead of generating a second one. Response value is unchanged.
+    try:
+        cluster_claim = fetch_claim_row(claim_id)
+        if cluster_claim and not cluster_claim.get("topic_cluster_id"):
+            find_or_create_topic_cluster(
+                claim_id=claim_id,
+                title=str(cluster_claim.get("title") or ""),
+                description=str(cluster_claim.get("description") or ""),
+                category=str(cluster_claim.get("category") or ""),
+            )
+    except Exception as cluster_error:
+        print(f"[topic_cluster] non-blocking error: {cluster_error}", flush=True)
+
     return {"ok": stored}
 
 
@@ -5793,7 +5881,9 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
 
     if embedding is None:
         # Fail open: no embedding -> no suggestions, but posting is never blocked.
-        return {"duplicates": []}
+        # PHASE 6 STEP 4: topic_cluster is an additive key (always present, may
+        # be null) so clients can rely on its shape.
+        return {"duplicates": [], "topic_cluster": None}
 
     try:
         supabase = get_supabase_client()
@@ -5809,7 +5899,7 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
         candidates = response.data or []
     except Exception as error:
         print(f"[check-duplicate] vector search failed: {error}", flush=True)
-        return {"duplicates": []}
+        return {"duplicates": [], "topic_cluster": None}
 
     duplicates = []
 
@@ -5838,7 +5928,36 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
             }
         )
 
-    return {"duplicates": duplicates}
+    # PHASE 6 STEP 4 — TOPIC CLUSTER info (additive field, null if no cluster).
+    # INSPECTION NOTE: the spec references /api/claims/check-title, which does
+    # not exist in this codebase; this endpoint is its equivalent (the pre-save
+    # title/description check with an embedding already in hand). Reuses that
+    # embedding — no second OpenAI call.
+    topic_cluster = None
+    try:
+        cluster_response = get_supabase_client().rpc(
+            "match_claim_topics",
+            {
+                "query_embedding": embedding,
+                "match_threshold": CLUSTER_MATCH_THRESHOLD,
+                "match_count": 1,
+            },
+        ).execute()
+        cluster_rows = cluster_response.data or []
+
+        if cluster_rows:
+            cluster_row = cluster_rows[0]
+            topic_cluster = {
+                "topic_cluster_id": str(cluster_row.get("id") or ""),
+                "topic_label": str(cluster_row.get("topic_label") or ""),
+                "claim_count": int(cluster_row.get("claim_count") or 0),
+                "cluster_verdict": str(cluster_row.get("cluster_verdict") or "INSUFFICIENT_DATA"),
+                "total_vote_count": int(cluster_row.get("total_vote_count") or 0),
+            }
+    except Exception as cluster_error:
+        print(f"[check-duplicate] topic cluster lookup failed: {cluster_error}", flush=True)
+
+    return {"duplicates": duplicates, "topic_cluster": topic_cluster}
 
 
 # PHASE 6 STEP 2 — Offline reference citations.
@@ -6075,6 +6194,25 @@ def ai_precheck(payload: AiPrecheckRequest, request: Request):
         return build_safe_ai_precheck_failure(payload.claim_id)
 
     print("[ai/precheck] Supabase update success", flush=True)
+
+    # PHASE 6 STEP 3 — SEO metadata trigger (NEW, additive). Claims are
+    # created client-side (services/claimService.ts), and /ai/precheck is the
+    # backend call that fires right after creation, so the 'creation' SEO
+    # version is generated here. Synchronous because the codebase has no
+    # fire-and-forget pattern; generate_claim_seo never raises, so the
+    # existing precheck response is never blocked or altered by SEO failures.
+    try:
+        generate_claim_seo(
+            claim_id=payload.claim_id,
+            title=payload.title,
+            description=payload.description,
+            category=payload.category,
+            verdict=None,
+            version="creation",
+        )
+    except Exception as seo_error:  # Defensive belt-and-suspenders.
+        print("[ai/precheck] SEO generation failed (non-fatal):", str(seo_error), flush=True)
+
     return build_ai_precheck_response(payload.claim_id, update_result)
 
 
@@ -6154,3 +6292,439 @@ def retry_ai_precheck(payload: AiPrecheckRetryRequest, request: Request):
             **error_analysis,
             "error": "AI pre-check failed. Please retry.",
         }
+
+
+# ============================================================
+# PHASE 6 STEP 3 — NEW endpoints (additive; nothing above changed)
+# ============================================================
+
+
+def parse_supabase_timestamp(value: Any) -> datetime | None:
+    """Parse a Supabase timestamptz string into an aware UTC datetime."""
+    text = str(value or "").strip()
+
+    if not text:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed
+
+
+# PHASE 6 STEP 3 — FEATURE 1: claim deletion, 3-hour window.
+@app.delete("/api/claims/{claim_id}")
+def delete_own_claim(claim_id: str, request: Request):
+    """Author-only claim deletion within 3 hours of posting.
+
+    After 3 hours OR after finalization (whichever comes first) the claim is
+    permanent — no one can delete it through this endpoint, admins included
+    (the separate POST /admin/claims/delete moderation path is unchanged).
+
+    Inspection notes:
+    - "Finalized" in this codebase is claims.verdict_calculated_at (set by
+      finalize_expired_claim / claimService.ts), so it plays the spec's
+      finalized_at role; no new column was added.
+    - Existing deletions are HARD deletes (admin endpoint and the client's
+      claimService.deleteClaim); matched exactly. Child rows (votes,
+      evidence, reports, mention_tags, claim_seo) cascade in the DB.
+
+    Frontend should show a countdown timer on the user's own claims for the
+    first 3 hours. After 3 hours or finalization, hide the delete option
+    entirely.
+    """
+    normalized_claim_id = claim_id.strip()
+
+    if not is_uuid(normalized_claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    authenticated_user_id = get_authenticated_user_id(request)
+    claim = fetch_claim_row(normalized_claim_id)
+
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    # Ownership check — same pattern as the RLS policy (auth.uid() = author_id).
+    if str(claim.get("author_id") or "") != authenticated_user_id:
+        raise HTTPException(status_code=403, detail="You can only remove your own claims.")
+
+    if claim.get("verdict_calculated_at") is not None:
+        raise HTTPException(status_code=403, detail="Claim is finalized and permanent.")
+
+    created_at = parse_supabase_timestamp(claim.get("created_at"))
+
+    # An unreadable created_at means the window cannot be proven still open,
+    # so the claim is treated as permanent (fail closed).
+    if created_at is None:
+        raise HTTPException(status_code=403, detail="Claim can only be removed within 3 hours of posting.")
+
+    age = datetime.now(timezone.utc) - created_at
+
+    if age > timedelta(hours=3):
+        raise HTTPException(status_code=403, detail="Claim can only be removed within 3 hours of posting.")
+
+    # Hard delete — matches the existing admin deletion behavior exactly;
+    # the 3-hour window above is the guard.
+    try:
+        supabase = get_supabase_client()
+        supabase.table("claims").delete().eq("id", normalized_claim_id).execute()
+    except Exception as error:
+        print("[claims delete] failed:", normalized_claim_id, str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not remove the claim right now.")
+
+    print("[claims delete] removed claim:", normalized_claim_id, "by:", authenticated_user_id, flush=True)
+    return {"ok": True, "message": "Claim removed."}
+
+
+# PHASE 6 STEP 3 — FEATURE 2: auth-level PII scrub + session invalidation,
+# called from DELETE /account. Follows the existing GoTrue admin REST
+# pattern (see fetch_auth_users_for_username_check): there is no stored
+# session table in this codebase — auth is stateless Supabase JWTs — so
+# "invalidate all sessions" means revoking every refresh token via the
+# admin logout endpoint; outstanding access tokens then lapse at expiry.
+def scrub_auth_user_and_sign_out(user_id: str) -> None:
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    service_role_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+    if not supabase_url or not service_role_key:
+        raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY on backend.")
+
+    headers = {
+        "apikey": service_role_key,
+        "authorization": f"Bearer {service_role_key}",
+        "content-type": "application/json",
+    }
+    encoded_user_id = quote(str(user_id), safe="")
+
+    # a. Replace the auth email with a non-deliverable placeholder and clear
+    #    metadata (username/display name copies live there). profiles has no
+    #    email column, so this is the only place email exists.
+    update_body = json.dumps({
+        "email": f"deleted+{str(user_id).replace('-', '')[:16]}@deleted.invalid",
+        "user_metadata": {},
+    }).encode("utf-8")
+    update_request = UrlRequest(
+        f"{supabase_url}/auth/v1/admin/users/{encoded_user_id}",
+        data=update_body,
+        headers=headers,
+        method="PUT",
+    )
+
+    with urlopen(update_request, timeout=10):
+        pass
+
+    # b. Revoke all refresh tokens for this user (global sign-out).
+    logout_request = UrlRequest(
+        f"{supabase_url}/auth/v1/admin/users/{encoded_user_id}/logout",
+        data=b"",
+        headers=headers,
+        method="POST",
+    )
+
+    with urlopen(logout_request, timeout=10):
+        pass
+
+    print("[account delete] auth PII scrubbed and sessions revoked:", user_id, flush=True)
+
+
+# PHASE 6 STEP 3 — FEATURE 3: SEO metadata endpoint.
+def get_claim_final_verdict_label(claim: dict) -> str | None:
+    """Human-readable verdict once a claim is finalized, else None."""
+    if not claim.get("verdict_calculated_at"):
+        return None
+
+    status = str(claim.get("status") or "").strip().upper()
+    labels = {
+        "COMMUNITY_TRUE": "True",
+        "COMMUNITY_FAKE": "Fake",
+        "NEEDS_MORE_EVIDENCE": "Unverified - needs more evidence",
+    }
+    return labels.get(status, status or None)
+
+
+@app.get("/api/claims/{claim_id}/seo")
+def api_claim_seo(claim_id: str):
+    """Public SEO metadata for a claim (no auth — crawlers must reach it).
+
+    Returns the latest claim_seo row: the 'finalization' version when the
+    claim has finalized, otherwise the 'creation' version.
+
+    Finalization trigger note: claims finalize client-side
+    (services/claimService.ts finalizeExpiredClaim / the DB RPC), so there is
+    no backend code path that sets verdict_calculated_at to hook into.
+    Instead the 'finalization' SEO version is generated lazily on first fetch
+    after finalization — same net effect (verdict-aware SEO exists once the
+    verdict is public), no change to the existing finalize flow. The
+    'creation' version is likewise backfilled here if the /ai/precheck
+    trigger never ran for an old claim.
+    """
+    normalized_claim_id = claim_id.strip()
+
+    if not is_uuid(normalized_claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    claim = fetch_claim_row(normalized_claim_id)
+
+    if not claim or claim.get("hidden"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    seo_row = fetch_latest_claim_seo(normalized_claim_id)
+    final_verdict = get_claim_final_verdict_label(claim)
+    needs_finalization_version = final_verdict is not None and (
+        seo_row is None or seo_row.get("version") != "finalization"
+    )
+
+    if needs_finalization_version or seo_row is None:
+        generate_claim_seo(
+            claim_id=normalized_claim_id,
+            title=str(claim.get("title") or ""),
+            description=str(claim.get("description") or ""),
+            category=str(claim.get("category") or ""),
+            verdict=final_verdict,
+            version="finalization" if needs_finalization_version else "creation",
+        )
+        seo_row = fetch_latest_claim_seo(normalized_claim_id)
+
+    if seo_row is None:
+        raise HTTPException(status_code=404, detail="SEO metadata is not available for this claim yet.")
+
+    return {"ok": True, "claim_id": normalized_claim_id, "seo": seo_row}
+
+
+# ============================================================
+# PHASE 6 STEP 4 — Topic clustering endpoints (NEW, additive)
+# ============================================================
+#
+# VOTE-HOOK NOTE (Feature: cluster stats on vote): the spec asks to wire
+# update_cluster_stats into "the vote recording endpoint in main.py". No such
+# endpoint exists — votes are inserted client-side straight into Supabase
+# (services/voteService.ts -> supabase.from("votes").insert), with DB triggers
+# maintaining the per-claim totals. Cluster stats are therefore refreshed
+# LAZILY on read below (search results and the topic detail endpoint), which
+# keeps them eventually consistent without touching the existing vote flow.
+
+TOPIC_SEARCH_SIMILARITY_THRESHOLD = 0.65
+TOPIC_SEARCH_CLUSTER_LIMIT = 10
+TOPIC_SEARCH_PREVIEW_CLAIMS = 3
+TOPIC_SEARCH_INDIVIDUAL_LIMIT = 20
+TOPIC_CLAIMS_DEFAULT_LIMIT = 20
+TOPIC_CLAIMS_MAX_LIMIT = 50
+
+# Public author-card fields, mirroring what the client's own profile join
+# selects (services/claimService.ts CLAIM_PROFILE_SAFE_SELECT-style subset) so
+# claim rows returned here render authors through the existing mapper.
+TOPIC_AUTHOR_PROFILE_SELECT = (
+    "id,username,display_name,avatar_url,verified,reputation_score,trust_score,"
+    "rank_title,highest_rank_achieved,badge_list,is_deleted,deleted_at,created_at"
+)
+
+
+def attach_author_profiles_to_claim_rows(rows: list) -> list:
+    """Embed each claim row's author profile under row['profiles'].
+
+    The frontend claim mapper (claimService.ts mapAuthor/getEmbeddedProfile)
+    reads the author from row.profiles; the client normally merges this itself,
+    so backend-served claim lists must do the same for authors to render.
+    Fails soft: rows come back unmodified if the profile fetch errors."""
+    author_ids = sorted({str(row.get("author_id") or "") for row in rows if row.get("author_id")})
+
+    if not author_ids:
+        return rows
+
+    try:
+        profiles_response = (
+            get_supabase_client()
+            .table("profiles")
+            .select(TOPIC_AUTHOR_PROFILE_SELECT)
+            .in_("id", author_ids)
+            .execute()
+        )
+        profiles_by_id = {str(profile.get("id")): profile for profile in (profiles_response.data or [])}
+    except Exception as error:
+        print(f"[topics] author profile fetch failed: {error}", flush=True)
+        return rows
+
+    for row in rows:
+        row["profiles"] = profiles_by_id.get(str(row.get("author_id") or ""))
+
+    return rows
+
+
+def strip_claim_row_for_api(row: dict) -> dict:
+    """Drop the raw embedding vector — large and useless to clients."""
+    safe_row = dict(row)
+    safe_row.pop("embedding", None)
+    return safe_row
+
+
+@app.get("/api/topics/search")
+def api_topics_search(request: Request, q: str = ""):
+    """Two-layer public search: topic clusters first, individual claims after.
+
+    Public (no auth) — Google must be able to index topic cluster results.
+    Layer 1: clusters by embedding similarity to the query (> 0.65, top 10),
+             each with up to 3 preview claims ordered by vote count.
+    Layer 2: text-search fallback over claims with NO cluster.
+             INSPECTION NOTE: the existing search (claimService.ts
+             searchClaimsPage) is a client-side substring filter over
+             title/description/source_url/category — there is no backend text
+             search to reuse, so this is its server-side equivalent (ilike over
+             title/description), returning raw claim rows in the same shape the
+             existing claim list endpoints/queries produce.
+    """
+    enforce_rate_limit(request, "topics_search", SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    query = (q or "").strip()
+
+    if len(query) < 2:
+        return {"topics": [], "individual_claims": []}
+
+    topics = []
+    embedding = generate_claim_embedding(title=query, description="")
+
+    if embedding is not None:
+        try:
+            supabase = get_supabase_client()
+            match_response = supabase.rpc(
+                "match_claim_topics",
+                {
+                    "query_embedding": embedding,
+                    "match_threshold": TOPIC_SEARCH_SIMILARITY_THRESHOLD,
+                    "match_count": TOPIC_SEARCH_CLUSTER_LIMIT,
+                },
+            ).execute()
+            matched_clusters = match_response.data or []
+
+            for cluster in matched_clusters:
+                cluster_id = str(cluster.get("id") or "")
+                # Lazy stats refresh (see VOTE-HOOK NOTE above), then re-read.
+                update_cluster_stats(cluster_id)
+                topic_row = fetch_topic_row(cluster_id)
+
+                if not topic_row:
+                    continue
+
+                preview_rows = []
+                try:
+                    preview_response = (
+                        supabase.table("claims")
+                        .select("id,title,author_id,votes_true,votes_fake,total_votes,status")
+                        .eq("topic_cluster_id", cluster_id)
+                        .order("total_votes", desc=True)
+                        .limit(TOPIC_SEARCH_PREVIEW_CLAIMS)
+                        .execute()
+                    )
+                    preview_rows = attach_author_profiles_to_claim_rows(preview_response.data or [])
+                except Exception as preview_error:
+                    print(f"[topics/search] preview fetch failed: {preview_error}", flush=True)
+
+                preview_claims = []
+                for preview in preview_rows:
+                    profile = preview.get("profiles") or {}
+                    is_deleted_author = bool(profile.get("is_deleted"))
+                    preview_claims.append(
+                        {
+                            "claim_id": str(preview.get("id") or ""),
+                            "title": str(preview.get("title") or ""),
+                            "author_display_name": (
+                                "Deleted User"
+                                if is_deleted_author
+                                else str(profile.get("display_name") or profile.get("username") or "Verifact contributor")
+                            ),
+                            "true_votes": int(preview.get("votes_true") or 0),
+                            "fake_votes": int(preview.get("votes_fake") or 0),
+                            "verdict_status": str(preview.get("status") or ""),
+                        }
+                    )
+
+                topics.append(
+                    {
+                        "topic_cluster_id": cluster_id,
+                        "topic_label": str(topic_row.get("topic_label") or ""),
+                        "slug": str(topic_row.get("slug") or ""),
+                        "cluster_verdict": str(topic_row.get("cluster_verdict") or "INSUFFICIENT_DATA"),
+                        "total_true_votes": int(topic_row.get("total_true_votes") or 0),
+                        "total_fake_votes": int(topic_row.get("total_fake_votes") or 0),
+                        "total_vote_count": int(topic_row.get("total_vote_count") or 0),
+                        "claim_count": int(topic_row.get("claim_count") or 0),
+                        "preview_claims": preview_claims,
+                    }
+                )
+        except Exception as error:
+            print(f"[topics/search] cluster search failed: {error}", flush=True)
+            topics = []
+
+    individual_claims = []
+    try:
+        # PostgREST or= syntax breaks on commas/parens inside the pattern, so
+        # strip them from the user query before building the ilike filter.
+        safe_pattern = re.sub(r"[,()]+", " ", query).strip()
+
+        if safe_pattern:
+            individual_response = (
+                get_supabase_client()
+                .table("claims")
+                .select("*")
+                .is_("topic_cluster_id", "null")
+                .or_(f"title.ilike.%{safe_pattern}%,description.ilike.%{safe_pattern}%")
+                .order("created_at", desc=True)
+                .limit(TOPIC_SEARCH_INDIVIDUAL_LIMIT)
+                .execute()
+            )
+            individual_rows = attach_author_profiles_to_claim_rows(individual_response.data or [])
+            individual_claims = [strip_claim_row_for_api(row) for row in individual_rows]
+    except Exception as error:
+        print(f"[topics/search] individual claim search failed: {error}", flush=True)
+        individual_claims = []
+
+    return {"topics": topics, "individual_claims": individual_claims}
+
+
+@app.get("/api/topics/{cluster_id}/claims")
+def api_topic_claims(cluster_id: str, request: Request, limit: int = TOPIC_CLAIMS_DEFAULT_LIMIT, offset: int = 0):
+    """All claims in a topic cluster, paginated. Public (no auth) — Google
+    must be able to index topic cluster pages."""
+    enforce_rate_limit(request, "topic_claims", SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    normalized_cluster_id = cluster_id.strip()
+
+    if not is_uuid(normalized_cluster_id):
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    safe_limit = max(1, min(TOPIC_CLAIMS_MAX_LIMIT, int(limit or TOPIC_CLAIMS_DEFAULT_LIMIT)))
+    safe_offset = max(0, int(offset or 0))
+
+    # Lazy stats refresh BEFORE reading the topic row (see VOTE-HOOK NOTE):
+    # votes land client-side, so this read is where cluster totals catch up.
+    update_cluster_stats(normalized_cluster_id)
+    topic = fetch_topic_row(normalized_cluster_id)
+
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    try:
+        claims_response = (
+            get_supabase_client()
+            .table("claims")
+            .select("*", count="exact")
+            .eq("topic_cluster_id", normalized_cluster_id)
+            .order("created_at", desc=True)
+            .range(safe_offset, safe_offset + safe_limit - 1)
+            .execute()
+        )
+        claim_rows = attach_author_profiles_to_claim_rows(claims_response.data or [])
+        total = int(claims_response.count or len(claim_rows))
+    except Exception as error:
+        print(f"[topics/claims] fetch failed: {error}", flush=True)
+        raise HTTPException(status_code=500, detail="Could not load topic claims right now.")
+
+    return {
+        "topic": topic,
+        "claims": [strip_claim_row_for_api(row) for row in claim_rows],
+        "total": total,
+        "offset": safe_offset,
+        "limit": safe_limit,
+    }

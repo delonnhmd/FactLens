@@ -2,6 +2,11 @@
 // PHASE 3 STEP 27
 // PHASE 4 STEP 15
 // PHASE 5 STEP 5 PRE-LAUNCH
+// PHASE 6 STEP 4 — topic cluster cards in search (additive blocks only).
+// Frontend changes: JS-only, no native modules changed, no app.json changed.
+// Deploy with: eas update --channel preview
+// Do NOT run eas build — Apple review is in progress.
+// Backend changes deploy to Render independently.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -25,6 +30,8 @@ import { fetchUnreadNotificationCount } from "../../services/notificationService
 import { useAuth } from "../../context/AuthContext";
 import { useClaims } from "../../context/ClaimsContext";
 import { useDebounce } from "../../hooks/useDebounce";
+// PHASE 6 STEP 4 (NEW)
+import { searchTopics, type TopicSearchTopic } from "../../services/topicService";
 import { useAppTheme } from "../../hooks/useTheme";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
@@ -34,6 +41,24 @@ import type { Claim } from "../../types/claim";
 const categoryChips = ["All", ...claimCategories];
 // PHASE 3 STEP 11
 const HOME_PAGE_SIZE = 20;
+
+// PHASE 6 STEP 4 (NEW): display helpers for topic cluster verdict chips.
+function formatTopicVerdict(verdict: string): string {
+  if (verdict === "TRUE") return "Community Says True";
+  if (verdict === "FAKE") return "Community Says Fake";
+  if (verdict === "DISPUTED") return "Disputed";
+  return "Insufficient data";
+}
+
+function getTopicVerdictChipStyle(
+  verdict: string,
+  styles: ReturnType<typeof createStyles>,
+) {
+  if (verdict === "TRUE") return styles.topicVerdictTrue;
+  if (verdict === "FAKE") return styles.topicVerdictFake;
+  if (verdict === "DISPUTED") return styles.topicVerdictDisputed;
+  return styles.topicVerdictInsufficient;
+}
 
 function mergeClaimsById(currentClaims: Claim[], incomingClaims: Claim[]): Claim[] {
   const claimsById = new Map(currentClaims.map((claim) => [claim.id, claim]));
@@ -85,6 +110,9 @@ export default function HomeScreen() {
   const [feedError, setFeedError] = useState("");
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const debouncedQuery = useDebounce(query, 400);
+  // PHASE 6 STEP 4 (NEW): topic cluster layer for search. Empty array = the
+  // screen renders exactly as before (individual claims only).
+  const [topicResults, setTopicResults] = useState<TopicSearchTopic[]>([]);
   // PHASE 2 STEP 10
   const [refreshing, setRefreshing] = useState(false);
   // PHASE 4 STEP 15
@@ -173,6 +201,31 @@ export default function HomeScreen() {
   useEffect(() => {
     void refreshUnreadNotifications();
   }, [refreshUnreadNotifications]);
+
+  // PHASE 6 STEP 4 (NEW): fetch matching topic clusters when a search query is
+  // active. Fails soft to [] so existing search behavior is untouched.
+  useEffect(() => {
+    const trimmedQuery = debouncedQuery.trim();
+
+    if (trimmedQuery.length < 2) {
+      setTopicResults([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const topics = await searchTopics(trimmedQuery);
+
+      if (!cancelled) {
+        setTopicResults(topics);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery]);
 
   useFocusEffect(
     useCallback(() => {
@@ -295,6 +348,35 @@ export default function HomeScreen() {
           );
         })}
       </ScrollView>
+      {/* PHASE 6 STEP 4 (NEW): topic cluster cards ABOVE individual claims.
+          Empty topicResults = nothing rendered = screen behaves as before. */}
+      {debouncedQuery.trim().length >= 2 && topicResults.length > 0 ? (
+        <View style={styles.topicResultsBlock}>
+          <Text style={styles.topicResultsHeading}>Topics</Text>
+          {topicResults.map((topic) => (
+            <TouchableOpacity
+              key={topic.topic_cluster_id}
+              style={styles.topicCard}
+              activeOpacity={0.85}
+              onPress={() => router.push(`/topic/${topic.topic_cluster_id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Topic ${topic.topic_label}`}
+              accessibilityHint="Opens all claims in this topic"
+            >
+              <Text style={styles.topicCardLabel}>{topic.topic_label}</Text>
+              <View style={styles.topicCardMetaRow}>
+                <Text style={[styles.topicVerdictChip, getTopicVerdictChipStyle(topic.cluster_verdict, styles)]}>
+                  {formatTopicVerdict(topic.cluster_verdict)}
+                </Text>
+                <Text style={styles.topicCardMetaText}>
+                  {topic.total_vote_count} votes {"·"} {topic.claim_count}{" "}
+                  {topic.claim_count === 1 ? "claim" : "claims"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
       {claimPosted === "1" ? (
         <View style={styles.successBanner}>
           <Text style={styles.successText}>Claim posted.</Text>
@@ -537,6 +619,64 @@ function createStyles(theme: AppTheme) {
   footerLoader: {
     alignItems: "center",
     paddingVertical: theme.spacing.lg,
+  },
+  // PHASE 6 STEP 4 (NEW): topic cluster result cards.
+  topicResultsBlock: {
+    marginBottom: theme.spacing.md,
+  },
+  topicResultsHeading: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+    marginBottom: theme.spacing.sm,
+    textTransform: "uppercase",
+  },
+  topicCard: {
+    backgroundColor: theme.colors.banner,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  topicCardLabel: {
+    color: theme.colors.chipActiveText,
+    fontSize: theme.typography.body.fontSize,
+    fontWeight: "500",
+  },
+  topicCardMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  topicCardMetaText: {
+    color: theme.colors.bannerSubtitle,
+    fontSize: theme.typography.small.fontSize,
+  },
+  topicVerdictChip: {
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: "500",
+    overflow: "hidden",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  topicVerdictTrue: {
+    backgroundColor: theme.colors.successBg,
+    color: theme.colors.success,
+  },
+  topicVerdictFake: {
+    backgroundColor: theme.colors.dangerBg,
+    color: theme.colors.danger,
+  },
+  topicVerdictDisputed: {
+    backgroundColor: theme.colors.warningBg,
+    color: theme.colors.warningText,
+  },
+  topicVerdictInsufficient: {
+    backgroundColor: theme.colors.chipInactiveBg,
+    color: theme.colors.chipInactiveText,
   },
   });
 }

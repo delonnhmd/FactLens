@@ -50,6 +50,10 @@ class VerifactAiPrecheckResult(BaseModel):
     red_flags: list[str]
     ai_summary: str
     ai_status: AiStatus
+    # PHASE 6 STEP 3 — natural-truth classification (NEW, optional so older
+    # responses and fallback paths keep parsing unchanged).
+    naturally_true_category: str | None = None
+    verdict_signal: str | None = None
 
 
 # PHASE 4 STEP 5
@@ -93,6 +97,16 @@ SUSPICIOUS_TERMS = [
 
 CLAIM_TYPES = {"FACTUAL", "OPINION", "SATIRE", "QUESTION", "PROMOTION", "UNCLEAR"}
 AI_STATUSES = {"LOW_RISK", "MEDIUM_RISK", "HIGH_RISK", "NEEDS_MORE_EVIDENCE", "NOT_FACT_CHECKABLE", "ERROR"}
+# PHASE 6 STEP 3 — natural-truth classification (NEW, additive).
+NATURALLY_TRUE_CATEGORIES = {
+    "MATHEMATICAL",
+    "SCIENTIFIC_CONSENSUS",
+    "HISTORICAL_RECORD",
+    "VALUES_DISPUTE",
+    "CONTESTED_SCIENCE",
+    "FACTUAL_CLAIM",
+}
+VERDICT_SIGNALS = {"DISPUTED"}
 SOURCE_REVIEW_UNAVAILABLE_SUMMARY = (
     "We could not automatically read this source. Community review can still continue."
 )
@@ -468,6 +482,29 @@ def _normalize_analysis(raw_result: dict) -> dict:
     if ai_status == "NOT_FACT_CHECKABLE" and not red_flags:
         red_flags = [f"Claim type is {claim_type.lower()}, not a factual news claim"]
 
+    # PHASE 6 STEP 3 — natural-truth classification (NEW block, append-only).
+    # Validates the model's classification and enforces the hard rules even
+    # if the model forgets them. It is a signal only and never overrides a
+    # community verdict (it feeds ai_status, which is already advisory).
+    naturally_true_category = str(raw_result.get("naturally_true_category") or "").strip().upper() or None
+    if naturally_true_category not in NATURALLY_TRUE_CATEGORIES:
+        naturally_true_category = None
+
+    verdict_signal = str(raw_result.get("verdict_signal") or "").strip().upper() or None
+    if verdict_signal not in VERDICT_SIGNALS:
+        verdict_signal = None
+
+    if naturally_true_category == "VALUES_DISPUTE":
+        ai_status = "NOT_FACT_CHECKABLE"
+        verdict_signal = "DISPUTED"
+        if "values question" not in ai_summary.lower():
+            ai_summary = (
+                "This is a values question that Verifact does not rule on; the answer depends on "
+                "definitions, cultural context, or moral framework. " + ai_summary
+            ).strip()
+    elif naturally_true_category == "CONTESTED_SCIENCE":
+        verdict_signal = "DISPUTED"
+
     return {
         "claim_type": claim_type,
         "ai_confidence": ai_confidence,
@@ -479,6 +516,10 @@ def _normalize_analysis(raw_result: dict) -> dict:
         "red_flags": [str(flag) for flag in red_flags[:8]],
         "ai_summary": ai_summary[:500],
         "ai_status": ai_status,
+        # PHASE 6 STEP 3 — natural-truth classification (NEW keys; absent/None
+        # on fallback and error paths, which read via .get()).
+        "naturally_true_category": naturally_true_category,
+        "verdict_signal": verdict_signal,
     }
 
 
@@ -579,6 +620,23 @@ def _build_prompt(
         "Some community evidence items are offline print citations (reference_type of book, newspaper, journal, or document) with a structured citation object and citation_verified flag instead of a fetched web page. "
         "This is an offline print source. Check for anachronisms (publication predates the claimed event) and flag plausibility concerns in red_flags. Do not assume the cited content supports the claim. "
         "Treat citation_verified=true as confirming the source EXISTS, not that it supports the claim; citation_verified=false or null means existence is unconfirmed, so give it minimal weight. "
+        # PHASE 6 STEP 3 — natural-truth classification (append-only block).
+        "NATURAL TRUTH CLASSIFICATION: "
+        "Before verdict analysis, classify this claim on one axis. "
+        "Set naturally_true_category to exactly one of: "
+        "'MATHEMATICAL': arithmetic, logic, geometry facts. "
+        "'SCIENTIFIC_CONSENSUS': established peer-reviewed consensus with no serious academic dissent (e.g. vaccine efficacy, evolution, climate data). "
+        "'HISTORICAL_RECORD': verifiable dated events, official documents, legislative text. "
+        "'VALUES_DISPUTE': any claim where the answer depends on definitions, cultural context, or moral framework — including but not limited to gender identity, immigration policy, economic philosophy. "
+        "'CONTESTED_SCIENCE': peer-reviewed debate is active and ongoing. "
+        "'FACTUAL_CLAIM': specific verifiable assertion not in above categories. "
+        "Rules you must follow without exception: "
+        "VALUES_DISPUTE claims: set ai_status to NOT_FACT_CHECKABLE, set verdict_signal to DISPUTED, explain in ai_summary that this is a values question Verifact does not rule on. Do not attempt TRUE/FAKE. "
+        "MATHEMATICAL and HISTORICAL_RECORD: you may flag clear errors (1+1=3) with high confidence in red_flags. "
+        "SCIENTIFIC_CONSENSUS: flag claims contradicting consensus in red_flags with source citations. "
+        "CONTESTED_SCIENCE: flag as DISPUTED, note the debate. "
+        "Never use naturally_true_category to override a community verdict — it is a signal only. "
+        "Add naturally_true_category to your JSON response. "
         f"Verifact AI Teaching Library: {ai_library_json}"
     )
     user_prompt = (
