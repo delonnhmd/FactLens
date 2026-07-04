@@ -1,3 +1,7 @@
+// APPLE GUIDELINE 1.2 — "Block user" added next to the report flow (NEW)
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 // PHASE 1 STEP 4
 // PHASE 3 STEP 28
 // PHASE 3 STEP 32
@@ -318,6 +322,8 @@ export default function ClaimDetailScreen() {
     fetchReportsForClaim,
     reportClaim,
     refreshClaimVerdict,
+    // APPLE GUIDELINE 1.2 — user blocking (NEW)
+    blockUser,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -797,6 +803,34 @@ export default function ClaimDetailScreen() {
     } finally {
       setReportSubmitting(false);
     }
+  };
+
+  // APPLE GUIDELINE 1.2 — user blocking (NEW). Lives next to the report flow
+  // (same compact card). Navigates back first: the context filter removes
+  // this claim the instant the block lands, so staying here would strand the
+  // user on an empty detail screen.
+  const handleBlockAuthor = () => {
+    if (!claim) {
+      return;
+    }
+
+    Alert.alert(
+      `Block @${claim.authorUsername || "this user"}?`,
+      "You won't see their claims anymore. This also notifies Verifact moderation.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: () => {
+            router.back();
+            blockUser(claim.authorId, claim.id)
+              .then(() => Alert.alert("User blocked."))
+              .catch(() => Alert.alert("Could not block this user right now."));
+          },
+        },
+      ],
+    );
   };
 
   // PHASE 3 STEP 4
@@ -1323,6 +1357,23 @@ export default function ClaimDetailScreen() {
           ) : null}
           {reportError ? <Text style={styles.errorText}>{reportError}</Text> : null}
           {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
+          {/* APPLE GUIDELINE 1.2 — user blocking (NEW): same card as the
+              report flow; hidden on the user's own claims and when logged out. */}
+          {currentUser && currentUser.id !== claim.authorId ? (
+            <TouchableOpacity
+              style={styles.blockUserButton}
+              activeOpacity={0.8}
+              onPress={handleBlockAuthor}
+              accessibilityRole="button"
+              accessibilityLabel={`Block ${claim.authorUsername ? `@${claim.authorUsername}` : "this user"}`}
+              accessibilityHint="Removes this user's claims from your feed and notifies moderation"
+            >
+              <Ionicons name="ban-outline" size={14} color={appTheme.colors.danger} />
+              <Text style={styles.blockUserButtonText}>
+                Block {claim.authorUsername ? `@${claim.authorUsername}` : "user"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.card}>
@@ -2500,6 +2551,20 @@ function createStyles(theme: AppTheme) {
     width: "100%",
   },
   // PHASE 5 STEP 2
+  // APPLE GUIDELINE 1.2 — user blocking (NEW)
+  blockUserButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 8,
+    minHeight: 32,
+  },
+  blockUserButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
   reportEvidenceButton: {
     alignItems: "center",
     alignSelf: "flex-start",

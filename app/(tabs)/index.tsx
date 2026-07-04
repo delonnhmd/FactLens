@@ -3,6 +3,7 @@
 // PHASE 4 STEP 15
 // PHASE 5 STEP 5 PRE-LAUNCH
 // PHASE 6 STEP 4 — topic cluster cards in search (additive blocks only).
+// APPLE GUIDELINE 1.2 — blocked-author filter on visibleClaims (NEW).
 // Frontend changes: JS-only, no native modules changed, no app.json changed.
 // Deploy with: eas update --channel preview
 // Do NOT run eas build — Apple review is in progress.
@@ -97,6 +98,8 @@ export default function HomeScreen() {
     searchClaimsPage,
     refreshClaims,
     loadMoreClaims,
+    // APPLE GUIDELINE 1.2 — user blocking (NEW)
+    blockedUserIds,
   } = useClaims();
   // PHASE 2 STEP 8
   const [query, setQuery] = useState("");
@@ -132,8 +135,16 @@ export default function HomeScreen() {
 
   const visibleClaims = useMemo(() => {
     const baseClaims = filteredFeedActive ? feedClaims : claims;
-    return baseClaims.map((claim) => claims.find((currentClaim) => currentClaim.id === claim.id) ?? claim);
-  }, [claims, feedClaims, filteredFeedActive]);
+    return (
+      baseClaims
+        .map((claim) => claims.find((currentClaim) => currentClaim.id === claim.id) ?? claim)
+        // APPLE GUIDELINE 1.2 — user blocking (NEW): context claims are
+        // already filtered, but the category/search feed keeps a local copy
+        // (feedClaims) whose `?? claim` fallback would keep a just-blocked
+        // author visible. This one line makes blocking instant there too.
+        .filter((claim) => !blockedUserIds.includes(claim.authorId))
+    );
+  }, [blockedUserIds, claims, feedClaims, filteredFeedActive]);
 
   // PHASE 3 STEP 11
   const loadFilteredClaims = useCallback(

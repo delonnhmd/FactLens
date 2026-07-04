@@ -1,3 +1,7 @@
+// APPLE GUIDELINE 1.2 — "Blocked users" row added to Account section (NEW)
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
@@ -165,6 +169,12 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Account" styles={styles}>
+          {/* APPLE GUIDELINE 1.2 — user blocking (NEW) */}
+          <SettingsLink
+            label="Blocked users"
+            onPress={() => router.push("/settings/blocked-users")}
+            styles={styles}
+          />
           <SettingsLink
             label={logoutLoading ? "Logging out..." : "Logout"}
             onPress={handleLogout}

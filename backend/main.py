@@ -2154,6 +2154,11 @@ class MentionTagsRequest(BaseModel):
     text: str = ""
 
 
+# APPLE GUIDELINE 1.2 — user blocking (NEW)
+class BlockUserRequest(BaseModel):
+    source_claim_id: str | None = None
+
+
 class AiPrecheckResponse(BaseModel):
     ok: bool
     claim_id: str
@@ -4928,6 +4933,197 @@ def delete_account(request: Request):
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# APPLE GUIDELINE 1.2 — USER BLOCKING + EULA ACCEPTANCE (NEW, additive)
+# Requires supabase/sql/038_user_blocks_eula.sql to be run first.
+# Auth follows get_authenticated_user_id (same as DELETE /account); all
+# writes use the service-role client (get_supabase_client), same as every
+# other endpoint in this file.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def insert_block_moderation_report(
+    supabase: Any,
+    blocker_id: str,
+    blocked_id: str,
+    source_claim_id: str | None,
+) -> None:
+    """Developer notification (Apple req. 3b): every block surfaces in the
+    same moderation view as reports (GET /admin/reports).
+
+    Inspection notes on why the row looks like this:
+    - reports.reason has a CHECK constraint (019_phase5_step2_launch_reports)
+      allowing only the fixed enum — a literal "User blocked" reason would be
+      rejected, so reason = HARASSMENT_OR_ABUSE and "User blocked" goes in
+      the note, which the admin view already displays.
+    - reports_one_target_check forces PROFILE-target rows to have
+      claim_id NULL, so the source claim id rides along in the note text
+      instead of the claim_id column.
+    - Non-fatal by design: the block row is the safety feature; a failed
+      notification row must not fail the block.
+    """
+    note = f"User blocked (blocked user {blocked_id})"
+
+    if source_claim_id:
+        note += f" — triggered from claim {source_claim_id}"
+
+    try:
+        supabase.table("reports").insert({
+            "user_id": blocker_id,
+            "target_type": "PROFILE",
+            "profile_id": blocked_id,
+            "claim_id": None,
+            "evidence_id": None,
+            "reason": "HARASSMENT_OR_ABUSE",
+            "note": note,
+            "status": "OPEN",
+        }).execute()
+    except Exception as error:
+        # Most likely reports_unique_profile_user: the blocker already
+        # reported this profile. The block itself succeeded; log and move on.
+        print(
+            "[block] moderation report row skipped:",
+            blocker_id, "->", blocked_id, str(error),
+            flush=True,
+        )
+
+
+@app.post("/api/users/{user_id}/block")
+def block_user(user_id: str, request: Request, payload: BlockUserRequest | None = None):
+    """Block a user. Idempotent — blocking an already-blocked user is 200."""
+    blocker_id = get_authenticated_user_id(request)
+    blocked_id = user_id.strip()
+
+    if not is_uuid(blocked_id):
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if blocked_id == blocker_id:
+        raise HTTPException(status_code=400, detail="You cannot block yourself.")
+
+    source_claim_id = (payload.source_claim_id or "").strip() if payload else ""
+
+    if source_claim_id and not is_uuid(source_claim_id):
+        source_claim_id = ""
+
+    supabase = get_supabase_client()
+
+    target_result = (
+        supabase.table("profiles").select("id").eq("id", blocked_id).limit(1).execute()
+    )
+
+    if not (target_result.data or []):
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    existing_result = (
+        supabase.table("user_blocks")
+        .select("id")
+        .eq("blocker_id", blocker_id)
+        .eq("blocked_id", blocked_id)
+        .limit(1)
+        .execute()
+    )
+
+    if existing_result.data:
+        # Already blocked — idempotent success, no duplicate moderation row.
+        return {"ok": True, "blocked_id": blocked_id}
+
+    try:
+        supabase.table("user_blocks").insert({
+            "blocker_id": blocker_id,
+            "blocked_id": blocked_id,
+            "source_claim_id": source_claim_id or None,
+        }).execute()
+    except Exception as error:
+        # Unique-violation race (double tap) still means "blocked" — treat
+        # as success; anything else is a real failure.
+        message = str(error)
+
+        if "user_blocks_blocker_id_blocked_id_key" not in message and "duplicate" not in message.lower():
+            print("[block] insert failed:", blocker_id, "->", blocked_id, message, flush=True)
+            raise HTTPException(status_code=500, detail="Could not block this user right now.")
+
+        return {"ok": True, "blocked_id": blocked_id}
+
+    insert_block_moderation_report(supabase, blocker_id, blocked_id, source_claim_id or None)
+    print("[block] user blocked:", blocker_id, "->", blocked_id, flush=True)
+    return {"ok": True, "blocked_id": blocked_id}
+
+
+@app.delete("/api/users/{user_id}/block")
+def unblock_user(user_id: str, request: Request):
+    """Unblock a user. Idempotent — unblocking a non-blocked user is 200."""
+    blocker_id = get_authenticated_user_id(request)
+    blocked_id = user_id.strip()
+
+    if not is_uuid(blocked_id):
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    try:
+        supabase = get_supabase_client()
+        (
+            supabase.table("user_blocks")
+            .delete()
+            .eq("blocker_id", blocker_id)
+            .eq("blocked_id", blocked_id)
+            .execute()
+        )
+    except Exception as error:
+        print("[block] delete failed:", blocker_id, "->", blocked_id, str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not unblock this user right now.")
+
+    return {"ok": True}
+
+
+@app.get("/api/users/me/blocks")
+def list_my_blocks(request: Request):
+    """Ids only — the frontend caches this list in ClaimsContext."""
+    blocker_id = get_authenticated_user_id(request)
+
+    try:
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("user_blocks")
+            .select("blocked_id")
+            .eq("blocker_id", blocker_id)
+            .execute()
+        )
+    except Exception as error:
+        print("[block] list failed:", blocker_id, str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not load blocked users right now.")
+
+    blocked_ids = [row.get("blocked_id") for row in (result.data or []) if row.get("blocked_id")]
+    return {"blocked_ids": blocked_ids}
+
+
+@app.post("/api/users/me/accept-terms")
+def accept_terms(request: Request):
+    """Record EULA acceptance (Apple req. 1). Fire-and-forget from the client.
+
+    Missing profile row is not an error: on brand-new signups the profile can
+    be created after email verification (ensure_backend_profile), so a no-op
+    update here just means the timestamp lands on the next login instead.
+    """
+    authenticated_user_id = get_authenticated_user_id(request)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    try:
+        supabase = get_supabase_client()
+        result = (
+            supabase.table("profiles")
+            .update({"terms_accepted_at": now_iso})
+            .eq("id", authenticated_user_id)
+            .execute()
+        )
+    except Exception as error:
+        print("[terms] accept failed:", authenticated_user_id, str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not record terms acceptance right now.")
+
+    if not (result.data or []):
+        print("[terms] no profile row yet for:", authenticated_user_id, flush=True)
+
+    return {"ok": True}
+
+
 # PHASE 5 STEP 2
 @app.get("/admin/reports")
 def admin_list_reports(request: Request, status: str = "OPEN", limit: int = 50):
@@ -5090,7 +5286,57 @@ def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
         raise HTTPException(status_code=400, detail="claim_id is required")
 
     supabase = get_supabase_client()
+
+    # MODERATION NOTIFICATION (NEW, additive) — capture author + title BEFORE
+    # the row is deleted; the moderation screen already sends `reason` in
+    # this payload (services/moderationService.ts deleteClaimAsAdmin), it was
+    # just unused here until now. Fetch failure must not block deletion.
+    author_id = None
+    title_snippet = ""
+
+    try:
+        pre_delete_result = (
+            supabase.table("claims")
+            .select("author_id,title")
+            .eq("id", claim_id)
+            .limit(1)
+            .execute()
+        )
+        pre_delete_row = (pre_delete_result.data or [None])[0]
+
+        if pre_delete_row:
+            author_id = pre_delete_row.get("author_id")
+            title_snippet = str(pre_delete_row.get("title") or "")[:80]
+    except Exception as error:
+        print("[admin delete] pre-delete lookup failed:", str(error), flush=True)
+
     result = supabase.table("claims").delete().eq("id", claim_id).execute()
+
+    # MODERATION NOTIFICATION (NEW, additive) — tell the author why their
+    # claim was removed (Apple 1.2 moderation transparency). Rules:
+    # - only after a successful delete of an existing row
+    # - author_id None (anonymized account) → skip silently
+    # - claim_id stays NULL on the notification: the claims row is already
+    #   hard-deleted, so referencing it would fail the FK (the ON DELETE SET
+    #   NULL on notifications.claim_id only protects existing rows)
+    # - failure NEVER fails the deletion — response below is unchanged
+    if (result.data or []) and author_id:
+        reason = payload.reason.strip() or "Violation of Verifact Terms of Use"
+
+        try:
+            supabase.table("notifications").insert({
+                "user_id": author_id,
+                "type": "claim_removed",
+                "title": "Your claim was removed",
+                "body": (
+                    f'Your claim "{title_snippet}..." was removed by moderation. '
+                    f"Reason: {reason}. Repeated violations may result in account "
+                    "suspension. See the Terms of Use for our content rules."
+                ),
+                "claim_id": None,
+            }).execute()
+        except Exception as error:
+            print(f"[admin delete] notification failed: {error}", flush=True)
 
     return {"ok": True, "claim_id": claim_id, "deleted": len(result.data or [])}
 
@@ -5175,6 +5421,28 @@ def admin_suspend_user(payload: AdminUserActionRequest, request: Request):
         .eq("id", target_user_id)
         .execute()
     )
+
+    # MODERATION NOTIFICATION (NEW, additive) — same pattern as the claim
+    # deletion notification above. Only on actual suspension (not
+    # unsuspension), only when the update touched a row; failure NEVER fails
+    # the suspension — response below is unchanged.
+    if suspended and (result.data or []):
+        reason = payload.reason.strip() or "Violation of Verifact Terms of Use"
+
+        try:
+            supabase.table("notifications").insert({
+                "user_id": target_user_id,
+                "type": "account_suspended",
+                "title": "Your account has been suspended",
+                "body": (
+                    f"Your account has been suspended by moderation. Reason: {reason}. "
+                    "If you believe this is a mistake, contact "
+                    "support@verifact.pennyfloat.com."
+                ),
+                "claim_id": None,
+            }).execute()
+        except Exception as error:
+            print(f"[admin suspend] notification failed: {error}", flush=True)
 
     return {"ok": True, "user_id": target_user_id, "suspended": suspended, "updated": len(result.data or [])}
 

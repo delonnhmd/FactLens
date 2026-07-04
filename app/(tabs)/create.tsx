@@ -352,7 +352,24 @@ export default function CreateScreen() {
       return;
     }
 
-    await submitClaim();
+    // CLAIM PERMANENCE CONFIRMATION — additive only
+    // JS-only change. Deploy: eas update --channel preview
+    // Shows EVERY submit (informed consent, Apple-relevant). Runs AFTER
+    // validation and BEFORE submitClaim(); isSubmitting is only set inside
+    // submitClaim, so Cancel leaves the form fully editable and untouched.
+    Alert.alert(
+      "Post this claim?",
+      "You can remove your claim within 3 hours of posting.\n\nAfter 3 hours or once the verdict is finalized, your claim is permanent and cannot be removed.\n\nAll True and Fake votes on your claim count toward the combined total of its topic.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Post Claim",
+          onPress: () => {
+            void submitClaim();
+          },
+        },
+      ],
+    );
   };
 
   // PHASE 3 STEP 15

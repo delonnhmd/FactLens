@@ -1,5 +1,9 @@
 // PHASE 1 STEP 4
 // PHASE 5 STEP 5 PRE-LAUNCH
+// APPLE GUIDELINE 1.2 — blocked-author filter (NEW)
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
@@ -77,7 +81,8 @@ export default function TrendingScreen() {
     [contentBottomPadding, styles.content],
   );
   // PHASE 3 STEP 11
-  const { claims, fetchTrendingClaimsPage, voteOnClaim, reportClaim } = useClaims();
+  // APPLE GUIDELINE 1.2 — user blocking (NEW): blockedUserIds added.
+  const { claims, fetchTrendingClaimsPage, voteOnClaim, reportClaim, blockedUserIds } = useClaims();
   const [activeFilter, setActiveFilter] = useState<TrendingFilter>("ALL");
   const [trendingSourceClaims, setTrendingSourceClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,8 +122,13 @@ export default function TrendingScreen() {
   // PHASE 3 STEP 9
   const syncedTrendingClaims = useMemo(
     () =>
-      trendingSourceClaims.map((claim) => claims.find((currentClaim) => currentClaim.id === claim.id) ?? claim),
-    [claims, trendingSourceClaims],
+      trendingSourceClaims
+        .map((claim) => claims.find((currentClaim) => currentClaim.id === claim.id) ?? claim)
+        // APPLE GUIDELINE 1.2 — user blocking (NEW): the `?? claim` fallback
+        // keeps a local copy alive after context filtering; this line makes
+        // blocking from a trending card instant too.
+        .filter((claim) => !blockedUserIds.includes(claim.authorId)),
+    [blockedUserIds, claims, trendingSourceClaims],
   );
 
   const trendingClaims = useMemo(

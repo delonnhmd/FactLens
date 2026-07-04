@@ -1,8 +1,15 @@
 // PHASE 5 STEP 2
+// APPLE GUIDELINE 1.2 — screen now renders the full TERMS_TEXT EULA
+// (constants/termsText.ts) with zero-tolerance + 24-hour moderation
+// language required by App Review. Screen structure/styles unchanged.
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 import { useMemo } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
+import { TERMS_TEXT } from "../../constants/termsText";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useAppTheme } from "../../hooks/useTheme";
 
@@ -13,26 +20,12 @@ export default function TermsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Terms of Service" subtitle="Verifact public launch terms" />
+      <Header title="Terms of Use" subtitle="Verifact Terms of Use (EULA)" />
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} accessibilityRole="button">
           <Text style={styles.link}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.heading}>Use of Verifact</Text>
-        <Text style={styles.body}>
-          Verifact is an informational community news-verification app. Content, AI pre-checks, source analysis,
-          and community voting are not guaranteed to be complete, accurate, or final truth.
-        </Text>
-        <Text style={styles.heading}>User Content</Text>
-        <Text style={styles.body}>
-          You are responsible for the claims, evidence, reports, and profile information you submit. Do not post
-          spam, harassment, explicit content, hateful content, illegal threats, malicious evidence, or harmful abuse.
-        </Text>
-        <Text style={styles.heading}>Moderation</Text>
-        <Text style={styles.body}>
-          Verifact may remove, hide, or restrict content and accounts that violate these terms or create safety risk.
-          Reports are reviewed for launch safety and abuse prevention.
-        </Text>
+        <Text style={styles.body}>{TERMS_TEXT}</Text>
       </ScrollView>
     </SafeAreaView>
   );

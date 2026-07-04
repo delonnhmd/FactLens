@@ -1,4 +1,9 @@
 // PHASE 3 STEP 1
+// APPLE GUIDELINE 1.2 — EULA checkbox gate before signup AND login (NEW,
+// additive: checkbox row + disabled-state logic only, no restructuring).
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,6 +19,7 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../components/Header";
 import { RESET_PASSWORD_URL } from "../../constants/launchConfig";
 import { theme } from "../../constants/theme";
@@ -25,6 +31,8 @@ import {
   type UsernameAvailabilityTone,
 } from "../../services/profileService";
 import { getUsernameValidationError } from "../../utils/username";
+// APPLE GUIDELINE 1.2 — EULA acceptance (NEW)
+import { acceptTermsRequest } from "../../services/blockService";
 
 type AuthMode = "LOGIN" | "SIGN_UP";
 type UsernameAvailabilityStatus = "idle" | "checking" | "available" | "unavailable" | "invalid";
@@ -48,6 +56,9 @@ export default function AuthScreen() {
   const [usernameAvailabilityMessage, setUsernameAvailabilityMessage] = useState("");
   // PHASE 5 PRE-LAUNCH: drives the availability message color (gray / amber / red / green).
   const [usernameAvailabilityTone, setUsernameAvailabilityTone] = useState<UsernameAvailabilityTone | null>(null);
+  // APPLE GUIDELINE 1.2 — EULA gate (NEW): required for BOTH signup and login.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState("");
 
   const signingUp = mode === "SIGN_UP";
   const usernameSubmitBlocked =
@@ -56,7 +67,8 @@ export default function AuthScreen() {
       usernameAvailabilityStatus === "checking" ||
       usernameAvailabilityStatus === "unavailable" ||
       usernameAvailabilityStatus === "invalid");
-  const submitDisabled = loading || usernameSubmitBlocked;
+  // APPLE GUIDELINE 1.2 (NEW): submit stays disabled until terms are accepted.
+  const submitDisabled = loading || usernameSubmitBlocked || !termsAccepted;
 
   useEffect(() => {
     if (!signingUp) {
@@ -121,6 +133,15 @@ export default function AuthScreen() {
     setError("");
     setMessage("");
 
+    // APPLE GUIDELINE 1.2 (NEW): terms must be agreed to before registering
+    // or logging in. Belt-and-suspenders — the button is also disabled.
+    if (!termsAccepted) {
+      setTermsError("You must agree to the Terms of Use to continue.");
+      return;
+    }
+
+    setTermsError("");
+
     if (!email.trim()) {
       setError("Email is required.");
       return;
@@ -160,6 +181,11 @@ export default function AuthScreen() {
       setError(result.error);
       return;
     }
+
+    // APPLE GUIDELINE 1.2 (NEW): fire-and-forget acceptance record. On
+    // signup with email confirmation there is no session yet — the call
+    // no-ops and fires again on the first login (box is required then too).
+    void acceptTermsRequest();
 
     if (signingUp) {
       router.replace({
@@ -308,6 +334,37 @@ export default function AuthScreen() {
 
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {message ? <Text style={styles.messageText}>{message}</Text> : null}
+
+          {/* APPLE GUIDELINE 1.2 (NEW): EULA agreement required before
+              signup AND login. Checkbox + tappable Terms of Use link. */}
+          <TouchableOpacity
+            style={styles.termsRow}
+            activeOpacity={0.8}
+            onPress={() => {
+              setTermsAccepted((accepted) => !accepted);
+              setTermsError("");
+            }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: termsAccepted }}
+            accessibilityLabel="I agree to the Terms of Use"
+          >
+            <Ionicons
+              name={termsAccepted ? "checkbox" : "square-outline"}
+              size={22}
+              color={termsAccepted ? theme.colors.primary : theme.colors.muted}
+            />
+            <Text style={styles.termsText}>
+              I agree to the{" "}
+              <Text
+                style={styles.termsLink}
+                onPress={() => router.push("/legal/terms")}
+                accessibilityRole="link"
+              >
+                Terms of Use
+              </Text>
+            </Text>
+          </TouchableOpacity>
+          {termsError ? <Text style={styles.errorText}>{termsError}</Text> : null}
 
           <TouchableOpacity
             style={[styles.button, submitDisabled && styles.buttonDisabled]}
@@ -466,6 +523,25 @@ const styles = StyleSheet.create({
   protectedText: {
     color: theme.colors.warningBorder,
     fontSize: 12,
+  },
+  // APPLE GUIDELINE 1.2 (NEW)
+  termsRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    minHeight: 32,
+  },
+  termsText: {
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "400",
+  },
+  termsLink: {
+    color: theme.colors.link,
+    fontWeight: "500",
+    textDecorationLine: "underline",
   },
   button: {
     alignItems: "center",

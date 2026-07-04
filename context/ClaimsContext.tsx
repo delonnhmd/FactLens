@@ -1,3 +1,7 @@
+// APPLE GUIDELINE 1.2 — user blocking (NEW additions marked below)
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 // PHASE 2 STEP 2
 // PHASE 3 STEP 26
 // PHASE 3 STEP 27
@@ -59,6 +63,12 @@ import {
 } from "../services/realtimeService";
 import type { Claim, ClaimStatus, Evidence, EvidenceType, Report, ReportReason, VoteOption } from "../types/claim";
 import type { PickedOptimizedImage } from "../services/imageUploadService";
+// APPLE GUIDELINE 1.2 — user blocking (NEW)
+import {
+  blockUserRequest,
+  fetchMyBlockedIds,
+  unblockUserRequest,
+} from "../services/blockService";
 
 export interface CreateClaimInput {
   title: string;
@@ -131,6 +141,10 @@ interface ClaimsContextValue {
   getClaimById: (claimId: string) => Claim | undefined;
   fetchClaimById: (claimId: string) => Promise<Claim | undefined>;
   now: Date;
+  // APPLE GUIDELINE 1.2 — user blocking (NEW)
+  blockedUserIds: string[];
+  blockUser: (userId: string, sourceClaimId?: string | null) => Promise<void>;
+  unblockUser: (userId: string) => Promise<void>;
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
@@ -405,6 +419,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   const [aiPrecheckNotice, setAiPrecheckNotice] = useState<string | null>(null);
   // PHASE 3 STEP 20E
   const [userVotesByClaimId, setUserVotesByClaimId] = useState<Record<string, VoteOption>>({});
+  // APPLE GUIDELINE 1.2 — user blocking (NEW). Loaded once per login from
+  // GET /api/users/me/blocks; blockUser() updates it instantly (no refetch).
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
+  const blockedUserIdsRef = useRef<string[]>([]);
   const [now, setNow] = useState(() => new Date());
   const claimsRef = useRef<Claim[]>([]);
   const locallyCreatedClaimIdsRef = useRef(new Set<string>());
@@ -420,6 +438,38 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     claimsRef.current = claims;
   }, [claims]);
+
+  // APPLE GUIDELINE 1.2 — user blocking (NEW): keep a ref in sync so
+  // fetch-time filtering in applyRemoteClaims sees the latest list without
+  // re-creating every fetch callback.
+  useEffect(() => {
+    blockedUserIdsRef.current = blockedUserIds;
+  }, [blockedUserIds]);
+
+  // APPLE GUIDELINE 1.2 — user blocking (NEW): load the blocked list once on
+  // auth; clear it on logout.
+  useEffect(() => {
+    if (!currentUser) {
+      setBlockedUserIds([]);
+      return;
+    }
+
+    let mounted = true;
+
+    fetchMyBlockedIds()
+      .then((result) => {
+        if (mounted) {
+          setBlockedUserIds(result.blockedIds);
+        }
+      })
+      .catch(() => {
+        // Non-fatal: server-side RLS filtering still hides blocked content.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser]);
 
   const clearClaimsError = useCallback(() => {
     setError(null);
@@ -511,7 +561,13 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         sortClaimsNewestFirst(replace ? claimsWithVotes : mergeClaimLists(currentClaimsState, claimsWithVotes)),
       );
 
-      return claimsWithVotes;
+      // APPLE GUIDELINE 1.2 — user blocking (NEW): every remote claim list
+      // handed back to screens (feed, search, trending, topic) is filtered
+      // here, so screens that keep their own copies inherit the filter. The
+      // context-level exposure filter lives in the currentClaims memo below.
+      return claimsWithVotes.filter(
+        (claim) => !blockedUserIdsRef.current.includes(claim.authorId),
+      );
     },
     [applyUserVotes, clearClaimsError, setClaimsErrorFromResult],
   );
@@ -728,12 +784,17 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
    * AI source review starts once after claim creation.
    */
 
+  // APPLE GUIDELINE 1.2 — user blocking (NEW): THE context-level filter
+  // point. Every screen that reads claims from this context (feed, search,
+  // trending, topic, claim detail via getClaimById) inherits it, so adding
+  // an id to blockedUserIds removes that author's content instantly.
   const currentClaims = useMemo(
     () =>
       claims
+        .filter((claim) => !blockedUserIds.includes(claim.authorId))
         .map((claim) => applyCurrentClaimStatus(claim, now))
         .sort((first, second) => new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime()),
-    [claims, now],
+    [blockedUserIds, claims, now],
   );
 
   // PHASE 4 STEP 2
@@ -1448,6 +1509,52 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [applyUserVotes],
   );
 
+  // APPLE GUIDELINE 1.2 — user blocking (NEW)
+  // Optimistic: the id is added to blockedUserIds BEFORE the network call so
+  // the author's content vanishes instantly (Apple req. 3a); rolled back
+  // only if the backend rejects the block.
+  const blockUser = useCallback(
+    async (userId: string, sourceClaimId?: string | null) => {
+      if (!currentUser) {
+        throw new Error("Please log in to block users.");
+      }
+
+      if (userId === currentUser.id) {
+        throw new Error("You cannot block yourself.");
+      }
+
+      setBlockedUserIds((currentIds) =>
+        currentIds.includes(userId) ? currentIds : [...currentIds, userId],
+      );
+
+      const result = await blockUserRequest(userId, sourceClaimId ?? null);
+
+      if (!result.ok) {
+        setBlockedUserIds((currentIds) => currentIds.filter((id) => id !== userId));
+        throw new Error(result.error ?? "Could not block this user right now.");
+      }
+    },
+    [currentUser],
+  );
+
+  // APPLE GUIDELINE 1.2 — user blocking (NEW)
+  const unblockUser = useCallback(
+    async (userId: string) => {
+      if (!currentUser) {
+        throw new Error("Please log in to unblock users.");
+      }
+
+      const result = await unblockUserRequest(userId);
+
+      if (!result.ok) {
+        throw new Error(result.error ?? "Could not unblock this user right now.");
+      }
+
+      setBlockedUserIds((currentIds) => currentIds.filter((id) => id !== userId));
+    },
+    [currentUser],
+  );
+
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
     [currentClaims],
@@ -1522,8 +1629,16 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       getClaimById,
       fetchClaimById,
       now,
+      // APPLE GUIDELINE 1.2 — user blocking (NEW)
+      blockedUserIds,
+      blockUser,
+      unblockUser,
     }),
     [
+      // APPLE GUIDELINE 1.2 — user blocking (NEW)
+      blockedUserIds,
+      blockUser,
+      unblockUser,
       addEvidence,
       createClaim,
       currentClaims,

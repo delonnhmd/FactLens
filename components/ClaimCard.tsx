@@ -1,3 +1,7 @@
+// APPLE GUIDELINE 1.2 — "Block user" added to the post options menu (NEW)
+// JS-only change. Deploy: eas update --channel preview
+// Do NOT run eas build. Apple review response pending.
+// Backend deploys to Render independently.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -16,6 +20,9 @@ import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality
 import { useAppTheme, useDisplaySettings } from "../hooks/useTheme";
 import type { AppTheme } from "../context/DisplaySettingsContext";
 import { MentionText } from "./MentionText";
+// APPLE GUIDELINE 1.2 — user blocking (NEW)
+import { useAuth } from "../context/AuthContext";
+import { useClaims } from "../context/ClaimsContext";
 
 // PHASE 4 STEP 18
 // Source trust label update
@@ -209,6 +216,9 @@ function getSourcePillStyle(score: number, label: string, styles: ReturnType<typ
 function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
+  // APPLE GUIDELINE 1.2 — user blocking (NEW)
+  const { currentUser } = useAuth();
+  const { blockUser } = useClaims();
   // PHASE 5 PRE-LAUNCH: collapse long descriptions until "Read more" is tapped.
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const descriptionWordCount = claim.description ? claim.description.trim().split(/\s+/).length : 0;
@@ -277,6 +287,31 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       ? appTheme.colors.danger
       : appTheme.colors.warning;
 
+  // APPLE GUIDELINE 1.2 — user blocking (NEW): confirmation → blockUser from
+  // context → the author's claims vanish instantly via the context filter.
+  const handleBlock = useCallback(() => {
+    Alert.alert(
+      `Block @${claim.authorUsername || "this user"}?`,
+      "You won't see their claims anymore. This also notifies Verifact moderation.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: () => {
+            blockUser(claim.authorId, claim.id)
+              .then(() => Alert.alert("User blocked."))
+              .catch(() => Alert.alert("Could not block this user right now."));
+          },
+        },
+      ],
+    );
+  }, [blockUser, claim.authorId, claim.authorUsername, claim.id]);
+
+  // APPLE GUIDELINE 1.2 — user blocking (NEW): "Block user" hidden on the
+  // user's own claims and when logged out; Report/Share/Cancel unchanged.
+  const canBlockAuthor = Boolean(currentUser) && currentUser?.id !== claim.authorId;
+
   const handleOptions = useCallback(() => {
     Alert.alert("Post options", undefined, [
       {
@@ -286,6 +321,16 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           void handleReport();
         },
       },
+      // APPLE GUIDELINE 1.2 — user blocking (NEW)
+      ...(canBlockAuthor
+        ? [
+            {
+              text: "Block user",
+              style: "destructive" as const,
+              onPress: handleBlock,
+            },
+          ]
+        : []),
       {
         text: "Share",
         onPress: () => Alert.alert("Share", claim.shareUrl),
@@ -295,7 +340,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         style: "cancel",
       },
     ]);
-  }, [claim.shareUrl, handleReport]);
+  }, [canBlockAuthor, claim.shareUrl, handleBlock, handleReport]);
 
   // PHASE 5 STEP 3
   if (claim.hidden) {
