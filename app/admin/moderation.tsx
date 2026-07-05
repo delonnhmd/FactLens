@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   RefreshControl,
@@ -17,19 +17,38 @@ import { useAuth } from "../../context/AuthContext";
 import { useAppTheme } from "../../hooks/useTheme";
 import {
   deleteClaimAsAdmin,
+  fetchManagedClaims,
+  fetchManagedUsers,
   fetchModerationReports,
   hideClaim,
+  hideClaimFromFeeds,
   lockClaimVoting,
   markClaimFeatured,
   resolveModerationReport,
   restoreModerationTarget,
   suspendUser,
+  unhideClaim,
+  unsuspendUser,
+  type ManagedClaim,
+  type ManagedUser,
   type ModerationReport,
 } from "../../services/moderationService";
 
 type ReportStatus = "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED" | "ALL";
+type UserFilter = "all" | "suspended" | "blocked";
+type ClaimFilter = "all" | "hidden" | "visible";
 
 const statusOptions: ReportStatus[] = ["OPEN", "REVIEWING", "RESOLVED", "DISMISSED", "ALL"];
+const userFilterOptions: { value: UserFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "suspended", label: "Suspended" },
+  { value: "blocked", label: "Blocked-by-users" },
+];
+const claimFilterOptions: { value: ClaimFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "hidden", label: "Hidden" },
+  { value: "visible", label: "Visible" },
+];
 
 function getTargetId(report: ModerationReport): string | null {
   if (report.target_type === "CLAIM") {
@@ -73,6 +92,15 @@ export default function ModerationScreen() {
   const [claimId, setClaimId] = useState("");
   const [userId, setUserId] = useState("");
   const [reason, setReason] = useState("Admin moderation action.");
+  // ADMIN MANAGEMENT DASHBOARD (NEW, additive)
+  const [usersSearch, setUsersSearch] = useState("");
+  const [usersFilter, setUsersFilter] = useState<UserFilter>("all");
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
+  const [usersMessage, setUsersMessage] = useState("");
+  const [claimsSearch, setClaimsSearch] = useState("");
+  const [claimsFilter, setClaimsFilter] = useState<ClaimFilter>("all");
+  const [managedClaims, setManagedClaims] = useState<ManagedClaim[]>([]);
+  const [claimsMessage, setClaimsMessage] = useState("");
 
   const loadReports = useCallback(async () => {
     setRefreshing(true);
@@ -97,6 +125,81 @@ export default function ModerationScreen() {
       await loadReports();
     },
     [loadReports],
+  );
+
+  // ADMIN MANAGEMENT DASHBOARD (NEW, additive) — debounced (400ms) loaders
+  // for the Users and Claims sections; the Reports section above is
+  // untouched.
+  const isAdmin = Boolean(profile?.is_admin);
+
+  const loadManagedUsers = useCallback(async () => {
+    setUsersMessage("Loading...");
+    const result = await fetchManagedUsers(usersSearch.trim(), usersFilter);
+    setManagedUsers(result.users);
+    setUsersMessage(result.error ?? (result.users.length === 0 ? "No users found." : ""));
+  }, [usersFilter, usersSearch]);
+
+  const loadManagedClaims = useCallback(async () => {
+    setClaimsMessage("Loading...");
+    const result = await fetchManagedClaims(claimsSearch.trim(), claimsFilter);
+    setManagedClaims(result.claims);
+    setClaimsMessage(result.error ?? (result.claims.length === 0 ? "No claims found." : ""));
+  }, [claimsFilter, claimsSearch]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void loadManagedUsers();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [isAdmin, loadManagedUsers]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void loadManagedClaims();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [isAdmin, loadManagedClaims]);
+
+  const runUserAction = useCallback(
+    async (action: () => Promise<{ ok: boolean; error?: string }>, successMessage: string) => {
+      setUsersMessage("");
+      const result = await action();
+
+      if (!result.ok) {
+        setUsersMessage(result.error ?? "Admin action failed.");
+        return;
+      }
+
+      setUsersMessage(successMessage);
+      await loadManagedUsers();
+    },
+    [loadManagedUsers],
+  );
+
+  const runClaimAction = useCallback(
+    async (action: () => Promise<{ ok: boolean; error?: string }>, successMessage: string) => {
+      setClaimsMessage("");
+      const result = await action();
+
+      if (!result.ok) {
+        setClaimsMessage(result.error ?? "Admin action failed.");
+        return;
+      }
+
+      setClaimsMessage(successMessage);
+      await loadManagedClaims();
+    },
+    [loadManagedClaims],
   );
 
   const confirmDeleteClaim = (targetClaimId: string) => {
@@ -224,6 +327,9 @@ export default function ModerationScreen() {
                     <AdminAction label="Lock voting" styles={styles} onPress={() => runAction(() => lockClaimVoting(targetId, reason), "Voting locked.")} />
                     <AdminAction label="Feature" styles={styles} onPress={() => runAction(() => markClaimFeatured(targetId, true), "Claim featured.")} />
                     <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(targetId)} />
+                    {/* HIDE/UNHIDE CLAIM (NEW, additive) — reversible alternative to delete */}
+                    <AdminAction label="Hide claim" danger styles={styles} onPress={() => runAction(() => hideClaimFromFeeds(targetId, reason), "Claim hidden from feeds.")} />
+                    <AdminAction label="Unhide claim" styles={styles} onPress={() => runAction(() => unhideClaim(targetId), "Claim restored to feeds.")} />
                   </>
                 ) : null}
                 {(report.target_type === "PROFILE" && targetId) || ownerId ? (
@@ -271,12 +377,144 @@ export default function ModerationScreen() {
           />
           <View style={styles.actionRow}>
             <AdminAction label="Hide claim" styles={styles} onPress={() => runAction(() => hideClaim(claimId.trim(), reason), "Claim hidden.")} />
+            {/* HIDE/UNHIDE CLAIM (NEW, additive) — removes from feeds via RLS, unlike legacy "Hide claim" above */}
+            <AdminAction label="Hide from feeds" danger styles={styles} onPress={() => runAction(() => hideClaimFromFeeds(claimId.trim(), reason), "Claim hidden from feeds.")} />
+            <AdminAction label="Unhide claim" styles={styles} onPress={() => runAction(() => unhideClaim(claimId.trim()), "Claim restored to feeds.")} />
             <AdminAction label="Lock voting" styles={styles} onPress={() => runAction(() => lockClaimVoting(claimId.trim(), reason), "Voting locked.")} />
             <AdminAction label="Feature" styles={styles} onPress={() => runAction(() => markClaimFeatured(claimId.trim(), true), "Claim featured.")} />
             <AdminAction label="Delete claim" danger styles={styles} onPress={() => confirmDeleteClaim(claimId.trim())} />
             <AdminAction label="Suspend user" danger styles={styles} onPress={() => runAction(() => suspendUser(userId.trim(), reason), "User suspended.")} />
           </View>
         </View>
+
+        {/* ADMIN MANAGEMENT DASHBOARD (NEW, additive) — Users */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Users</Text>
+          <TextInput
+            value={usersSearch}
+            onChangeText={setUsersSearch}
+            placeholder="Search username or email"
+            placeholderTextColor={appTheme.colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.input}
+          />
+          <View style={styles.statusRow}>
+            {userFilterOptions.map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                style={[styles.statusButton, usersFilter === item.value && styles.statusButtonActive]}
+                activeOpacity={0.8}
+                onPress={() => setUsersFilter(item.value)}
+              >
+                <Text style={[styles.statusButtonText, usersFilter === item.value && styles.statusButtonTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {usersMessage ? <Text style={styles.messageText}>{usersMessage}</Text> : null}
+        </View>
+
+        {managedUsers.map((user) => (
+          <View key={user.id} style={styles.reportCard}>
+            <View style={styles.reportHeader}>
+              <Text style={styles.targetType}>@{user.username || "unknown"}</Text>
+              <Text style={styles.reportStatus}>{new Date(user.created_at).toLocaleDateString()}</Text>
+            </View>
+            <Text style={styles.targetSummary} numberOfLines={1}>
+              {user.email || "No email on record"}
+            </Text>
+            <Text style={styles.note}>
+              {user.claim_count} {user.claim_count === 1 ? "claim" : "claims"} {"·"} blocked by {user.blocked_by_count}{" "}
+              {user.blocked_by_count === 1 ? "user" : "users"}
+            </Text>
+            {user.is_admin ? <Text style={styles.note}>ADMIN</Text> : null}
+            {user.is_suspended ? <Text style={styles.hiddenText}>SUSPENDED</Text> : null}
+            <View style={styles.actionRow}>
+              {user.is_suspended ? (
+                <AdminAction
+                  label="Unsuspend"
+                  styles={styles}
+                  onPress={() => runUserAction(() => unsuspendUser(user.id), "User unsuspended.")}
+                />
+              ) : (
+                <AdminAction
+                  label="Suspend"
+                  danger
+                  styles={styles}
+                  onPress={() => runUserAction(() => suspendUser(user.id, reason), "User suspended.")}
+                />
+              )}
+            </View>
+          </View>
+        ))}
+
+        {/* ADMIN MANAGEMENT DASHBOARD (NEW, additive) — Claims */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Claims</Text>
+          <TextInput
+            value={claimsSearch}
+            onChangeText={setClaimsSearch}
+            placeholder="Search claim title"
+            placeholderTextColor={appTheme.colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.input}
+          />
+          <View style={styles.statusRow}>
+            {claimFilterOptions.map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                style={[styles.statusButton, claimsFilter === item.value && styles.statusButtonActive]}
+                activeOpacity={0.8}
+                onPress={() => setClaimsFilter(item.value)}
+              >
+                <Text style={[styles.statusButtonText, claimsFilter === item.value && styles.statusButtonTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {claimsMessage ? <Text style={styles.messageText}>{claimsMessage}</Text> : null}
+        </View>
+
+        {managedClaims.map((claim) => (
+          <View key={claim.id} style={styles.reportCard}>
+            <View style={styles.reportHeader}>
+              <Text style={styles.targetType}>{claim.author_username ? `@${claim.author_username}` : "Unknown author"}</Text>
+              <Text style={styles.reportStatus}>{new Date(claim.created_at).toLocaleDateString()}</Text>
+            </View>
+            <Text style={styles.targetSummary} numberOfLines={2}>
+              {claim.title || claim.id}
+            </Text>
+            <Text style={styles.note}>
+              True {claim.votes_true ?? 0} {"·"} Fake {claim.votes_fake ?? 0} {"·"} Not sure {claim.votes_unsure ?? 0}
+            </Text>
+            {claim.is_hidden ? (
+              <Text style={styles.hiddenText}>Hidden{claim.hidden_reason ? ` — ${claim.hidden_reason}` : ""}</Text>
+            ) : claim.hidden ? (
+              <Text style={styles.hiddenText}>Removed (legacy hide){claim.hidden_reason ? ` — ${claim.hidden_reason}` : ""}</Text>
+            ) : null}
+            <View style={styles.actionRow}>
+              {claim.is_hidden ? (
+                <AdminAction
+                  label="Unhide"
+                  styles={styles}
+                  onPress={() => runClaimAction(() => unhideClaim(claim.id), "Claim restored to feeds.")}
+                />
+              ) : (
+                <AdminAction
+                  label="Hide"
+                  danger
+                  styles={styles}
+                  onPress={() => runClaimAction(() => hideClaimFromFeeds(claim.id, reason), "Claim hidden from feeds.")}
+                />
+              )}
+              <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(claim.id)} />
+            </View>
+          </View>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );

@@ -2101,6 +2101,11 @@ class AdminUserActionRequest(BaseModel):
     suspended: bool = True
 
 
+# HIDE/UNHIDE CLAIMS (NEW, additive) — POST /admin/claims/{claim_id}/hide
+class AdminHideClaimRequest(BaseModel):
+    reason: str = ""
+
+
 class IdentityUsernameCheckRequest(BaseModel):
     username: str = ""
 
@@ -5445,6 +5450,218 @@ def admin_suspend_user(payload: AdminUserActionRequest, request: Request):
             print(f"[admin suspend] notification failed: {error}", flush=True)
 
     return {"ok": True, "user_id": target_user_id, "suspended": suspended, "updated": len(result.data or [])}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# HIDE/UNHIDE CLAIMS + ADMIN MANAGEMENT DASHBOARD (NEW, additive)
+# Requires supabase/sql/040_hide_claims_admin_manage.sql to be run first.
+# Inspection notes:
+# - is_hidden is the NEW flag that the restrictive RLS policy filters out
+#   of feeds/search/topics for non-admin readers. The legacy `hidden` flag
+#   (020) only renders a "Content removed" box client-side, so these
+#   endpoints set/clear BOTH flags to keep the two mechanisms in agreement.
+#   The legacy /admin/content/hide and /admin/content/restore endpoints are
+#   untouched.
+# - Notifications follow the /admin/claims/delete pattern: only after a
+#   successful update, and failure NEVER fails the moderation action.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.post("/admin/claims/{claim_id}/hide")
+def admin_hide_claim(claim_id: str, payload: AdminHideClaimRequest, request: Request):
+    admin_user_id = require_admin_user(request)
+    target_claim_id = claim_id.strip()
+
+    if not target_claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    reason = payload.reason.strip() or "Hidden by moderation."
+    supabase = get_supabase_client()
+
+    claim_result = (
+        supabase.table("claims")
+        .select("author_id,title,is_hidden")
+        .eq("id", target_claim_id)
+        .limit(1)
+        .execute()
+    )
+    claim_row = (claim_result.data or [None])[0]
+
+    if not claim_row:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    was_hidden = bool(claim_row.get("is_hidden"))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    result = (
+        supabase.table("claims")
+        .update({
+            "is_hidden": True,
+            "hidden": True,
+            "hidden_reason": reason,
+            "hidden_at": now_iso,
+            "hidden_by": admin_user_id,
+            "updated_at": now_iso,
+        })
+        .eq("id", target_claim_id)
+        .execute()
+    )
+
+    author_id = claim_row.get("author_id")
+
+    # Notify only on an actual visibility change — re-hiding an already
+    # hidden claim must not spam the author.
+    if (result.data or []) and author_id and not was_hidden:
+        title_snippet = str(claim_row.get("title") or "")[:80]
+
+        try:
+            supabase.table("notifications").insert({
+                "user_id": author_id,
+                "type": "claim_hidden",
+                "title": "Your claim was hidden",
+                "body": (
+                    f'Your claim "{title_snippet}..." was hidden by moderation. '
+                    f"Reason: {reason}. It is no longer visible to other users, "
+                    "but it may be restored after review."
+                ),
+                "claim_id": target_claim_id,
+            }).execute()
+        except Exception as error:
+            print(f"[admin hide] notification failed: {error}", flush=True)
+
+    return {"ok": True, "claim_id": target_claim_id, "is_hidden": True, "updated": len(result.data or [])}
+
+
+@app.post("/admin/claims/{claim_id}/unhide")
+def admin_unhide_claim(claim_id: str, request: Request):
+    require_admin_user(request)
+    target_claim_id = claim_id.strip()
+
+    if not target_claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    supabase = get_supabase_client()
+
+    claim_result = (
+        supabase.table("claims")
+        .select("author_id,title,is_hidden,hidden")
+        .eq("id", target_claim_id)
+        .limit(1)
+        .execute()
+    )
+    claim_row = (claim_result.data or [None])[0]
+
+    if not claim_row:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    was_hidden = bool(claim_row.get("is_hidden")) or bool(claim_row.get("hidden"))
+    result = (
+        supabase.table("claims")
+        .update({
+            "is_hidden": False,
+            "hidden": False,
+            "hidden_reason": None,
+            "hidden_at": None,
+            "hidden_by": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", target_claim_id)
+        .execute()
+    )
+
+    author_id = claim_row.get("author_id")
+
+    # Notify only when the claim was actually hidden before this call.
+    if (result.data or []) and author_id and was_hidden:
+        title_snippet = str(claim_row.get("title") or "")[:80]
+
+        try:
+            supabase.table("notifications").insert({
+                "user_id": author_id,
+                "type": "claim_restored",
+                "title": "Your claim was restored",
+                "body": (
+                    f'Your claim "{title_snippet}..." was reviewed and restored. '
+                    "It is visible to other users again."
+                ),
+                "claim_id": target_claim_id,
+            }).execute()
+        except Exception as error:
+            print(f"[admin unhide] notification failed: {error}", flush=True)
+
+    return {"ok": True, "claim_id": target_claim_id, "is_hidden": False, "updated": len(result.data or [])}
+
+
+@app.get("/admin/manage/users")
+def admin_manage_users(request: Request, search: str = "", filter: str = "all"):
+    require_admin_user(request)
+    filter_mode = (filter or "all").strip().lower()
+
+    if filter_mode not in {"all", "blocked", "suspended"}:
+        filter_mode = "all"
+
+    # Search runs inside admin_manage_users_search (SECURITY DEFINER,
+    # service_role only) because emails live in auth.users, which PostgREST
+    # does not expose. ilike wildcards typed by the admin are allowed on
+    # purpose — this is an admin-only search box.
+    search_query = (search or "").strip()[:80]
+    supabase = get_supabase_client()
+    result = supabase.rpc(
+        "admin_manage_users_search",
+        {"search_query": search_query, "filter_mode": filter_mode},
+    ).execute()
+
+    return {"ok": True, "users": result.data or []}
+
+
+@app.get("/admin/manage/claims")
+def admin_manage_claims(request: Request, search: str = "", filter: str = "all"):
+    require_admin_user(request)
+    filter_mode = (filter or "all").strip().lower()
+
+    if filter_mode not in {"all", "hidden", "visible"}:
+        filter_mode = "all"
+
+    search_query = (search or "").strip()[:120]
+    supabase = get_supabase_client()
+
+    # Service-role read: bypasses the restrictive RLS policy, so hidden
+    # claims are always visible to the dashboard.
+    query = (
+        supabase.table("claims")
+        .select("id,title,author_id,is_hidden,hidden,hidden_reason,hidden_at,votes_true,votes_fake,votes_unsure,created_at")
+        .order("created_at", desc=True)
+        .limit(50)
+    )
+
+    if search_query:
+        query = query.ilike("title", f"%{search_query}%")
+
+    if filter_mode == "hidden":
+        query = query.eq("is_hidden", True)
+    elif filter_mode == "visible":
+        query = query.eq("is_hidden", False)
+
+    result = query.execute()
+    claims = result.data or []
+    author_ids = sorted({claim["author_id"] for claim in claims if claim.get("author_id")})
+    usernames: dict[str, str] = {}
+
+    if author_ids:
+        profiles_result = (
+            supabase.table("profiles")
+            .select("id,username")
+            .in_("id", author_ids)
+            .execute()
+        )
+        usernames = {
+            profile["id"]: profile.get("username") or ""
+            for profile in (profiles_result.data or [])
+        }
+
+    for claim in claims:
+        claim["author_username"] = usernames.get(claim.get("author_id") or "", None)
+
+    return {"ok": True, "claims": claims}
 
 
 # PHASE 5 STEP 1C

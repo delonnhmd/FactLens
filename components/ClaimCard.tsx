@@ -484,7 +484,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionColumn, styles.actionDivider]} activeOpacity={0.8} onPress={handleOptions}>
           <Ionicons name="ellipsis-horizontal" size={14} color={appTheme.colors.subtext} />
-          <Text style={styles.actionText}>...</Text>
+          <Text style={styles.actionText}>More</Text>
         </TouchableOpacity>
       </View>
     </View>
