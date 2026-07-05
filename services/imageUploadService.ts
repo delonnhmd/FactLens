@@ -206,6 +206,10 @@ async function uploadJpeg(bucket: ImageUploadBucket, path: string, bytes: ArrayB
   });
 
   if (error) {
+    // Surface the real storage error in dev logs; the thrown message stays
+    // user-friendly. (2026-07-04: "Bucket not found" here meant production
+    // had no storage buckets at all — fixed by 041_fix_storage_buckets.sql.)
+    console.log("[image upload] storage error:", { bucket, path, message: error.message });
     throw new Error(getImageUploadErrorMessage(error.message));
   }
 
