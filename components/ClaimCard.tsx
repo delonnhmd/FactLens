@@ -222,7 +222,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
   const { currentUser } = useAuth();
-  const { blockUser } = useClaims();
+  const { blockUser, savedClaimIds, toggleSaveClaim } = useClaims();
   // Public user profile navigation; anonymized/deleted authors are not tappable.
   const router = useRouter();
   const authorIsAnonymous =
@@ -326,8 +326,29 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // user's own claims and when logged out; Report/Share/Cancel unchanged.
   const canBlockAuthor = Boolean(currentUser) && currentUser?.id !== claim.authorId;
 
+  // Save/unsave claims: optimistic toggle via context; hidden when logged
+  // out (same rule as Block user).
+  const isSaved = savedClaimIds.includes(claim.id);
+
+  const handleToggleSave = useCallback(() => {
+    toggleSaveClaim(claim.id)
+      .then((saved) => Alert.alert(saved ? "Saved" : "Removed"))
+      .catch(() => Alert.alert("Could not update saved claims right now."));
+  }, [claim.id, toggleSaveClaim]);
+
   const handleOptions = useCallback(() => {
     Alert.alert("Post options", undefined, [
+      // Save/unsave claims (logged-in only)
+      ...(currentUser
+        ? [
+            {
+              text: isSaved ? "Unsave claim" : "Save claim",
+              onPress: () => {
+                void handleToggleSave();
+              },
+            },
+          ]
+        : []),
       {
         text: "Report",
         style: "destructive",
@@ -355,7 +376,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         style: "cancel",
       },
     ]);
-  }, [canBlockAuthor, claim.shareUrl, handleBlock]);
+  }, [canBlockAuthor, claim.shareUrl, currentUser, handleBlock, handleToggleSave, isSaved]);
 
   // PHASE 5 STEP 3
   if (claim.hidden) {

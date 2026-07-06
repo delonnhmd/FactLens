@@ -769,6 +769,14 @@ export default function ProfileScreen() {
               <Text style={styles.detailValue}>{createdAt ? new Date(createdAt).toLocaleDateString() : "Unknown"}</Text>
             </View>
 
+            {/* Save/unsave claims: entry point to the saved list. */}
+            <View style={styles.legalSection}>
+              <Text style={styles.detailLabel}>Saved</Text>
+              <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={() => router.push("/saved")}>
+                <Text style={styles.legalLinkText}>Saved claims</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* PHASE 5 STEP 2 */}
             {/* PHASE 5 STEP 4 */}
             <View style={styles.legalSection}>

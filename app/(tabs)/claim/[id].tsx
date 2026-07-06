@@ -326,6 +326,9 @@ export default function ClaimDetailScreen() {
     refreshClaimVerdict,
     // APPLE GUIDELINE 1.2 — user blocking (NEW)
     blockUser,
+    // Save/unsave claims
+    savedClaimIds,
+    toggleSaveClaim,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -849,6 +852,20 @@ export default function ClaimDetailScreen() {
         },
       ],
     );
+  };
+
+  // Save/unsave claims: optimistic toggle via context (the detail screen has
+  // no "..." menu, so the action lives next to Block in the same card).
+  const claimIsSaved = claim ? savedClaimIds.includes(claim.id) : false;
+
+  const handleToggleSaveClaim = () => {
+    if (!claim) {
+      return;
+    }
+
+    toggleSaveClaim(claim.id)
+      .then((saved) => Alert.alert(saved ? "Saved" : "Removed"))
+      .catch(() => Alert.alert("Could not update saved claims right now."));
   };
 
   // PHASE 3 STEP 4
@@ -1393,6 +1410,28 @@ export default function ClaimDetailScreen() {
               void handleSubmitReport(note);
             }}
           />
+          {/* Save/unsave claims: logged-in only, same rule as voting/blocking. */}
+          {currentUser ? (
+            <TouchableOpacity
+              style={styles.saveClaimButton}
+              activeOpacity={0.8}
+              onPress={handleToggleSaveClaim}
+              accessibilityRole="button"
+              accessibilityLabel={claimIsSaved ? "Unsave claim" : "Save claim"}
+              accessibilityHint={
+                claimIsSaved ? "Removes this claim from your saved list" : "Adds this claim to your saved list"
+              }
+            >
+              <Ionicons
+                name={claimIsSaved ? "bookmark" : "bookmark-outline"}
+                size={14}
+                color={appTheme.colors.link}
+              />
+              <Text style={styles.saveClaimButtonText}>
+                {claimIsSaved ? "Unsave claim" : "Save claim"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           {/* APPLE GUIDELINE 1.2 — user blocking (NEW): same card as the
               report flow; hidden on the user's own claims and when logged out. */}
           {currentUser && currentUser.id !== claim.authorId ? (
@@ -2588,6 +2627,19 @@ function createStyles(theme: AppTheme) {
   },
   // PHASE 5 STEP 2
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
+  // Save/unsave claims: same compact-row shape as blockUserButton.
+  saveClaimButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 8,
+    minHeight: 32,
+  },
+  saveClaimButtonText: {
+    color: theme.colors.link,
+    fontSize: theme.typography.small.fontSize,
+  },
   blockUserButton: {
     alignItems: "center",
     alignSelf: "flex-start",

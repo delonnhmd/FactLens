@@ -32,6 +32,10 @@ import {
   refreshClaimVerdict as refreshRemoteClaimVerdict,
   searchClaims as searchRemoteClaims,
   searchClaimsPage as searchRemoteClaimsPage,
+  // Save/unsave claims
+  fetchMySavedClaimIds,
+  saveClaim as saveRemoteClaim,
+  unsaveClaim as unsaveRemoteClaim,
   CLAIMS_LOAD_ERROR_MESSAGE,
   DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
@@ -145,6 +149,10 @@ interface ClaimsContextValue {
   blockedUserIds: string[];
   blockUser: (userId: string, sourceClaimId?: string | null) => Promise<void>;
   unblockUser: (userId: string) => Promise<void>;
+  // Save/unsave claims: ids loaded once at auth; toggle is optimistic and
+  // resolves to the new saved state (true = now saved).
+  savedClaimIds: string[];
+  toggleSaveClaim: (claimId: string) => Promise<boolean>;
 }
 
 const ClaimsContext = createContext<ClaimsContextValue | undefined>(undefined);
@@ -423,6 +431,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
   // GET /api/users/me/blocks; blockUser() updates it instantly (no refetch).
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const blockedUserIdsRef = useRef<string[]>([]);
+  // Save/unsave claims: loaded once per login, mirrors blockedUserIds.
+  const [savedClaimIds, setSavedClaimIds] = useState<string[]>([]);
   const [now, setNow] = useState(() => new Date());
   const claimsRef = useRef<Claim[]>([]);
   const locallyCreatedClaimIdsRef = useRef(new Set<string>());
@@ -464,6 +474,30 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         // Non-fatal: server-side RLS filtering still hides blocked content.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser]);
+
+  // Save/unsave claims: load the saved ids once on auth; clear on logout.
+  useEffect(() => {
+    if (!currentUser) {
+      setSavedClaimIds([]);
+      return;
+    }
+
+    let mounted = true;
+
+    fetchMySavedClaimIds(currentUser.id)
+      .then((result) => {
+        if (mounted && !result.error) {
+          setSavedClaimIds(result.savedClaimIds);
+        }
+      })
+      .catch(() => {
+        // Non-fatal: the saved list screen re-queries on open.
       });
 
     return () => {
@@ -1555,6 +1589,41 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentUser],
   );
 
+  // Save/unsave claims. Optimistic like blockUser: state flips BEFORE the
+  // network call and is reverted only if the request fails. Resolves to the
+  // new saved state so callers can toast "Saved" / "Removed".
+  const toggleSaveClaim = useCallback(
+    async (claimId: string): Promise<boolean> => {
+      if (!currentUser) {
+        throw new Error("Please log in to save claims.");
+      }
+
+      const wasSaved = savedClaimIds.includes(claimId);
+
+      setSavedClaimIds((currentIds) =>
+        wasSaved ? currentIds.filter((id) => id !== claimId) : [...currentIds, claimId],
+      );
+
+      const result = wasSaved
+        ? await unsaveRemoteClaim(claimId, currentUser.id)
+        : await saveRemoteClaim(claimId, currentUser.id);
+
+      if (!result.ok) {
+        setSavedClaimIds((currentIds) =>
+          wasSaved
+            ? currentIds.includes(claimId)
+              ? currentIds
+              : [...currentIds, claimId]
+            : currentIds.filter((id) => id !== claimId),
+        );
+        throw new Error(result.error ?? "Could not update saved claims right now.");
+      }
+
+      return !wasSaved;
+    },
+    [currentUser, savedClaimIds],
+  );
+
   const getClaimById = useCallback(
     (claimId: string) => currentClaims.find((claim) => claim.id === claimId),
     [currentClaims],
@@ -1633,12 +1702,18 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       blockedUserIds,
       blockUser,
       unblockUser,
+      // Save/unsave claims
+      savedClaimIds,
+      toggleSaveClaim,
     }),
     [
       // APPLE GUIDELINE 1.2 — user blocking (NEW)
       blockedUserIds,
       blockUser,
       unblockUser,
+      // Save/unsave claims
+      savedClaimIds,
+      toggleSaveClaim,
       addEvidence,
       createClaim,
       currentClaims,

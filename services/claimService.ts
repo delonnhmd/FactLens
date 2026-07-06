@@ -1305,6 +1305,84 @@ export async function fetchClaimsByAuthorPage(
   }
 }
 
+// SAVE/UNSAVE CLAIMS. Same direct supabase-js pattern as the claim reads
+// above; saved_claims RLS scopes every query to the logged-in user.
+interface SavedClaimIdsResult {
+  savedClaimIds: string[];
+  error?: string;
+}
+
+interface SaveClaimActionResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function fetchMySavedClaimIds(userId: string): Promise<SavedClaimIdsResult> {
+  const { data, error } = await supabase
+    .from("saved_claims")
+    .select("claim_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return { savedClaimIds: [], error: error.message };
+  }
+
+  return {
+    savedClaimIds: ((data ?? []) as Array<{ claim_id: string }>).map((row) => row.claim_id),
+  };
+}
+
+export async function saveClaim(claimId: string, userId: string): Promise<SaveClaimActionResult> {
+  const { error } = await supabase.from("saved_claims").insert({ user_id: userId, claim_id: claimId });
+
+  // 23505 = unique violation: already saved, treat as success.
+  if (error && error.code !== "23505") {
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true };
+}
+
+export async function unsaveClaim(claimId: string, userId: string): Promise<SaveClaimActionResult> {
+  const { error } = await supabase
+    .from("saved_claims")
+    .delete()
+    .eq("user_id", userId)
+    .eq("claim_id", claimId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true };
+}
+
+// Full claim objects joined via saved_claims, newest saved first. Hidden
+// claims come back as a null embed (claims RLS applies to the join) and are
+// filtered out here.
+export async function getSavedClaims(offset = 0, limit = DEFAULT_CLAIMS_PAGE_SIZE): Promise<ClaimsResult> {
+  try {
+    const { data, error } = await supabase
+      .from("saved_claims")
+      .select("created_at, claims(*)")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    const rows = ((data ?? []) as unknown as Array<{ claims: ClaimRow | null }>)
+      .map((row) => row.claims)
+      .filter((row): row is ClaimRow => Boolean(row));
+
+    return await getClaimsSuccessResultWithProfiles(rows);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
+  }
+}
+
 // PHASE 3 STEP 9
 export async function searchClaims(query: string, filters: ClaimSearchFilters = {}): Promise<ClaimsResult> {
   // PHASE 3 STEP 11
