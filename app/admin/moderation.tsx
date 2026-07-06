@@ -33,6 +33,12 @@ import {
   type ManagedUser,
   type ModerationReport,
 } from "../../services/moderationService";
+import {
+  fetchAdminAppeals,
+  resolveAdminAppeal,
+  type AppealDecision,
+  type ModerationAppeal,
+} from "../../services/appealService";
 
 type ReportStatus = "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED" | "ALL";
 type UserFilter = "all" | "suspended" | "blocked";
@@ -49,6 +55,26 @@ const claimFilterOptions: { value: ClaimFilter; label: string }[] = [
   { value: "hidden", label: "Hidden" },
   { value: "visible", label: "Visible" },
 ];
+
+function formatAppealAction(actionType: ModerationAppeal["action_type"]): string {
+  if (actionType === "claim_hidden") {
+    return "Claim hidden";
+  }
+
+  if (actionType === "claim_removed") {
+    return "Claim removed";
+  }
+
+  return "Account suspended";
+}
+
+function getAppealUserLabel(appeal: ModerationAppeal): string {
+  if (appeal.username) {
+    return `@${appeal.username}`;
+  }
+
+  return appeal.display_name || appeal.user_id;
+}
 
 function getTargetId(report: ModerationReport): string | null {
   if (report.target_type === "CLAIM") {
@@ -101,6 +127,10 @@ export default function ModerationScreen() {
   const [claimsFilter, setClaimsFilter] = useState<ClaimFilter>("all");
   const [managedClaims, setManagedClaims] = useState<ManagedClaim[]>([]);
   const [claimsMessage, setClaimsMessage] = useState("");
+  const [appeals, setAppeals] = useState<ModerationAppeal[]>([]);
+  const [appealsMessage, setAppealsMessage] = useState("");
+  const [appealReviewNotes, setAppealReviewNotes] = useState<Record<string, string>>({});
+  const [showResolvedAppeals, setShowResolvedAppeals] = useState(false);
 
   const loadReports = useCallback(async () => {
     setRefreshing(true);
@@ -146,6 +176,13 @@ export default function ModerationScreen() {
     setClaimsMessage(result.error ?? (result.claims.length === 0 ? "No claims found." : ""));
   }, [claimsFilter, claimsSearch]);
 
+  const loadAppeals = useCallback(async () => {
+    setAppealsMessage("Loading...");
+    const result = await fetchAdminAppeals("all", 100);
+    setAppeals(result.appeals);
+    setAppealsMessage(result.error ?? (result.appeals.length === 0 ? "No appeals found." : ""));
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) {
       return;
@@ -169,6 +206,14 @@ export default function ModerationScreen() {
 
     return () => clearTimeout(timer);
   }, [isAdmin, loadManagedClaims]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
+    void loadAppeals();
+  }, [isAdmin, loadAppeals]);
 
   const runUserAction = useCallback(
     async (action: () => Promise<{ ok: boolean; error?: string }>, successMessage: string) => {
@@ -202,6 +247,28 @@ export default function ModerationScreen() {
     [loadManagedClaims],
   );
 
+  const runAppealAction = useCallback(
+    async (appealId: string, decision: AppealDecision) => {
+      setAppealsMessage("");
+      const result = await resolveAdminAppeal(appealId, decision, appealReviewNotes[appealId] ?? "");
+
+      if (!result.ok) {
+        setAppealsMessage(result.error ?? "Could not resolve appeal.");
+        return;
+      }
+
+      setAppealsMessage(decision === "granted" ? "Appeal granted." : "Appeal denied.");
+      setAppealReviewNotes((currentNotes) => {
+        const nextNotes = { ...currentNotes };
+        delete nextNotes[appealId];
+        return nextNotes;
+      });
+      await loadAppeals();
+      await Promise.all([loadManagedClaims(), loadManagedUsers()]);
+    },
+    [appealReviewNotes, loadAppeals, loadManagedClaims, loadManagedUsers],
+  );
+
   const confirmDeleteClaim = (targetClaimId: string) => {
     Alert.alert("Delete claim?", "This permanently removes the claim and related rows.", [
       { text: "Cancel", style: "cancel" },
@@ -214,6 +281,9 @@ export default function ModerationScreen() {
       },
     ]);
   };
+
+  const pendingAppeals = appeals.filter((appeal) => appeal.status === "pending");
+  const resolvedAppeals = appeals.filter((appeal) => appeal.status !== "pending");
 
   if (loading) {
     return (
@@ -346,6 +416,89 @@ export default function ModerationScreen() {
         })}
 
         {!refreshing && reports.length === 0 ? <Text style={styles.emptyText}>No reports loaded.</Text> : null}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Appeals</Text>
+          <View style={styles.actionRow}>
+            <AdminAction label="Load appeals" styles={styles} onPress={loadAppeals} />
+            <AdminAction
+              label={showResolvedAppeals ? "Hide resolved" : "Show resolved"}
+              styles={styles}
+              onPress={() => setShowResolvedAppeals((current) => !current)}
+            />
+          </View>
+          {appealsMessage ? <Text style={styles.messageText}>{appealsMessage}</Text> : null}
+          <Text style={styles.note}>
+            Pending {pendingAppeals.length} / Resolved {resolvedAppeals.length}
+          </Text>
+        </View>
+
+        {pendingAppeals.map((appeal) => (
+          <View key={appeal.id} style={styles.reportCard}>
+            <View style={styles.reportHeader}>
+              <Text style={styles.targetType}>{formatAppealAction(appeal.action_type)}</Text>
+              <Text style={styles.reportStatus}>PENDING</Text>
+            </View>
+            <Text style={styles.targetSummary} numberOfLines={1}>
+              {getAppealUserLabel(appeal)}
+            </Text>
+            {appeal.claim_title || appeal.claim_id ? (
+              <Text style={styles.note} numberOfLines={2}>
+                Claim: {appeal.claim_title || appeal.claim_id}
+              </Text>
+            ) : null}
+            <Text style={styles.reason}>{appeal.appeal_text}</Text>
+            <Text style={styles.date}>{new Date(appeal.created_at).toLocaleString()}</Text>
+            <TextInput
+              value={appealReviewNotes[appeal.id] ?? ""}
+              onChangeText={(value) =>
+                setAppealReviewNotes((currentNotes) => ({
+                  ...currentNotes,
+                  [appeal.id]: value,
+                }))
+              }
+              placeholder="Review note"
+              placeholderTextColor={appTheme.colors.muted}
+              style={[styles.input, styles.reasonInput, styles.appealReviewInput]}
+              multiline
+            />
+            <View style={styles.actionRow}>
+              <AdminAction label="Grant" styles={styles} onPress={() => runAppealAction(appeal.id, "granted")} />
+              <AdminAction label="Deny" danger styles={styles} onPress={() => runAppealAction(appeal.id, "denied")} />
+            </View>
+          </View>
+        ))}
+
+        {showResolvedAppeals
+          ? resolvedAppeals.map((appeal) => (
+              <View key={appeal.id} style={styles.reportCard}>
+                <View style={styles.reportHeader}>
+                  <Text style={styles.targetType}>{formatAppealAction(appeal.action_type)}</Text>
+                  <Text
+                    style={[
+                      styles.reportStatus,
+                      appeal.status === "granted" ? styles.appealGrantedText : styles.appealDeniedText,
+                    ]}
+                  >
+                    {appeal.status.toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.targetSummary} numberOfLines={1}>
+                  {getAppealUserLabel(appeal)}
+                </Text>
+                {appeal.claim_title || appeal.claim_id ? (
+                  <Text style={styles.note} numberOfLines={2}>
+                    Claim: {appeal.claim_title || appeal.claim_id}
+                  </Text>
+                ) : null}
+                <Text style={styles.note}>{appeal.appeal_text}</Text>
+                {appeal.review_note ? <Text style={styles.reason}>Review: {appeal.review_note}</Text> : null}
+                <Text style={styles.date}>
+                  {appeal.reviewed_at ? new Date(appeal.reviewed_at).toLocaleString() : new Date(appeal.created_at).toLocaleString()}
+                </Text>
+              </View>
+            ))
+          : null}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Direct action</Text>
@@ -710,6 +863,15 @@ function createStyles(theme: AppTheme) {
     reasonInput: {
       minHeight: 80,
       textAlignVertical: "top",
+    },
+    appealReviewInput: {
+      marginTop: 10,
+    },
+    appealGrantedText: {
+      color: theme.colors.success,
+    },
+    appealDeniedText: {
+      color: theme.colors.danger,
     },
     emptyText: {
       color: theme.colors.subtext,

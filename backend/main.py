@@ -2116,6 +2116,19 @@ class AdminHideClaimRequest(BaseModel):
     reason: str = ""
 
 
+# MODERATION APPEALS (NEW, additive)
+class AppealCreateRequest(BaseModel):
+    action_type: str = ""
+    claim_id: str | None = None
+    notification_id: str | None = None
+    appeal_text: str = ""
+
+
+class AppealResolveRequest(BaseModel):
+    decision: str = ""
+    review_note: str = ""
+
+
 class IdentityUsernameCheckRequest(BaseModel):
     username: str = ""
 
@@ -5599,6 +5612,262 @@ def admin_unhide_claim(claim_id: str, request: Request):
             print(f"[admin unhide] notification failed: {error}", flush=True)
 
     return {"ok": True, "claim_id": target_claim_id, "is_hidden": False, "updated": len(result.data or [])}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# MODERATION APPEALS (NEW, additive)
+# Requires supabase/sql/044_moderation_appeals.sql to be run first.
+# Inspection notes:
+# - Suspended users CAN call /api/appeals: get_authenticated_user_id only
+#   validates the token (verified — no is_suspended check anywhere in it),
+#   so no exemption is needed; only require_admin_user blocks suspended
+#   accounts. Do NOT add a suspended check to these user endpoints.
+# - Grant reversal REUSES the existing endpoint functions directly:
+#   admin_unhide_claim() for claim_hidden and admin_suspend_user(
+#   suspended=False) for account_suspended — nothing reimplemented, and
+#   their claim_restored notifications keep firing as they do today.
+# - claim_removed CANNOT be auto-reversed: /admin/claims/delete hard-deletes
+#   the claims row (verified). There is no strike system in this codebase to
+#   clear, so a granted claim_removed appeal records the outcome and
+#   notifies the user only.
+# - appeal_resolved notifications follow the existing fail-soft pattern:
+#   failure never fails the resolution.
+# ═══════════════════════════════════════════════════════════════════════
+
+APPEAL_ACTION_TYPES = {"claim_hidden", "claim_removed", "account_suspended"}
+APPEAL_TEXT_MIN_CHARS = 20
+APPEAL_TEXT_MAX_CHARS = 500
+APPEAL_DENIED_COOLDOWN_DAYS = 30
+
+
+@app.post("/api/appeals")
+def create_appeal(payload: AppealCreateRequest, request: Request):
+    user_id = get_authenticated_user_id(request)
+    action_type = payload.action_type.strip().lower()
+    appeal_text = payload.appeal_text.strip()
+    claim_id = (payload.claim_id or "").strip() or None
+    notification_id = (payload.notification_id or "").strip() or None
+
+    if action_type not in APPEAL_ACTION_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported appeal action type.")
+
+    if len(appeal_text) < APPEAL_TEXT_MIN_CHARS or len(appeal_text) > APPEAL_TEXT_MAX_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Appeal text must be {APPEAL_TEXT_MIN_CHARS}-{APPEAL_TEXT_MAX_CHARS} characters.",
+        )
+
+    if action_type == "account_suspended":
+        claim_id = None
+
+    supabase = get_supabase_client()
+
+    # One appeal per decision: claim_id identifies hidden claims; notification_id
+    # is the durable link for hard-deleted claims whose notification has no
+    # claim_id.
+    existing_query = (
+        supabase.table("moderation_appeals")
+        .select("id, status, created_at, reviewed_at")
+        .eq("user_id", user_id)
+        .eq("action_type", action_type)
+    )
+
+    if claim_id:
+        existing_query = existing_query.eq("claim_id", claim_id)
+    elif notification_id:
+        existing_query = existing_query.eq("notification_id", notification_id)
+    else:
+        existing_query = existing_query.is_("claim_id", "null").is_("notification_id", "null")
+
+    for row in existing_query.execute().data or []:
+        if row.get("status") == "pending":
+            raise HTTPException(status_code=409, detail="You already have a pending appeal for this decision.")
+
+        if row.get("status") == "denied":
+            try:
+                denied_at = datetime.fromisoformat(
+                    str(row.get("reviewed_at") or row.get("created_at")).replace("Z", "+00:00")
+                )
+            except ValueError:
+                continue
+
+            age_days = (datetime.now(timezone.utc) - denied_at).days
+
+            if age_days < APPEAL_DENIED_COOLDOWN_DAYS:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "An appeal for this decision was denied recently. "
+                        f"You can appeal again in {APPEAL_DENIED_COOLDOWN_DAYS - age_days} days."
+                    ),
+                )
+
+    insert_result = (
+        supabase.table("moderation_appeals")
+        .insert({
+            "user_id": user_id,
+            "action_type": action_type,
+            "claim_id": claim_id,
+            "notification_id": notification_id,
+            "appeal_text": appeal_text,
+            "status": "pending",
+        })
+        .execute()
+    )
+    appeal_row = (insert_result.data or [None])[0]
+
+    if not appeal_row:
+        raise HTTPException(status_code=500, detail="Could not submit the appeal.")
+
+    return {"ok": True, "appeal": appeal_row}
+
+
+@app.get("/api/appeals/mine")
+def list_my_appeals(request: Request):
+    user_id = get_authenticated_user_id(request)
+    supabase = get_supabase_client()
+    result = (
+        supabase.table("moderation_appeals")
+        .select("id, action_type, claim_id, notification_id, status, appeal_text, review_note, created_at, reviewed_at")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    return {"ok": True, "appeals": result.data or []}
+
+
+@app.get("/admin/appeals")
+def admin_list_appeals(request: Request, status: str = "all", limit: int = 100):
+    require_admin_user(request)
+    status_filter = (status or "all").strip().lower()
+    supabase = get_supabase_client()
+    query = (
+        supabase.table("moderation_appeals")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(max(1, min(limit, 200)))
+    )
+
+    if status_filter in {"pending", "granted", "denied"}:
+        query = query.eq("status", status_filter)
+
+    appeals = query.execute().data or []
+
+    # Attach usernames + claim titles for display; lookup failure only
+    # degrades labels, never the list.
+    try:
+        user_ids = list({row["user_id"] for row in appeals if row.get("user_id")})
+        claim_ids = list({row["claim_id"] for row in appeals if row.get("claim_id")})
+        profiles_by_id: dict = {}
+        claims_by_id: dict = {}
+
+        if user_ids:
+            profile_rows = (
+                supabase.table("profiles").select("id, username, display_name").in_("id", user_ids).execute()
+            )
+            profiles_by_id = {row["id"]: row for row in profile_rows.data or []}
+
+        if claim_ids:
+            claim_rows = (
+                supabase.table("claims").select("id, title, is_hidden").in_("id", claim_ids).execute()
+            )
+            claims_by_id = {row["id"]: row for row in claim_rows.data or []}
+
+        for row in appeals:
+            profile = profiles_by_id.get(row.get("user_id")) or {}
+            claim = claims_by_id.get(row.get("claim_id")) or {}
+            row["username"] = profile.get("username")
+            row["display_name"] = profile.get("display_name")
+            row["claim_title"] = claim.get("title")
+            row["claim_is_hidden"] = claim.get("is_hidden")
+    except Exception as error:
+        print("[admin appeals] label lookup failed:", str(error), flush=True)
+
+    return {"ok": True, "appeals": appeals}
+
+
+@app.post("/admin/appeals/{appeal_id}/resolve")
+def admin_resolve_appeal(appeal_id: str, payload: AppealResolveRequest, request: Request):
+    admin_user_id = require_admin_user(request)
+    decision = payload.decision.strip().lower()
+    review_note = payload.review_note.strip()
+
+    if decision not in {"granted", "denied"}:
+        raise HTTPException(status_code=400, detail="decision must be 'granted' or 'denied'.")
+
+    supabase = get_supabase_client()
+    appeal_result = (
+        supabase.table("moderation_appeals").select("*").eq("id", appeal_id.strip()).limit(1).execute()
+    )
+    appeal = (appeal_result.data or [None])[0]
+
+    if not appeal:
+        raise HTTPException(status_code=404, detail="Appeal not found.")
+
+    if appeal.get("status") != "pending":
+        raise HTTPException(status_code=409, detail="This appeal was already resolved.")
+
+    action_type = appeal.get("action_type")
+    reversal_note = ""
+
+    if decision == "granted":
+        # Reverse the action by calling the EXISTING endpoint logic.
+        if action_type == "claim_hidden" and appeal.get("claim_id"):
+            admin_unhide_claim(str(appeal["claim_id"]), request)
+        elif action_type == "account_suspended":
+            admin_suspend_user(
+                AdminUserActionRequest(user_id=str(appeal["user_id"]), suspended=False, reason=""),
+                request,
+            )
+        elif action_type == "claim_removed":
+            # Hard-deleted — cannot be restored; the grant is recorded only.
+            reversal_note = " The original claim was permanently removed and cannot be restored."
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update_result = (
+        supabase.table("moderation_appeals")
+        .update({
+            "status": decision,
+            "reviewed_by": admin_user_id,
+            "review_note": review_note or None,
+            "reviewed_at": now_iso,
+        })
+        .eq("id", appeal_id.strip())
+        .eq("status", "pending")
+        .execute()
+    )
+
+    if not (update_result.data or []):
+        raise HTTPException(status_code=409, detail="This appeal was already resolved.")
+
+    # Notify the user (fail-soft, same pattern as the moderation actions).
+    try:
+        outcome_line = (
+            "Your appeal was granted." if decision == "granted" else "Your appeal was denied."
+        )
+
+        if decision == "granted" and action_type == "claim_hidden":
+            outcome_line += " Your claim has been restored."
+        elif decision == "granted" and action_type == "account_suspended":
+            outcome_line += " Your account has been unsuspended."
+        elif decision == "granted" and action_type == "claim_removed":
+            outcome_line += reversal_note
+
+        body = outcome_line + (f" Reviewer note: {review_note}" if review_note else "")
+        notification_claim_id = appeal.get("claim_id") if action_type != "claim_removed" else None
+
+        supabase.table("notifications").insert({
+            "user_id": appeal["user_id"],
+            "type": "appeal_resolved",
+            "title": "Your appeal was reviewed",
+            "body": body,
+            "claim_id": notification_claim_id,
+        }).execute()
+    except Exception as error:
+        print(f"[admin appeals] notification failed: {error}", flush=True)
+
+    return {"ok": True, "appeal_id": appeal_id, "status": decision}
 
 
 @app.get("/admin/manage/users")
