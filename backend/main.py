@@ -64,6 +64,11 @@ try:
         find_or_create_topic_cluster,
         update_cluster_stats,
     )
+    # VERDICT FORMULA v1 (NEW)
+    from services.verdict_engine import (
+        compute_verdict,
+        map_verdict_to_claim_status,
+    )
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
@@ -92,6 +97,11 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         fetch_topic_row,
         find_or_create_topic_cluster,
         update_cluster_stats,
+    )
+    # VERDICT FORMULA v1 (NEW)
+    from backend.services.verdict_engine import (
+        compute_verdict,
+        map_verdict_to_claim_status,
     )
 
 
@@ -5731,6 +5741,75 @@ def admin_override_claim(payload: AdminOverrideRequest, request: Request):
         "ok": True,
         "claim_id": claim_id,
         "status": new_status,
+    }
+
+
+# VERDICT FORMULA v1 (NEW) — backend finalization point.
+#
+# Inspection finding: finalization in this app is client-triggered
+# (claimService.ts -> finalize_expired_claim RPC); there was no backend
+# finalization code path to insert into. This endpoint IS that path now:
+# same guards as the RPC, verdict from services/verdict_engine.py
+# (canonical formula; migration 043 mirrors it inside the RPC so the
+# existing client flow uses v1 too). Already-finalized claims are never
+# recomputed. Topic cluster stats are untouched.
+@app.post("/claims/{claim_id}/finalize")
+def finalize_claim_verdict_v1(claim_id: str, request: Request):
+    get_authenticated_user_id(request)
+    supabase = get_supabase_client()
+
+    claim_result = (
+        supabase.table("claims")
+        .select("id, status, score_lock_at, expires_at")
+        .eq("id", claim_id)
+        .execute()
+    )
+    claim = (claim_result.data or [None])[0]
+
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    if claim.get("status") not in {"OPEN", "ACTIVE", "EARLY_VERDICT", "LOCKED", "VOTING_CLOSED"}:
+        # Terminal claims keep their stored verdict — v1 applies to NEW
+        # finalizations only.
+        return {"ok": True, "claim_id": claim_id, "finalized": False, "status": claim.get("status")}
+
+    lock_at = claim.get("score_lock_at") or claim.get("expires_at")
+
+    if lock_at and datetime.fromisoformat(str(lock_at).replace("Z", "+00:00")) > datetime.now(timezone.utc):
+        return {"ok": True, "claim_id": claim_id, "finalized": False, "status": claim.get("status")}
+
+    verdict = compute_verdict(claim_id, supabase)
+    final_status = map_verdict_to_claim_status(verdict["verdict"])
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    update_result = (
+        supabase.table("claims")
+        .update({
+            "status": final_status,
+            "verdict_reason": verdict["reason"],
+            "combined_score": verdict["combined_score"],
+            "decisive_ratio": verdict["decisive_ratio"],
+            "evidence_ratio": verdict["evidence_ratio_true"],
+            "total_votes": verdict["total_votes"],
+            "verdict_calculated_at": now_iso,
+            "published_at": now_iso,
+            "phase4_locked": True,
+            "updated_at": now_iso,
+        })
+        .eq("id", claim_id)
+        .in_("status", ["OPEN", "ACTIVE", "EARLY_VERDICT", "LOCKED", "VOTING_CLOSED"])
+        .execute()
+    )
+
+    print("[verdict v1] claim:", claim_id, "->", final_status, verdict["reason"], flush=True)
+
+    return {
+        "ok": True,
+        "claim_id": claim_id,
+        "finalized": bool(update_result.data),
+        "status": final_status,
+        **verdict,
     }
 
 
