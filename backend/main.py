@@ -5640,6 +5640,14 @@ APPEAL_TEXT_MAX_CHARS = 500
 APPEAL_DENIED_COOLDOWN_DAYS = 30
 
 
+def raise_appeals_unavailable(error: Exception):
+    print("[appeals] moderation_appeals unavailable:", str(error), flush=True)
+    raise HTTPException(
+        status_code=503,
+        detail="Appeals are not available until the moderation appeals migration is applied.",
+    )
+
+
 @app.post("/api/appeals")
 def create_appeal(payload: AppealCreateRequest, request: Request):
     user_id = get_authenticated_user_id(request)
@@ -5679,7 +5687,12 @@ def create_appeal(payload: AppealCreateRequest, request: Request):
     else:
         existing_query = existing_query.is_("claim_id", "null").is_("notification_id", "null")
 
-    for row in existing_query.execute().data or []:
+    try:
+        existing_rows = existing_query.execute().data or []
+    except Exception as error:
+        raise_appeals_unavailable(error)
+
+    for row in existing_rows:
         if row.get("status") == "pending":
             raise HTTPException(status_code=409, detail="You already have a pending appeal for this decision.")
 
@@ -5702,18 +5715,21 @@ def create_appeal(payload: AppealCreateRequest, request: Request):
                     ),
                 )
 
-    insert_result = (
-        supabase.table("moderation_appeals")
-        .insert({
-            "user_id": user_id,
-            "action_type": action_type,
-            "claim_id": claim_id,
-            "notification_id": notification_id,
-            "appeal_text": appeal_text,
-            "status": "pending",
-        })
-        .execute()
-    )
+    try:
+        insert_result = (
+            supabase.table("moderation_appeals")
+            .insert({
+                "user_id": user_id,
+                "action_type": action_type,
+                "claim_id": claim_id,
+                "notification_id": notification_id,
+                "appeal_text": appeal_text,
+                "status": "pending",
+            })
+            .execute()
+        )
+    except Exception as error:
+        raise_appeals_unavailable(error)
     appeal_row = (insert_result.data or [None])[0]
 
     if not appeal_row:
@@ -5726,13 +5742,16 @@ def create_appeal(payload: AppealCreateRequest, request: Request):
 def list_my_appeals(request: Request):
     user_id = get_authenticated_user_id(request)
     supabase = get_supabase_client()
-    result = (
-        supabase.table("moderation_appeals")
-        .select("id, action_type, claim_id, notification_id, status, appeal_text, review_note, created_at, reviewed_at")
-        .eq("user_id", user_id)
-        .order("created_at", desc=True)
-        .execute()
-    )
+    try:
+        result = (
+            supabase.table("moderation_appeals")
+            .select("id, action_type, claim_id, notification_id, status, appeal_text, review_note, created_at, reviewed_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except Exception as error:
+        raise_appeals_unavailable(error)
 
     return {"ok": True, "appeals": result.data or []}
 
@@ -5752,7 +5771,10 @@ def admin_list_appeals(request: Request, status: str = "all", limit: int = 100):
     if status_filter in {"pending", "granted", "denied"}:
         query = query.eq("status", status_filter)
 
-    appeals = query.execute().data or []
+    try:
+        appeals = query.execute().data or []
+    except Exception as error:
+        raise_appeals_unavailable(error)
 
     # Attach usernames + claim titles for display; lookup failure only
     # degrades labels, never the list.
@@ -5797,9 +5819,12 @@ def admin_resolve_appeal(appeal_id: str, payload: AppealResolveRequest, request:
         raise HTTPException(status_code=400, detail="decision must be 'granted' or 'denied'.")
 
     supabase = get_supabase_client()
-    appeal_result = (
-        supabase.table("moderation_appeals").select("*").eq("id", appeal_id.strip()).limit(1).execute()
-    )
+    try:
+        appeal_result = (
+            supabase.table("moderation_appeals").select("*").eq("id", appeal_id.strip()).limit(1).execute()
+        )
+    except Exception as error:
+        raise_appeals_unavailable(error)
     appeal = (appeal_result.data or [None])[0]
 
     if not appeal:
@@ -5825,18 +5850,21 @@ def admin_resolve_appeal(appeal_id: str, payload: AppealResolveRequest, request:
             reversal_note = " The original claim was permanently removed and cannot be restored."
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    update_result = (
-        supabase.table("moderation_appeals")
-        .update({
-            "status": decision,
-            "reviewed_by": admin_user_id,
-            "review_note": review_note or None,
-            "reviewed_at": now_iso,
-        })
-        .eq("id", appeal_id.strip())
-        .eq("status", "pending")
-        .execute()
-    )
+    try:
+        update_result = (
+            supabase.table("moderation_appeals")
+            .update({
+                "status": decision,
+                "reviewed_by": admin_user_id,
+                "review_note": review_note or None,
+                "reviewed_at": now_iso,
+            })
+            .eq("id", appeal_id.strip())
+            .eq("status", "pending")
+            .execute()
+        )
+    except Exception as error:
+        raise_appeals_unavailable(error)
 
     if not (update_result.data or []):
         raise HTTPException(status_code=409, detail="This appeal was already resolved.")

@@ -123,6 +123,7 @@ export default function NotificationsScreen() {
   const [appealError, setAppealError] = useState("");
   const [appealText, setAppealText] = useState("");
   const [appealSubmitting, setAppealSubmitting] = useState(false);
+  const [appealStatusAvailable, setAppealStatusAvailable] = useState(true);
   const [selectedAppealNotification, setSelectedAppealNotification] = useState<AppNotification | null>(null);
 
   const unreadCount = notifications.filter((notification) => !notification.read).length;
@@ -141,6 +142,7 @@ export default function NotificationsScreen() {
       if (!currentUser?.id) {
         setNotifications([]);
         setAppeals([]);
+        setAppealStatusAvailable(true);
         setError("");
         return;
       }
@@ -155,7 +157,8 @@ export default function NotificationsScreen() {
       ]);
       setNotifications(notificationResult.notifications);
       setAppeals(appealResult.appeals);
-      setError(notificationResult.error ?? appealResult.error ?? "");
+      setAppealStatusAvailable(!appealResult.error);
+      setError(notificationResult.error ?? "");
 
       if (showSpinner) {
         setLoading(false);
@@ -283,7 +286,8 @@ export default function NotificationsScreen() {
       const icon = getNotificationIcon(item);
       const notificationAppealKey = getNotificationAppealKey(item);
       const existingAppeal = notificationAppealKey ? appealByKey.get(notificationAppealKey) : null;
-      const showAppealControl = Boolean(notificationAppealKey) && (!existingAppeal || existingAppeal.status === "pending");
+      const showAppealControl =
+        appealStatusAvailable && Boolean(notificationAppealKey) && (!existingAppeal || existingAppeal.status === "pending");
       const appealPending = existingAppeal?.status === "pending";
 
       return (
@@ -334,7 +338,15 @@ export default function NotificationsScreen() {
         </View>
       );
     },
-    [appTheme.colors.muted, appTheme.colors.sourceText, appealByKey, handleNotificationPress, openAppealModal, styles],
+    [
+      appTheme.colors.muted,
+      appTheme.colors.sourceText,
+      appealByKey,
+      appealStatusAvailable,
+      handleNotificationPress,
+      openAppealModal,
+      styles,
+    ],
   );
 
   return (
