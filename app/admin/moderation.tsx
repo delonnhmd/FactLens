@@ -17,6 +17,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAppTheme } from "../../hooks/useTheme";
 import {
   deleteClaimAsAdmin,
+  fetchAdminMetrics,
   fetchManagedClaims,
   fetchManagedUsers,
   fetchModerationReports,
@@ -29,6 +30,7 @@ import {
   suspendUser,
   unhideClaim,
   unsuspendUser,
+  type AdminMetrics,
   type ManagedClaim,
   type ManagedUser,
   type ModerationReport,
@@ -55,6 +57,14 @@ const claimFilterOptions: { value: ClaimFilter; label: string }[] = [
   { value: "hidden", label: "Hidden" },
   { value: "visible", label: "Visible" },
 ];
+
+function formatMetricNumber(value: number | null | undefined): string {
+  return new Intl.NumberFormat("en-US").format(Number(value ?? 0));
+}
+
+function formatMetricRatio(value: number | null | undefined): string {
+  return Number(value ?? 0).toFixed(1);
+}
 
 function formatAppealAction(actionType: ModerationAppeal["action_type"]): string {
   if (actionType === "claim_hidden") {
@@ -118,6 +128,8 @@ export default function ModerationScreen() {
   const [claimId, setClaimId] = useState("");
   const [userId, setUserId] = useState("");
   const [reason, setReason] = useState("Admin moderation action.");
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [metricsMessage, setMetricsMessage] = useState("");
   // ADMIN MANAGEMENT DASHBOARD (NEW, additive)
   const [usersSearch, setUsersSearch] = useState("");
   const [usersFilter, setUsersFilter] = useState<UserFilter>("all");
@@ -140,6 +152,13 @@ export default function ModerationScreen() {
     setMessage(result.error ?? "");
     setRefreshing(false);
   }, [status]);
+
+  const loadMetrics = useCallback(async () => {
+    setMetricsMessage("Loading...");
+    const result = await fetchAdminMetrics();
+    setMetrics(result.metrics);
+    setMetricsMessage(result.error ?? "");
+  }, []);
 
   const runAction = useCallback(
     async (action: () => Promise<{ ok: boolean; error?: string }>, successMessage: string) => {
@@ -188,6 +207,14 @@ export default function ModerationScreen() {
       return;
     }
 
+    void loadMetrics();
+  }, [isAdmin, loadMetrics]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
+
     const timer = setTimeout(() => {
       void loadManagedUsers();
     }, 400);
@@ -214,6 +241,10 @@ export default function ModerationScreen() {
 
     void loadAppeals();
   }, [isAdmin, loadAppeals]);
+
+  const handleAdminRefresh = useCallback(async () => {
+    await Promise.all([loadReports(), loadMetrics()]);
+  }, [loadMetrics, loadReports]);
 
   const runUserAction = useCallback(
     async (action: () => Promise<{ ok: boolean; error?: string }>, successMessage: string) => {
@@ -323,9 +354,74 @@ export default function ModerationScreen() {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadReports} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleAdminRefresh} />}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Metrics</Text>
+          {metrics ? (
+            <View style={[styles.healthBanner, metrics.health.wav_ratio < 30 && styles.healthBannerWarning]}>
+              <Text style={[styles.healthText, metrics.health.wav_ratio < 30 && styles.healthTextWarning]}>
+                Weekly active voters: {formatMetricNumber(metrics.health.weekly_active_voters)} (
+                {formatMetricRatio(metrics.health.wav_ratio)}% of {formatMetricNumber(metrics.health.total_users)} users)
+              </Text>
+            </View>
+          ) : null}
+          <TouchableOpacity style={styles.primaryButton} activeOpacity={0.8} onPress={loadMetrics}>
+            <Text style={styles.primaryButtonText}>Refresh metrics</Text>
+          </TouchableOpacity>
+          {metricsMessage ? <Text style={styles.messageText}>{metricsMessage}</Text> : null}
+        </View>
+
+        {metrics ? (
+          <>
+            <MetricSection
+              title="Today"
+              items={[
+                { label: "New users", value: metrics.today.new_users },
+                { label: "Claims posted", value: metrics.today.claims_posted },
+                { label: "Votes cast", value: metrics.today.votes_cast },
+                { label: "Reports opened", value: metrics.today.reports_opened },
+              ]}
+              styles={styles}
+            />
+            <MetricSection
+              title="This Week"
+              items={[
+                { label: "New users", value: metrics.week.new_users },
+                { label: "Claims posted", value: metrics.week.claims_posted },
+                { label: "Votes cast", value: metrics.week.votes_cast },
+                { label: "Reports opened", value: metrics.week.reports_opened },
+                { label: "Active voters", value: metrics.week.active_voters },
+              ]}
+              styles={styles}
+            />
+            <MetricSection
+              title="This Month"
+              items={[
+                { label: "New users", value: metrics.month.new_users },
+                { label: "Claims posted", value: metrics.month.claims_posted },
+                { label: "Votes cast", value: metrics.month.votes_cast },
+                { label: "Active voters", value: metrics.month.active_voters },
+              ]}
+              styles={styles}
+            />
+            <MetricSection
+              title="Totals"
+              items={[
+                { label: "Users", value: metrics.totals.users },
+                { label: "Claims", value: metrics.totals.claims },
+                { label: "Votes", value: metrics.totals.votes },
+                { label: "Hidden claims", value: metrics.totals.hidden_claims },
+                { label: "Pending reports", value: metrics.totals.pending_reports },
+                { label: "Pending appeals", value: metrics.totals.pending_appeals },
+                { label: "Blocks", value: metrics.totals.blocks },
+              ]}
+              styles={styles}
+            />
+          </>
+        ) : null}
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Reports</Text>
           <View style={styles.statusRow}>
@@ -691,6 +787,30 @@ function AdminAction({
   );
 }
 
+function MetricSection({
+  title,
+  items,
+  styles,
+}: {
+  title: string;
+  items: Array<{ label: string; value?: number | null }>;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.metricSection}>
+      <Text style={styles.metricSectionTitle}>{title}</Text>
+      <View style={styles.metricGrid}>
+        {items.map((item) => (
+          <View key={item.label} style={styles.metricItem}>
+            <Text style={styles.metricValue}>{formatMetricNumber(item.value)}</Text>
+            <Text style={styles.metricLabel}>{item.label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
@@ -733,6 +853,66 @@ function createStyles(theme: AppTheme) {
       color: theme.colors.text,
       fontSize: theme.typography.body.fontSize,
       fontWeight: "500",
+    },
+    healthBanner: {
+      backgroundColor: theme.colors.successBg,
+      borderColor: theme.colors.success,
+      borderRadius: theme.radius.sm,
+      borderWidth: theme.borderWidth,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+    },
+    healthBannerWarning: {
+      backgroundColor: theme.colors.warningBg,
+      borderColor: theme.colors.warningBorder,
+    },
+    healthText: {
+      color: theme.colors.success,
+      fontSize: 13,
+      fontWeight: "700",
+      lineHeight: 18,
+    },
+    healthTextWarning: {
+      color: theme.colors.warningText,
+    },
+    metricSection: {
+      backgroundColor: theme.colors.background,
+      borderColor: theme.colors.lightBorder,
+      borderRadius: theme.radius.md,
+      borderWidth: theme.borderWidth,
+      padding: 12,
+    },
+    metricSectionTitle: {
+      color: theme.colors.text,
+      fontSize: 13,
+      fontWeight: "700",
+      marginBottom: 10,
+    },
+    metricGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    metricItem: {
+      backgroundColor: theme.colors.card,
+      borderColor: theme.colors.lightBorder,
+      borderRadius: theme.radius.sm,
+      borderWidth: theme.borderWidth,
+      minWidth: 102,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+    },
+    metricValue: {
+      color: theme.colors.text,
+      fontSize: 22,
+      fontWeight: "700",
+      lineHeight: 26,
+    },
+    metricLabel: {
+      color: theme.colors.subtext,
+      fontSize: 11,
+      fontWeight: "500",
+      marginTop: 3,
     },
     statusRow: {
       flexDirection: "row",

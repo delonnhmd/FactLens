@@ -2284,6 +2284,11 @@ def fetch_auth_users_for_username_check() -> list[dict]:
     return users
 
 
+ADMIN_METRICS_CACHE_TTL_SECONDS = 300
+_admin_metrics_cache_payload: dict[str, Any] | None = None
+_admin_metrics_cache_expires_at = 0.0
+
+
 def normalize_identity_key(value: Any) -> str:
     return re.sub(r"[\s_.-]+", "", str(value or "").strip().lower())
 
@@ -5150,6 +5155,73 @@ def accept_terms(request: Request):
         print("[terms] no profile row yet for:", authenticated_user_id, flush=True)
 
     return {"ok": True}
+
+
+# ADMIN METRICS DASHBOARD (NEW, additive)
+# Requires supabase/sql/045_admin_metrics_snapshot.sql to be run first.
+def normalize_admin_metrics_payload(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            value = {}
+
+    if isinstance(value, list):
+        value = value[0] if value else {}
+
+    return value if isinstance(value, dict) else {}
+
+
+@app.get("/admin/metrics")
+def admin_metrics(request: Request):
+    require_admin_user(request)
+    global _admin_metrics_cache_payload, _admin_metrics_cache_expires_at
+
+    now_monotonic = monotonic()
+    if _admin_metrics_cache_payload is not None and now_monotonic < _admin_metrics_cache_expires_at:
+        return {
+            "ok": True,
+            **_admin_metrics_cache_payload,
+            "cached": True,
+            "cache_expires_in_seconds": max(0, int(_admin_metrics_cache_expires_at - now_monotonic)),
+        }
+
+    now_utc = datetime.now(timezone.utc)
+    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = now_utc - timedelta(days=7)
+    month_start = now_utc - timedelta(days=30)
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.rpc(
+            "admin_metrics_snapshot",
+            {
+                "today_start": today_start.isoformat(),
+                "week_start": week_start.isoformat(),
+                "month_start": month_start.isoformat(),
+            },
+        ).execute()
+    except Exception as error:
+        print("[admin metrics] snapshot failed:", str(error), flush=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Admin metrics are unavailable until supabase/sql/045_admin_metrics_snapshot.sql is applied.",
+        )
+
+    payload = normalize_admin_metrics_payload(result.data)
+
+    if not payload:
+        raise HTTPException(status_code=500, detail="Could not load admin metrics right now.")
+
+    _admin_metrics_cache_payload = payload
+    _admin_metrics_cache_expires_at = monotonic() + ADMIN_METRICS_CACHE_TTL_SECONDS
+
+    return {
+        "ok": True,
+        **payload,
+        "cached": False,
+        "cache_expires_in_seconds": ADMIN_METRICS_CACHE_TTL_SECONDS,
+    }
 
 
 # PHASE 5 STEP 2

@@ -15,6 +15,40 @@ export interface ModerationReport {
   target?: Record<string, unknown> | null;
 }
 
+export interface AdminMetricPeriod {
+  new_users: number;
+  claims_posted: number;
+  votes_cast: number;
+  reports_opened?: number;
+  active_voters?: number;
+}
+
+export interface AdminMetricTotals {
+  users: number;
+  claims: number;
+  votes: number;
+  hidden_claims: number;
+  pending_reports: number;
+  pending_appeals: number;
+  blocks: number;
+}
+
+export interface AdminMetricHealth {
+  weekly_active_voters: number;
+  total_users: number;
+  wav_ratio: number;
+}
+
+export interface AdminMetrics {
+  today: AdminMetricPeriod;
+  week: AdminMetricPeriod;
+  month: AdminMetricPeriod;
+  totals: AdminMetricTotals;
+  health: AdminMetricHealth;
+  cached?: boolean;
+  cache_expires_in_seconds?: number;
+}
+
 async function getAdminHeaders(): Promise<Record<string, string> | null> {
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;
@@ -57,6 +91,16 @@ export async function fetchModerationReports(
   } catch {
     return { reports: [], error: "Could not load moderation reports." };
   }
+}
+
+export async function fetchAdminMetrics(): Promise<{ metrics: AdminMetrics | null; error?: string }> {
+  const result = await getAdminJson<AdminMetrics>("/admin/metrics");
+
+  if (result.error || !result.data) {
+    return { metrics: null, error: result.error };
+  }
+
+  return { metrics: result.data };
 }
 
 export async function resolveModerationReport(
