@@ -23,6 +23,10 @@ import { MentionText } from "./MentionText";
 // APPLE GUIDELINE 1.2 — user blocking (NEW)
 import { useAuth } from "../context/AuthContext";
 import { useClaims } from "../context/ClaimsContext";
+// Report reason picker + note (shared with claim detail)
+import { ReportNoteModal, showReportReasonPicker } from "./ReportClaimFlow";
+// Public user profile navigation
+import { useRouter } from "expo-router";
 
 // PHASE 4 STEP 18
 // Source trust label update
@@ -219,6 +223,10 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
   const { currentUser } = useAuth();
   const { blockUser } = useClaims();
+  // Public user profile navigation; anonymized/deleted authors are not tappable.
+  const router = useRouter();
+  const authorIsAnonymous =
+    !claim.authorId || claim.authorUsername === "deleted_user" || claim.authorDisplayName === "Deleted User";
   // PHASE 5 PRE-LAUNCH: collapse long descriptions until "Read more" is tapped.
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const descriptionWordCount = claim.description ? claim.description.trim().split(/\s+/).length : 0;
@@ -264,14 +272,20 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     [claim.id, onVote],
   );
 
-  const handleReport = useCallback(async () => {
-    try {
-      await onReport(claim.id, "Spam", "");
-      Alert.alert("Report submitted.");
-    } catch (error) {
-      Alert.alert("Could not submit report right now.");
-    }
-  }, [claim.id, onReport]);
+  // Reason chosen in step 1; non-null shows the note modal (step 2).
+  const [pendingReportReason, setPendingReportReason] = useState<ReportReason | null>(null);
+
+  const handleReport = useCallback(
+    async (reason: ReportReason, note: string) => {
+      try {
+        await onReport(claim.id, reason, note);
+        Alert.alert("Report submitted.");
+      } catch (error) {
+        Alert.alert("Could not submit report right now.");
+      }
+    },
+    [claim.id, onReport],
+  );
 
   const verdictIconName =
     claim.status === "FINALIZED_TRUE" || claim.status === "COMMUNITY_TRUE"
@@ -318,7 +332,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         text: "Report",
         style: "destructive",
         onPress: () => {
-          void handleReport();
+          // Step 1: reason picker, then step 2: optional note modal.
+          showReportReasonPicker((reason) => setPendingReportReason(reason));
         },
       },
       // APPLE GUIDELINE 1.2 — user blocking (NEW)
@@ -340,7 +355,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         style: "cancel",
       },
     ]);
-  }, [canBlockAuthor, claim.shareUrl, handleBlock, handleReport]);
+  }, [canBlockAuthor, claim.shareUrl, handleBlock]);
 
   // PHASE 5 STEP 3
   if (claim.hidden) {
@@ -369,14 +384,22 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         accessibilityHint="View full claim details and evidence"
       >
         <View style={styles.body}>
-          <View style={styles.authorRow}>
+          <TouchableOpacity
+            style={styles.authorRow}
+            activeOpacity={0.8}
+            disabled={authorIsAnonymous}
+            onPress={() => router.push(`/user/${claim.authorId}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${authorHandle}'s profile`}
+            accessibilityHint="Opens this contributor's public profile and claims"
+          >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{avatarInitial}</Text>
             </View>
             <Text style={styles.authorMeta} numberOfLines={1}>
               {authorHandle} {"\u00B7"} {claim.author.rankTitle} {"\u00B7"} {getRelativeTime(claim.createdAt)}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           <Text style={styles.title}>
             {claim.title}
@@ -487,6 +510,19 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           <Text style={styles.actionText}>More</Text>
         </TouchableOpacity>
       </View>
+      {/* Step 2 of the report flow: optional note before the existing submit. */}
+      <ReportNoteModal
+        visible={pendingReportReason !== null}
+        onCancel={() => setPendingReportReason(null)}
+        onSubmit={(note) => {
+          const reason = pendingReportReason;
+          setPendingReportReason(null);
+
+          if (reason) {
+            void handleReport(reason, note);
+          }
+        }}
+      />
     </View>
   );
 }

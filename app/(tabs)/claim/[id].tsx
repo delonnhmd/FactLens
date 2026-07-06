@@ -64,6 +64,8 @@ import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../../
 import { normalizeUrl } from "../../../utils/url";
 import { getTopBadges } from "../../../utils/reputation";
 import { reportEvidence } from "../../../services/reportService";
+// Report note step (shared with the feed card "..." menu)
+import { ReportNoteModal } from "../../../components/ReportClaimFlow";
 import {
   formatImageSize,
   pickImageFromCamera,
@@ -776,8 +778,21 @@ export default function ClaimDetailScreen() {
     Alert.alert("Report submitted.");
   };
 
+  // Optional-note step shown between the reason chips and the submit call.
+  const [reportNoteModalVisible, setReportNoteModalVisible] = useState(false);
+
+  const handleReportButtonPress = () => {
+    if (!selectedReportReason) {
+      setReportError("Choose a report reason.");
+      return;
+    }
+
+    setReportError("");
+    setReportNoteModalVisible(true);
+  };
+
   // PHASE 3 STEP 6
-  const handleSubmitReport = async () => {
+  const handleSubmitReport = async (noteOverride?: string) => {
     if (!claim) {
       return;
     }
@@ -790,11 +805,14 @@ export default function ClaimDetailScreen() {
       return;
     }
 
+    const noteToSubmit = noteOverride ?? reportNote;
+
     setReportError("");
     setReportSubmitting(true);
 
     try {
-      await reportClaim(claim.id, reasonToSubmit, reportNote);
+      await reportClaim(claim.id, reasonToSubmit, noteToSubmit);
+      setReportNote(noteToSubmit);
       setReportReason(reasonToSubmit);
       setSelectedReportReason(reasonToSubmit);
       setReportSuccess(true);
@@ -1223,7 +1241,15 @@ export default function ClaimDetailScreen() {
           <TouchableOpacity
             style={styles.authorHeaderRow}
             activeOpacity={0.85}
-            onPress={() => openContributorProfile(claim.author.publicProfileSlug || claim.authorUsername, claim.author.id, claim.authorUsername)}
+            onPress={() => {
+              // Public user profile with claims; anonymized/deleted authors
+              // are not navigable.
+              if (!claim.author.id || claim.authorUsername === "deleted_user") {
+                return;
+              }
+
+              router.push(`/user/${claim.author.id}`);
+            }}
           >
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
@@ -1338,7 +1364,7 @@ export default function ClaimDetailScreen() {
                 reportSubmitting && styles.disabledButton,
               ]}
               activeOpacity={0.8}
-              onPress={handleSubmitReport}
+              onPress={handleReportButtonPress}
               disabled={reportSubmitting}
             >
               <Ionicons
@@ -1357,6 +1383,16 @@ export default function ClaimDetailScreen() {
           ) : null}
           {reportError ? <Text style={styles.errorText}>{reportError}</Text> : null}
           {reportSuccess ? <Text style={styles.reportSuccess}>Report submitted.</Text> : null}
+          {/* Step 2 of the report flow: optional note before the existing submit. */}
+          <ReportNoteModal
+            visible={reportNoteModalVisible}
+            submitting={reportSubmitting}
+            onCancel={() => setReportNoteModalVisible(false)}
+            onSubmit={(note) => {
+              setReportNoteModalVisible(false);
+              void handleSubmitReport(note);
+            }}
+          />
           {/* APPLE GUIDELINE 1.2 — user blocking (NEW): same card as the
               report flow; hidden on the user's own claims and when logged out. */}
           {currentUser && currentUser.id !== claim.authorId ? (

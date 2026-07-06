@@ -1279,6 +1279,32 @@ export async function fetchLatestClaimsPage(
   }
 }
 
+// Public user profile: one contributor's claims, newest first. Uses the
+// normal client so RLS applies (hidden claims + blocked authors filtered
+// automatically; admins and the author still see hidden ones).
+export async function fetchClaimsByAuthorPage(
+  authorId: string,
+  limit = DEFAULT_CLAIMS_PAGE_SIZE,
+  offset = 0,
+): Promise<ClaimsResult> {
+  try {
+    const { data, error } = await supabase
+      .from("claims")
+      .select("*")
+      .eq("author_id", authorId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      return getClaimsErrorResult(error);
+    }
+
+    return await getClaimsSuccessResultWithProfiles((data ?? []) as ClaimRow[]);
+  } catch (error) {
+    return getClaimsErrorResult(error, "Claim mapping failed");
+  }
+}
+
 // PHASE 3 STEP 9
 export async function searchClaims(query: string, filters: ClaimSearchFilters = {}): Promise<ClaimsResult> {
   // PHASE 3 STEP 11
