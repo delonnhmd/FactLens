@@ -417,6 +417,7 @@ type BackendProfileResponse = {
   detail?: unknown;
   error?: unknown;
   message?: unknown;
+  updated_rows?: unknown;
 };
 
 function getBackendProfileError(json: BackendProfileResponse, fallback: string): string {
@@ -459,6 +460,12 @@ async function saveProfileThroughBackend(
   }
 
   try {
+    console.log("[profile update] request:", {
+      path,
+      method,
+      fields: Object.keys(body),
+    });
+
     const response = await fetch(`${backendUrl}${path}`, {
       method,
       headers: {
@@ -468,6 +475,15 @@ async function saveProfileThroughBackend(
       body: JSON.stringify(body),
     });
     const json = (await response.json().catch(() => ({}))) as BackendProfileResponse;
+    const backendError = response.ok ? null : json.detail ?? json.error ?? json.message ?? null;
+
+    console.log("[profile update] response:", {
+      path,
+      status: response.status,
+      ok: Boolean(json.ok),
+      updatedRows: json.updated_rows ?? null,
+      supabaseError: backendError,
+    });
 
     if (!response.ok || !json.ok || !json.profile) {
       return {
@@ -479,7 +495,11 @@ async function saveProfileThroughBackend(
     return {
       profile: mapProfileRowToProfile(json.profile),
     };
-  } catch {
+  } catch (error) {
+    console.log("[profile update] request failed:", {
+      path,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { profile: null, error: fallbackError };
   }
 }
@@ -661,6 +681,7 @@ export async function updateProfile(userId: string, updates: ProfileUpdates): Pr
   const normalizedUsername = updates.username !== undefined ? normalizeUsername(updates.username) : undefined;
   const usernameValidationError =
     updates.username !== undefined ? getUsernameValidationError(updates.username) : "";
+  const isAvatarUpdate = updates.avatar_url !== undefined || updates.avatar_path !== undefined;
 
   if (updates.avatar_url !== undefined && updates.avatar_url && !isValidAvatarUrl(updates.avatar_url)) {
     return { profile: null, error: "Avatar URL must be a valid URL." };
@@ -702,6 +723,15 @@ export async function updateProfile(userId: string, updates: ProfileUpdates): Pr
 
   if (userError || !userData.user || userData.user.id !== userId) {
     return { profile: null, error: "Please log in to update your profile." };
+  }
+
+  if (isAvatarUpdate) {
+    console.log("[avatar save] database update:", {
+      userId,
+      avatarUrl: normalizedUpdates.avatar_url ?? null,
+      avatarPath: normalizedUpdates.avatar_path ?? null,
+      updatedAt: normalizedUpdates.updated_at,
+    });
   }
 
   return saveProfileThroughBackend(

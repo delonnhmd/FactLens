@@ -293,6 +293,15 @@ export default function ProfileScreen() {
       const image = source === "camera" ? await pickImageFromCamera() : await pickImageFromLibrary();
 
       if (image) {
+        console.log("[avatar save] image selected:", {
+          source,
+          uri: image.uri,
+          fileName: image.fileName ?? null,
+          mimeType: image.mimeType ?? null,
+          fileSize: image.fileSize ?? null,
+          width: image.width ?? null,
+          height: image.height ?? null,
+        });
         setSelectedAvatar(image);
       }
     } catch (error) {
@@ -330,20 +339,48 @@ export default function ProfileScreen() {
     setActionMessage("");
 
     try {
+      console.log("[avatar save] start:", {
+        userId: currentUser.id,
+        previousAvatarPath: profile?.avatar_path ?? null,
+        selectedBytes: selectedAvatar.fileSize ?? null,
+      });
+
       const uploadedAvatar = await uploadProfileAvatar(currentUser.id, selectedAvatar, profile?.avatar_path ?? null);
+      console.log("[avatar save] upload success:", {
+        storagePath: uploadedAvatar.imagePath,
+        publicUrl: uploadedAvatar.imageUrl,
+      });
+
       const result = await updateProfile(currentUser.id, {
         avatar_url: uploadedAvatar.imageUrl,
         avatar_path: uploadedAvatar.imagePath,
       });
+      console.log("[avatar save] database update result:", {
+        ok: Boolean(result.profile && !result.error),
+        error: result.error ?? null,
+        avatarUrl: result.profile?.avatar_url ?? null,
+        avatarPath: result.profile?.avatar_path ?? null,
+      });
 
       if (result.error) {
-        setAvatarError(cleanUserError(result.error));
+        setAvatarError("Your photo uploaded but your profile could not be updated.");
         return;
       }
 
       setSelectedAvatar(null);
       setActionMessage("Avatar updated.");
-      await refreshProfile();
+      console.log("[avatar save] refresh profile: start");
+      const refreshResult = await refreshProfile({ silent: true });
+
+      if (refreshResult.error) {
+        console.log("[avatar save] refresh profile failed silently:", refreshResult.error);
+        return;
+      }
+
+      console.log("[avatar save] UI refresh complete:", {
+        avatarUrl: refreshResult.profile?.avatar_url ?? null,
+        avatarPath: refreshResult.profile?.avatar_path ?? null,
+      });
     } catch (error) {
       setAvatarError(error instanceof Error ? error.message : "Could not upload image. Please try again.");
     } finally {

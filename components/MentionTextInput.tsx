@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   StyleProp,
   StyleSheet,
   Text,
@@ -173,7 +174,11 @@ export function MentionTextInput({
                   }}
                 >
                   <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{item.displayName.slice(0, 1).toUpperCase()}</Text>
+                    {item.avatarUrl ? (
+                      <Image source={{ uri: item.avatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={styles.avatarText}>{item.displayName.slice(0, 1).toUpperCase()}</Text>
+                    )}
                   </View>
                   <View style={styles.suggestionTextWrap}>
                     <View style={styles.nameRow}>
@@ -237,6 +242,11 @@ function createStyles(theme: AppTheme) {
       color: theme.colors.primary,
       fontSize: 13,
       fontWeight: "500",
+    },
+    avatarImage: {
+      borderRadius: 16,
+      height: 32,
+      width: 32,
     },
     suggestionTextWrap: {
       flex: 1,

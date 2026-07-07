@@ -371,6 +371,7 @@ export default function ClaimDetailScreen() {
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
+  const [authorAvatarLoadFailed, setAuthorAvatarLoadFailed] = useState(false);
   const evidenceNoteMentionLimitError = getMentionLimitError(
     evidenceNote,
     EVIDENCE_MENTION_LIMIT,
@@ -384,6 +385,10 @@ export default function ClaimDetailScreen() {
   useEffect(() => {
     showTabBar();
   }, [showTabBar]);
+
+  useEffect(() => {
+    setAuthorAvatarLoadFailed(false);
+  }, [claim?.authorAvatarUrl]);
 
   // PHASE 3 STEP 3
   // PHASE 3 STEP 32
@@ -1050,6 +1055,10 @@ export default function ClaimDetailScreen() {
   const minVotesLabel = `${totalVotes}/${claim.minVotesRequired}`;
   // PHASE 4 STEP 16
   const reportButtonActive = reportSubmitting || Boolean(selectedReportReason);
+  const authorAvatarInitial = (claim.authorUsername || claim.authorDisplayName || "U").slice(0, 1).toUpperCase();
+  const showAuthorAvatarImage = Boolean(
+    claim.authorAvatarUrl && !authorAvatarLoadFailed && claim.authorUsername !== "deleted_user",
+  );
   const shareClaim = () => {
     Alert.alert("Share link copied.", claim.shareUrl);
   };
@@ -1268,6 +1277,17 @@ export default function ClaimDetailScreen() {
               router.push(`/user/${claim.author.id}`);
             }}
           >
+            <View style={styles.detailAuthorAvatar}>
+              {showAuthorAvatarImage && claim.authorAvatarUrl ? (
+                <Image
+                  source={{ uri: claim.authorAvatarUrl }}
+                  style={styles.detailAuthorAvatarImage}
+                  onError={() => setAuthorAvatarLoadFailed(true)}
+                />
+              ) : (
+                <Text style={styles.detailAuthorAvatarText}>{authorAvatarInitial}</Text>
+              )}
+            </View>
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{claim.authorDisplayName}</Text>
               <Text style={styles.authorText}>@{claim.authorUsername}</Text>
@@ -1574,6 +1594,9 @@ export default function ClaimDetailScreen() {
                 const config = evidenceTypeConfig[item.type];
                 const sourceQuality = getEvidenceSourceQuality(item);
                 const sourceDomain = getEvidenceSourceDomain(item.url);
+                const contributorInitial = (item.contributorUsername || item.contributorDisplayName || "U")
+                  .slice(0, 1)
+                  .toUpperCase();
 
                 if (item.hidden) {
                   return (
@@ -1611,6 +1634,13 @@ export default function ClaimDetailScreen() {
                         activeOpacity={0.85}
                         onPress={() => openContributorProfile(item.contributorProfileSlug || item.contributorUsername, item.userId, item.contributorUsername)}
                       >
+                        <View style={styles.evidenceContributorAvatar}>
+                          {item.contributorAvatarUrl ? (
+                            <Image source={{ uri: item.contributorAvatarUrl }} style={styles.evidenceContributorAvatarImage} />
+                          ) : (
+                            <Text style={styles.evidenceContributorAvatarText}>{contributorInitial}</Text>
+                          )}
+                        </View>
                         <Text style={styles.evidenceContributorText} numberOfLines={1}>
                           @{item.contributorUsername}    {item.contributorRankTitle ?? "Claim Checker"}
                         </Text>
@@ -1905,6 +1935,24 @@ function createStyles(theme: AppTheme) {
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.sm,
   },
+  evidenceContributorAvatar: {
+    alignItems: "center",
+    backgroundColor: theme.colors.leaderboardAvatar,
+    borderRadius: 11,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+  },
+  evidenceContributorAvatarImage: {
+    borderRadius: 11,
+    height: 22,
+    width: 22,
+  },
+  evidenceContributorAvatarText: {
+    color: theme.colors.leaderboardAvatarText,
+    fontSize: 10,
+    fontWeight: "500",
+  },
   evidenceContributorText: {
     color: theme.colors.subtext,
     flexShrink: 1,
@@ -1923,6 +1971,24 @@ function createStyles(theme: AppTheme) {
     justifyContent: "space-between",
     gap: theme.spacing.md,
     marginBottom: theme.spacing.md,
+  },
+  detailAuthorAvatar: {
+    alignItems: "center",
+    backgroundColor: theme.colors.leaderboardAvatar,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  detailAuthorAvatarImage: {
+    borderRadius: 18,
+    height: 36,
+    width: 36,
+  },
+  detailAuthorAvatarText: {
+    color: theme.colors.leaderboardAvatarText,
+    fontSize: 14,
+    fontWeight: "500",
   },
   authorInfo: {
     flex: 1,

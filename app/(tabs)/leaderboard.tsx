@@ -1,7 +1,7 @@
 // PHASE 5 STEP 1
 // PHASE 5 STEP 5 PRE-LAUNCH
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
@@ -22,6 +22,33 @@ const tabs: Array<{ label: string; value: LeaderboardScope }> = [
   { label: "This Month", value: "monthly" },
   { label: "All Time", value: "all_time" },
 ];
+
+function LeaderboardAvatar({
+  avatarUrl,
+  initial,
+  styles,
+}: {
+  avatarUrl: string | null;
+  initial: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const [loadFailed, setLoadFailed] = useState(false);
+  const showImage = Boolean(avatarUrl && !loadFailed);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [avatarUrl]);
+
+  return (
+    <View style={styles.avatar}>
+      {showImage && avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.avatarImage} onError={() => setLoadFailed(true)} />
+      ) : (
+        <Text style={styles.avatarText}>{initial}</Text>
+      )}
+    </View>
+  );
+}
 
 export default function LeaderboardScreen() {
   // PHASE 5 STEP 1E
@@ -175,9 +202,11 @@ export default function LeaderboardScreen() {
                     {index + 1}
                   </Text>
                 </View>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{user.username.slice(0, 1).toUpperCase()}</Text>
-                </View>
+                <LeaderboardAvatar
+                  avatarUrl={user.avatarUrl}
+                  initial={user.username.slice(0, 1).toUpperCase()}
+                  styles={styles}
+                />
                 <View style={styles.userInfo}>
                   <Text style={styles.username} numberOfLines={1}>
                     @{user.username}
@@ -313,6 +342,11 @@ function createStyles(theme: AppTheme) {
     color: theme.colors.leaderboardAvatarText,
     fontSize: 12,
     fontWeight: "500",
+  },
+  avatarImage: {
+    borderRadius: 15,
+    height: 30,
+    width: 30,
   },
   userInfo: {
     flex: 1,

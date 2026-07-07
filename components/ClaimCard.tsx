@@ -229,6 +229,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     !claim.authorId || claim.authorUsername === "deleted_user" || claim.authorDisplayName === "Deleted User";
   // PHASE 5 PRE-LAUNCH: collapse long descriptions until "Read more" is tapped.
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const descriptionWordCount = claim.description ? claim.description.trim().split(/\s+/).length : 0;
   const descriptionIsLong = descriptionWordCount > FEED_DESCRIPTION_WORD_LIMIT;
   const displayDescription = descriptionExpanded ? claim.description : truncateDescription(claim.description);
@@ -257,8 +258,13 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const authorHandle = claim.authorUsername ? `@${claim.authorUsername}` : "Contributor";
   // PHASE 5 STEP 6
   const thumbnailUrl = claim.media.thumbnailUrl || claim.media.imageUrl || null;
+  const showAvatarImage = Boolean(claim.authorAvatarUrl && !avatarLoadFailed && !authorIsAnonymous);
   // PHASE 5 election positioning UI
   const isLive = isLiveClaim(claim.createdAt);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [claim.authorAvatarUrl]);
 
   const handleVote = useCallback(
     async (vote: VoteOption) => {
@@ -415,7 +421,15 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             accessibilityHint="Opens this contributor's public profile and claims"
           >
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{avatarInitial}</Text>
+              {showAvatarImage && claim.authorAvatarUrl ? (
+                <Image
+                  source={{ uri: claim.authorAvatarUrl }}
+                  style={styles.avatarImage}
+                  onError={() => setAvatarLoadFailed(true)}
+                />
+              ) : (
+                <Text style={styles.avatarText}>{avatarInitial}</Text>
+              )}
             </View>
             <Text style={styles.authorMeta} numberOfLines={1}>
               {authorHandle} {"\u00B7"} {claim.author.rankTitle} {"\u00B7"} {getRelativeTime(claim.createdAt)}
@@ -582,6 +596,11 @@ function createStyles(theme: AppTheme) {
     color: theme.colors.leaderboardAvatarText,
     fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
+  },
+  avatarImage: {
+    borderRadius: 12,
+    height: 28,
+    width: 28,
   },
   authorMeta: {
     color: theme.colors.subtext,

@@ -2881,8 +2881,13 @@ def is_valid_backend_avatar_url(value: str | None) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def build_profile_response(row: dict | None) -> dict:
-    return {"ok": True, "profile": row}
+def build_profile_response(row: dict | None, updated_rows: int | None = None) -> dict:
+    response = {"ok": True, "profile": row}
+
+    if updated_rows is not None:
+        response["updated_rows"] = updated_rows
+
+    return response
 
 
 def fetch_profile_row(supabase: Any, user_id: str) -> dict | None:
@@ -4434,16 +4439,28 @@ def update_backend_profile(payload: ProfileUpdateRequest, request: Request):
             .eq("id", user_id)
             .execute()
         )
+        updated_rows = len(result.data or [])
+        supabase_error = getattr(result, "error", None)
+        print(
+            "[profile update] database update:",
+            {
+                "user_id": user_id,
+                "fields": sorted(updates.keys()),
+                "updated_rows": updated_rows,
+                "supabase_error": str(supabase_error) if supabase_error else None,
+            },
+            flush=True,
+        )
         row = get_first_row(result) or fetch_profile_row(supabase, user_id)
 
         if not row:
             raise HTTPException(status_code=404, detail="Profile not found.")
 
-        return build_profile_response(row)
+        return build_profile_response(row, updated_rows)
     except HTTPException:
         raise
     except Exception as error:
-        print("[profile update] failed:", str(error), flush=True)
+        print("[profile update] failed:", {"user_id": user_id, "supabase_error": str(error)}, flush=True)
         raise HTTPException(status_code=503, detail="Could not update your profile right now.")
 
 
@@ -4829,7 +4846,7 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
 
     result = (
         supabase.table("profiles")
-        .select("id, username, display_name, public_profile_slug, trust_score, trust_tier, rank_title, highest_rank_achieved, reputation_points, monthly_reputation_points, badge_list")
+        .select("id, username, display_name, avatar_url, public_profile_slug, trust_score, trust_tier, rank_title, highest_rank_achieved, reputation_points, monthly_reputation_points, badge_list")
         .order(order_column, desc=True)
         .order("trust_score", desc=True)
         .limit(safe_limit)
@@ -4851,6 +4868,7 @@ def leaderboard(request: Request, type: str = "monthly", limit: int = 20):
             "id": user_id,
             "username": safe_username,
             "display_name": get_review_safe_backend_display_name(row.get("display_name"), row.get("username"), user_id),
+            "avatar_url": row.get("avatar_url"),
             "public_profile_slug": row.get("public_profile_slug") or generate_backend_profile_slug(safe_username, str(user_id or "")),
             "rank_title": display_rank,
             "current_rank_title": current_rank,

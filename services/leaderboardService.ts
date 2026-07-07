@@ -10,6 +10,7 @@ export interface LeaderboardUser {
   id: string;
   username: string;
   displayName: string;
+  avatarUrl: string | null;
   rankTitle: string;
   points: number;
   trustScore: number;
@@ -20,6 +21,7 @@ interface LeaderboardRow {
   id: string;
   username: string;
   display_name?: string | null;
+  avatar_url?: string | null;
   trust_score: number | null;
   rank_title: string | null;
   highest_rank_achieved: string | null;
@@ -41,6 +43,7 @@ function mapLeaderboardRow(row: LeaderboardRow, scope: LeaderboardScope): Leader
     id: row.id,
     username,
     displayName: getReviewSafeDisplayName(row.display_name, row.username, row.id),
+    avatarUrl: row.avatar_url ?? null,
     rankTitle: row.highest_rank_achieved || row.rank_title || "New Scout",
     points: scope === "monthly" ? row.monthly_reputation_points ?? 0 : row.reputation_points ?? 0,
     trustScore: row.trust_score ?? 50,

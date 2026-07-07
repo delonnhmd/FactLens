@@ -218,7 +218,20 @@ async function uploadJpeg(bucket: ImageUploadBucket, path: string, bytes: ArrayB
 
 function getPublicUrl(bucket: ImageUploadBucket, path: string): string {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
+  const publicUrl = data.publicUrl?.trim();
+
+  console.log("[image upload] public url:", {
+    bucket,
+    path,
+    publicUrl: publicUrl || null,
+  });
+
+  if (!publicUrl) {
+    console.log("[image upload] public url missing:", { bucket, path });
+    throw new Error("Could not upload image. Please try again.");
+  }
+
+  return publicUrl;
 }
 
 async function removeStoragePaths(bucket: ImageUploadBucket, paths: Array<string | null | undefined>) {
@@ -314,16 +327,25 @@ export async function uploadPickedImage({
   });
 
   const uploadedImagePath = await uploadJpeg(bucket, imagePath, mainBytes, upsert);
+  const imageUrl = getPublicUrl(bucket, uploadedImagePath);
+
+  console.log("[image upload] upload success:", {
+    bucket,
+    imagePath: uploadedImagePath,
+    imageUrl,
+  });
+
   const uploadedThumbnailPath = await uploadJpeg(bucket, thumbnailPath, thumbBytes, upsert);
+  const thumbnailUrl = getPublicUrl(bucket, uploadedThumbnailPath);
   const pathsToDelete = [oldPath, oldThumbnailPath].filter(
     (path) => path && path !== uploadedImagePath && path !== uploadedThumbnailPath,
   );
   await removeStoragePaths(bucket, pathsToDelete);
 
   return {
-    imageUrl: getPublicUrl(bucket, uploadedImagePath),
+    imageUrl,
     imagePath: uploadedImagePath,
-    thumbnailUrl: getPublicUrl(bucket, uploadedThumbnailPath),
+    thumbnailUrl,
   };
 }
 

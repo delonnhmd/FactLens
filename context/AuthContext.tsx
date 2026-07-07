@@ -18,6 +18,10 @@ interface AuthActionResult {
   profile?: Profile | null;
 }
 
+interface RefreshProfileOptions {
+  silent?: boolean;
+}
+
 interface AuthContextValue {
   currentUser: SupabaseUser | null;
   profile: Profile | null;
@@ -30,7 +34,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<AuthActionResult>;
   signOut: () => Promise<AuthActionResult>;
   refreshUser: () => Promise<AuthActionResult>;
-  refreshProfile: () => Promise<AuthActionResult>;
+  refreshProfile: (options?: RefreshProfileOptions) => Promise<AuthActionResult>;
   // PHASE 3 STEP 15
   ensureProfile: () => Promise<AuthActionResult>;
 }
@@ -122,10 +126,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // PHASE 3 STEP 15
   // PHASE 3 STEP 18C
   // PHASE 3 STEP 22
-  const loadProfile = useCallback(async (user: SupabaseUser): Promise<AuthActionResult> => {
+  const loadProfile = useCallback(async (user: SupabaseUser, options: RefreshProfileOptions = {}): Promise<AuthActionResult> => {
     try {
       console.log("[auth] current user id:", user.id);
       console.log("[auth] email confirmed:", Boolean(user.email_confirmed_at));
+      console.log("[profile] refresh profile:", { userId: user.id, silent: Boolean(options.silent) });
       const userVerified = getUserVerified(user);
 
       const existingProfile = await getProfile(user.id);
@@ -154,10 +159,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : null;
 
         setProfile(nextProfile);
-        setProfileError(profileResult.error ?? null);
+        setProfileError(options.silent ? null : profileResult.error ?? null);
         console.log("[profile] setting profile state:", nextProfile?.id);
         console.log("[profile] ensure profile result:", nextProfile?.id);
         console.log("[profile] ensure result:", nextProfile?.id);
+        console.log("[profile] refresh profile complete:", {
+          userId: user.id,
+          avatarUrl: nextProfile?.avatar_url ?? null,
+          avatarPath: nextProfile?.avatar_path ?? null,
+          error: profileResult.error ?? null,
+          silent: Boolean(options.silent),
+        });
 
         if (profileResult.error) {
           return { error: profileResult.error, profile: nextProfile };
@@ -167,9 +179,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (existingProfile.error) {
+        if (options.silent) {
+          console.log("[profile] silent refresh failed:", {
+            userId: user.id,
+            error: existingProfile.error,
+          });
+          return { error: existingProfile.error };
+        }
+
         setProfile(null);
         setProfileError(existingProfile.error);
         return { error: existingProfile.error };
+      }
+
+      if (options.silent) {
+        console.log("[profile] silent refresh found no profile row:", user.id);
+        return { error: "Could not load your profile right now.", profile: null };
       }
 
       const result = await ensureProfileForUser(user);
@@ -185,14 +210,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("[profile] setting profile state:", nextProfile?.id);
       console.log("[profile] ensure profile result:", nextProfile?.id);
       console.log("[profile] ensure result:", nextProfile?.id);
+      console.log("[profile] refresh profile complete:", {
+        userId: user.id,
+        avatarUrl: nextProfile?.avatar_url ?? null,
+        avatarPath: nextProfile?.avatar_path ?? null,
+        error: result.error ?? null,
+        silent: Boolean(options.silent),
+      });
 
       if (result.error) {
         return { error: result.error, profile: nextProfile };
       }
 
       return result.message ? { message: result.message, profile: nextProfile } : { profile: nextProfile };
-    } catch {
+    } catch (error) {
       const message = "Could not load your profile right now.";
+
+      if (options.silent) {
+        console.log("[profile] silent refresh failed:", {
+          userId: user.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { error: message, profile: null };
+      }
+
       setProfile(null);
       setProfileError(message);
       return { error: message, profile: null };
@@ -278,13 +319,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [applySession]);
 
-  const refreshProfile = useCallback(async (): Promise<AuthActionResult> => {
+  const refreshProfile = useCallback(async (options: RefreshProfileOptions = {}): Promise<AuthActionResult> => {
     if (!currentUser) {
       return { error: "You must be signed in to load a profile." };
     }
 
     // PHASE 3 STEP 18C
-    return loadProfile(currentUser);
+    return loadProfile(currentUser, options);
   }, [currentUser, loadProfile]);
 
   // PHASE 3 STEP 15
