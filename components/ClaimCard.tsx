@@ -25,6 +25,8 @@ import { useAuth } from "../context/AuthContext";
 import { useClaims } from "../context/ClaimsContext";
 // Report reason picker + note (shared with claim detail)
 import { ReportNoteModal, showReportReasonPicker } from "./ReportClaimFlow";
+// Admin moderation: hide/unhide a post straight from the "..." menu (admins only)
+import { hideClaimFromFeeds, unhideClaim } from "../services/moderationService";
 // Public user profile navigation
 import { useRouter } from "expo-router";
 
@@ -221,7 +223,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
-  const { currentUser } = useAuth();
+  const { currentUser, profile } = useAuth();
   const { blockUser, savedClaimIds, toggleSaveClaim } = useClaims();
   // Public user profile navigation; anonymized/deleted authors are not tappable.
   const router = useRouter();
@@ -342,6 +344,43 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       .catch(() => Alert.alert("Could not update saved claims right now."));
   }, [claim.id, toggleSaveClaim]);
 
+  // Admin moderation (NEW): hide/unhide a post from the "..." menu. is_admin
+  // comes from the authenticated profile — the same source the admin dashboard
+  // uses. Non-admins never see these options. hiddenOverride is the optimistic
+  // local state so the card flips immediately; it resets on any claim refresh.
+  const isAdmin = Boolean(profile?.is_admin);
+  const [hiddenOverride, setHiddenOverride] = useState<boolean | null>(null);
+  const claimHidden = hiddenOverride ?? Boolean(claim.hidden);
+
+  useEffect(() => {
+    setHiddenOverride(null);
+  }, [claim.id, claim.hidden]);
+
+  const handleToggleHidden = useCallback(() => {
+    const currentlyHidden = claimHidden;
+    setHiddenOverride(!currentlyHidden);
+
+    const request = currentlyHidden
+      ? unhideClaim(claim.id)
+      : hideClaimFromFeeds(claim.id, "Hidden by moderation.");
+
+    request
+      .then((result) => {
+        if (!result.ok) {
+          throw new Error(result.error ?? "Admin action failed.");
+        }
+        Alert.alert(currentlyHidden ? "Post unhidden." : "Post hidden from feeds.");
+      })
+      .catch(() => {
+        setHiddenOverride(currentlyHidden);
+        Alert.alert(
+          currentlyHidden
+            ? "Could not unhide this post right now."
+            : "Could not hide this post right now.",
+        );
+      });
+  }, [claim.id, claimHidden]);
+
   const handleOptions = useCallback(() => {
     Alert.alert("Post options", undefined, [
       // Save/unsave claims (logged-in only)
@@ -373,6 +412,16 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
             },
           ]
         : []),
+      // Admin moderation (NEW): hide/unhide the post. Admins only.
+      ...(isAdmin
+        ? [
+            {
+              text: claimHidden ? "Unhide post" : "Hide post",
+              style: claimHidden ? ("default" as const) : ("destructive" as const),
+              onPress: handleToggleHidden,
+            },
+          ]
+        : []),
       {
         text: "Share",
         onPress: () => Alert.alert("Share", claim.shareUrl),
@@ -382,10 +431,20 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         style: "cancel",
       },
     ]);
-  }, [canBlockAuthor, claim.shareUrl, currentUser, handleBlock, handleToggleSave, isSaved]);
+  }, [
+    canBlockAuthor,
+    claim.shareUrl,
+    claimHidden,
+    currentUser,
+    handleBlock,
+    handleToggleHidden,
+    handleToggleSave,
+    isAdmin,
+    isSaved,
+  ]);
 
   // PHASE 5 STEP 3
-  if (claim.hidden) {
+  if (claimHidden) {
     return (
       <View style={styles.card}>
         <View style={styles.hiddenContentBox}>
@@ -394,6 +453,19 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
           <Text style={styles.hiddenContentText}>
             This content was removed for violating community guidelines.
           </Text>
+          {/* Admin moderation (NEW): a hidden claim shows this placeholder
+              instead of the "..." menu, so admins get an Unhide action here. */}
+          {isAdmin ? (
+            <TouchableOpacity
+              style={styles.hiddenUnhideButton}
+              activeOpacity={0.8}
+              onPress={handleToggleHidden}
+              accessibilityRole="button"
+              accessibilityLabel="Unhide post"
+            >
+              <Text style={styles.hiddenUnhideButtonText}>Unhide post</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     );
@@ -824,6 +896,19 @@ function createStyles(theme: AppTheme) {
     fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
     lineHeight: Math.round(18 * (theme.typography.body.fontSize / 16)),
     textAlign: "center",
+  },
+  hiddenUnhideButton: {
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  hiddenUnhideButtonText: {
+    color: theme.colors.link,
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
+    fontWeight: "500",
   },
   });
 }
