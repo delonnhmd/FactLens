@@ -29,6 +29,8 @@ import { analyzeClaimDraft } from "../../utils/claimQuality";
 // PHASE 6 STEP 4 (NEW)
 import { useDebounce } from "../../hooks/useDebounce";
 import { checkTopicClusterForDraft, type TopicClusterInfo } from "../../services/topicService";
+// CONTENT SAFETY (NEW) — live warning heads-up while typing (enforcement is server-side in createClaim).
+import { checkContentSafety } from "../../services/contentSafetyService";
 import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
@@ -82,6 +84,15 @@ export default function CreateScreen() {
   const [topicCluster, setTopicCluster] = useState<TopicClusterInfo | null>(null);
   const [topicClusterDismissed, setTopicClusterDismissed] = useState(false);
   const debouncedTopicTitle = useDebounce(title, 800);
+  // CONTENT SAFETY (NEW) — LIVE WARNING (soft, cosmetic heads-up only). Shows a
+  // red banner while typing when the backend classifier flags the draft. This is
+  // NOT the enforcement: the real block is the server-authoritative gate inside
+  // createClaim (services/claimService.ts), which runs again on submit before any
+  // insert. Fails open (checkContentSafety never throws), so a down API shows no
+  // banner rather than a false alarm.
+  const [safetyBlocked, setSafetyBlocked] = useState(false);
+  const debouncedSafetyTitle = useDebounce(title, 600);
+  const debouncedSafetyDescription = useDebounce(description, 600);
 
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
@@ -121,6 +132,32 @@ export default function CreateScreen() {
       cancelled = true;
     };
   }, [debouncedTopicTitle]);
+  // CONTENT SAFETY (NEW) — live heads-up. Once the user pauses typing a
+  // meaningful title (>= 8 chars), ask the backend classifier whether the draft
+  // is objectionable and show/hide the red banner. Cosmetic only; never blocks
+  // submit (the hard gate does). Fire-and-forget; a null/error result clears it.
+  useEffect(() => {
+    const trimmedSafetyTitle = debouncedSafetyTitle.trim();
+
+    if (trimmedSafetyTitle.length < 8) {
+      setSafetyBlocked(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const result = await checkContentSafety(trimmedSafetyTitle, debouncedSafetyDescription.trim());
+
+      if (!cancelled) {
+        setSafetyBlocked(result.blocked);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSafetyTitle, debouncedSafetyDescription]);
   // PHASE 3 STEP 8
   const trimmedVideoUrl = videoUrl.trim();
   const normalizedVideoUrl = normalizeUrl(videoUrl);
@@ -731,6 +768,15 @@ export default function CreateScreen() {
             <Text style={styles.helperText}>Images are compressed to JPEG and thumbnails are generated before upload.</Text>
           </View>
 
+          {safetyBlocked ? (
+            <View style={styles.safetyWarningPanel}>
+              <Text style={styles.safetyWarningText}>
+                ⚠️ This content appears to violate our community guidelines (hate, harassment, violence, sexual, or
+                spam) and cannot be posted.
+              </Text>
+            </View>
+          ) : null}
+
           <TouchableOpacity
             style={[styles.button, submitDisabled && styles.buttonDisabled]}
             onPress={handleSubmit}
@@ -854,6 +900,19 @@ function createStyles(theme: AppTheme) {
     color: theme.colors.warningText,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",
+  },
+  safetyWarningPanel: {
+    backgroundColor: theme.colors.dangerBg ?? theme.colors.warningBg,
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.sm,
+  },
+  safetyWarningText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "600",
   },
   generalError: {
     color: theme.colors.danger,

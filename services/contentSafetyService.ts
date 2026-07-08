@@ -22,6 +22,12 @@ export async function checkContentSafety(title: string, description: string): Pr
     return { blocked: false }; // fail open
   }
 
+  // Bounded so a cold/slow backend (Render free tier can cold-start) can't hang
+  // the submit. The backend has its own 5s classifier ceiling; give it margin,
+  // then fail open. Enforcement backstop remains the report + moderation flow.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   try {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
@@ -33,6 +39,7 @@ export async function checkContentSafety(title: string, description: string): Pr
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({ title, description }),
+      signal: controller.signal,
     });
 
     const json = (await response.json().catch(() => ({}))) as {
@@ -56,6 +63,8 @@ export async function checkContentSafety(title: string, description: string): Pr
     return { blocked: false };
   } catch (error) {
     console.log("[content-safety] check failed — failing open:", error);
-    return { blocked: false }; // fail open
+    return { blocked: false }; // fail open (network error, abort/timeout)
+  } finally {
+    clearTimeout(timeout);
   }
 }
