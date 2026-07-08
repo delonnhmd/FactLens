@@ -50,6 +50,8 @@ export async function checkContentSafety(title: string, description: string): Pr
       category?: string;
     };
 
+    console.log("[content-safety] backend responded →", { status: response.status, json });
+
     // Only a definitive "blocked" (HTTP 400 + blocked:true) stops posting. Any
     // other shape (200 safe, or an unexpected error status) fails open.
     if (response.status === 400 && json.blocked) {

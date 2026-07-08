@@ -331,6 +331,27 @@ export default function CreateScreen() {
         mimeType: selectedImage?.mimeType ?? null,
       });
 
+      // CONTENT SAFETY HARD GATE — runs in the EXACT tapped path, BEFORE any
+      // claim is written. createClaim() below is a direct supabase-js insert
+      // (services/claimService.ts:1806), so this check must live here, in the
+      // app, ahead of it. Early-returns on block so the insert is never reached.
+      // Fail-open: checkContentSafety never throws (down API → blocked:false).
+      const safety = await checkContentSafety(title, description);
+      console.log("[content-safety] SUBMIT GATE RAN →", {
+        blocked: safety.blocked,
+        category: safety.category ?? null,
+        reason: safety.reason ?? null,
+        titlePreview: title.slice(0, 80),
+      });
+
+      if (safety.blocked) {
+        const blockMessage =
+          safety.reason || "This content violates our community guidelines and can't be posted.";
+        setErrors({ general: blockMessage });
+        Alert.alert("Can't post this", blockMessage);
+        return; // STOP — do not reach createClaim / the supabase.from("claims").insert
+      }
+
       const createdClaim = await createClaim({
         title,
         description,

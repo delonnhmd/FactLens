@@ -7130,6 +7130,11 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
     user_id = get_authenticated_user_id(request)
 
     verdict = check_content_safety(payload.title, payload.description)
+    print(
+        f"[content-safety] ENDPOINT RAN user={user_id} "
+        f"title={str(payload.title or '')[:80]!r} verdict={verdict}",
+        flush=True,
+    )
 
     if verdict.get("safe", True):
         return {"ok": True, "safe": True, "category": "", "reason": ""}
