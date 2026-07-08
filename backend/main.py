@@ -5301,7 +5301,11 @@ def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, requ
     if payload.hide_target:
         target_type = report_row.get("target_type") or "CLAIM"
         if target_type == "CLAIM" and report_row.get("claim_id"):
+            # is_hidden is the flag the restrictive RLS uses to remove a claim
+            # from feeds/search (see 040) and that the admin hidden list + inline
+            # hide use; set it alongside legacy `hidden` so every path agrees.
             supabase.table("claims").update({
+                "is_hidden": True,
                 "hidden": True,
                 "hidden_reason": payload.admin_note.strip() or "Removed for violating community guidelines.",
                 "hidden_at": datetime.now(timezone.utc).isoformat(),
@@ -5351,15 +5355,23 @@ def admin_hide_content(payload: AdminContentVisibilityRequest, request: Request)
         raise HTTPException(status_code=400, detail="Unsupported content target.")
 
     table_name = "claims" if target_type == "CLAIM" else "evidence"
+    update_fields = {
+        "hidden": True,
+        "hidden_reason": reason,
+        "hidden_at": datetime.now(timezone.utc).isoformat(),
+        "hidden_by": admin_user_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Claims use is_hidden for the feed-filtering RLS (040) and the admin hidden
+    # list; the inline hide sets it too. Keep both flags in agreement. Evidence
+    # has no is_hidden column, so only set it for claims.
+    if target_type == "CLAIM":
+        update_fields["is_hidden"] = True
+
     result = (
         supabase.table(table_name)
-        .update({
-            "hidden": True,
-            "hidden_reason": reason,
-            "hidden_at": datetime.now(timezone.utc).isoformat(),
-            "hidden_by": admin_user_id,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        .update(update_fields)
         .eq("id", target_id)
         .execute()
     )
@@ -5379,15 +5391,22 @@ def admin_restore_content(payload: AdminContentVisibilityRequest, request: Reque
         raise HTTPException(status_code=400, detail="Unsupported content target.")
 
     table_name = "claims" if target_type == "CLAIM" else "evidence"
+    update_fields = {
+        "hidden": False,
+        "hidden_reason": None,
+        "hidden_at": None,
+        "hidden_by": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Mirror the hide path: clear is_hidden for claims so the claim returns to
+    # feeds. Evidence has no is_hidden column.
+    if target_type == "CLAIM":
+        update_fields["is_hidden"] = False
+
     result = (
         supabase.table(table_name)
-        .update({
-            "hidden": False,
-            "hidden_reason": None,
-            "hidden_at": None,
-            "hidden_by": None,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        .update(update_fields)
         .eq("id", target_id)
         .execute()
     )
