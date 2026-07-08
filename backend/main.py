@@ -7113,6 +7113,9 @@ def log_content_safety_block(supabase, user_id: str, title: str, category: str, 
         print(f"[content-safety] block log failed: {error}", flush=True)
 
 
+# /api/content/check-safety is the documented endpoint name; /api/claims/safety-check
+# is the original path the app already calls. Both map to the same handler (alias).
+@app.post("/api/content/check-safety")
 @app.post("/api/claims/safety-check")
 def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
     """Classify a claim's SAFETY before it is saved.

@@ -58,6 +58,10 @@ interface ClaimCardProps {
   onPress?: () => void;
   onVote: (claimId: string, vote: VoteOption) => void | string | Promise<void | string>;
   onReport: (claimId: string, reason: ReportReason, note: string) => void | Promise<void>;
+  // Author self-delete: list screens with their OWN local claim state (e.g. My
+  // claims, public profile) pass this so a successful delete removes the row
+  // instantly. The main feed reads from context and doesn't need it.
+  onDeleted?: (claimId: string) => void;
 }
 
 // PHASE 5 PRE-LAUNCH: feed cards truncate long descriptions to ~100 words.
@@ -225,7 +229,7 @@ function getSourcePillStyle(score: number, label: string, styles: ReturnType<typ
   return styles.sourcePillRed;
 }
 
-function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps) {
+function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: ClaimCardProps) {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
@@ -361,14 +365,17 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
         style: "destructive",
         onPress: () => {
           deleteOwnClaim(claim.id)
-            .then(() => Alert.alert("Claim removed."))
+            .then(() => {
+              onDeleted?.(claim.id);
+              Alert.alert("Claim removed.");
+            })
             .catch((error) =>
               Alert.alert(error instanceof Error ? error.message : "Could not remove the claim right now."),
             );
         },
       },
     ]);
-  }, [claim.id, deleteOwnClaim]);
+  }, [claim.id, deleteOwnClaim, onDeleted]);
 
   // Admin moderation (NEW): hide/unhide a post from the "..." menu. is_admin
   // comes from the authenticated profile — the same source the admin dashboard

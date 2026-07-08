@@ -922,6 +922,15 @@ export default function ProfileScreen() {
               <Text style={styles.detailValue}>{createdAt ? new Date(createdAt).toLocaleDateString() : "Unknown"}</Text>
             </View>
 
+            {/* My claims: entry point to the current user's own posted claims
+                (reuses fetchClaimsByAuthorPage + ClaimCard, incl. 3h delete). */}
+            <View style={styles.legalSection}>
+              <Text style={styles.detailLabel}>Your posts</Text>
+              <TouchableOpacity style={styles.legalLink} activeOpacity={0.8} onPress={() => router.push("/my-claims")}>
+                <Text style={styles.legalLinkText}>My claims</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Save/unsave claims: entry point to the saved list. */}
             <View style={styles.legalSection}>
               <Text style={styles.detailLabel}>Saved</Text>
