@@ -11,6 +11,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useAppTheme } from "../../hooks/useTheme";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../constants/layout";
 import {
   fetchLeaderboard,
   type LeaderboardScope,
@@ -243,6 +245,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
+    ...centeredContentStyle,
   },
   tabRow: {
     backgroundColor: theme.colors.background,

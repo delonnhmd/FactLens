@@ -9,6 +9,8 @@ import { Alert, Image, Linking, View, Text, StyleSheet, SafeAreaView, ScrollView
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { PUBLIC_SITE_URL, SUPPORT_EMAIL } from "../../constants/launchConfig";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../constants/layout";
 import { useAuth } from "../../context/AuthContext";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
@@ -1131,6 +1133,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
+    ...centeredContentStyle,
   },
   card: {
     backgroundColor: theme.colors.background,

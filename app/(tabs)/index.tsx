@@ -37,6 +37,8 @@ import { useAppTheme } from "../../hooks/useTheme";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import type { Claim } from "../../types/claim";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../constants/layout";
 
 // PHASE 3 STEP 9
 const categoryChips = ["All", ...claimCategories];
@@ -476,6 +478,7 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
+    ...centeredContentStyle,
   },
   successBanner: {
     backgroundColor: theme.colors.successBg,

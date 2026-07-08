@@ -36,6 +36,8 @@ import { useClaims } from "../../../context/ClaimsContext";
 import type { AppTheme } from "../../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../../context/TabBarVisibilityContext";
 import { useAppTheme } from "../../../hooks/useTheme";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../../constants/layout";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../../services/claimVoting";
 import {
   formatSourceCredibilityScore,
@@ -1833,6 +1835,7 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
+    ...centeredContentStyle,
   },
   // PHASE 3 STEP 12
   liveText: {

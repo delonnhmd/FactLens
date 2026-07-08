@@ -14,6 +14,8 @@ import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
 import { MentionTextInput } from "../../components/MentionTextInput";
 import { claimCategories } from "../../constants/claimCategories";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../constants/layout";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import { useAuth } from "../../context/AuthContext";
@@ -758,6 +760,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
+    ...centeredContentStyle,
   },
   gateCard: {
     backgroundColor: theme.colors.background,

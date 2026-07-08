@@ -22,6 +22,8 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../components/Header";
 import { RESET_PASSWORD_URL } from "../../constants/launchConfig";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../constants/layout";
 import { theme } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { supabase, supabaseConfigError } from "../../lib/supabase";
@@ -441,6 +443,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: theme.spacing.lg,
+    ...centeredContentStyle,
   },
   card: {
     backgroundColor: theme.colors.background,

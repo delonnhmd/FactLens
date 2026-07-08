@@ -25,6 +25,8 @@ import { isVotingOpen } from "../../services/claimVoting";
 import { calculateTrendingScore } from "../../services/trending";
 import type { Claim } from "../../types/claim";
 import { useAppTheme } from "../../hooks/useTheme";
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from "../../constants/layout";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 
@@ -232,6 +234,7 @@ function createStyles(theme: AppTheme) {
   content: {
     paddingHorizontal: 10,
     paddingTop: 10,
+    ...centeredContentStyle,
   },
   filterRow: {
     gap: theme.spacing.sm,

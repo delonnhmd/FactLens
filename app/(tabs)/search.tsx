@@ -4,6 +4,8 @@
 import { useMemo } from 'react';
 import { SafeAreaView, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
 import { Header } from '../../components/Header';
+// iPad full-screen: cap + center the single content column on wide screens.
+import { centeredContentStyle } from '../../constants/layout';
 import { useScrollAwareTabBar } from '../../context/TabBarVisibilityContext';
 import type { AppTheme } from '../../context/DisplaySettingsContext';
 import { useAppTheme } from '../../hooks/useTheme';
@@ -48,6 +50,7 @@ function createStyles(theme: AppTheme) {
   },
   content: {
     padding: 10,
+    ...centeredContentStyle,
   },
   searchBox: {
     borderWidth: theme.borderWidth,
