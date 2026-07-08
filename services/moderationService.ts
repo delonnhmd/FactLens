@@ -326,3 +326,62 @@ export async function fetchManagedClaims(
 
   return { claims: Array.isArray(result.data.claims) ? result.data.claims : [] };
 }
+
+// ADMIN QUEUE LISTS (NEW, additive) — read-only lists for the admin profile
+// page. Rows reuse the existing hideClaimFromFeeds / unhideClaim /
+// deleteClaimAsAdmin actions above; these functions only fetch.
+
+export interface HiddenClaim {
+  claim_id: string;
+  title: string | null;
+  description: string | null;
+  author_id: string | null;
+  author_username: string | null;
+  hidden_reason: string | null;
+  hidden_at: string | null;
+  votes_true: number | null;
+  votes_fake: number | null;
+  votes_unsure: number | null;
+  created_at: string;
+}
+
+export interface ReportedClaimReport {
+  reason: string | null;
+  note: string | null;
+  reporter_id: string | null;
+  reporter_username: string | null;
+  created_at: string;
+}
+
+export interface ReportedClaim {
+  claim_id: string;
+  title: string | null;
+  description: string | null;
+  author_id: string | null;
+  author_username: string | null;
+  is_hidden: boolean;
+  report_count: number;
+  latest_report_at: string | null;
+  reasons: string[];
+  reports: ReportedClaimReport[];
+}
+
+export async function fetchHiddenClaims(): Promise<{ claims: HiddenClaim[]; error?: string }> {
+  const result = await getAdminJson<{ claims?: HiddenClaim[] }>("/admin/claims/hidden?limit=50");
+
+  if (result.error || !result.data) {
+    return { claims: [], error: result.error };
+  }
+
+  return { claims: Array.isArray(result.data.claims) ? result.data.claims : [] };
+}
+
+export async function fetchReportedClaims(): Promise<{ claims: ReportedClaim[]; error?: string }> {
+  const result = await getAdminJson<{ claims?: ReportedClaim[] }>("/admin/claims/reported?limit=50");
+
+  if (result.error || !result.data) {
+    return { claims: [], error: result.error };
+  }
+
+  return { claims: Array.isArray(result.data.claims) ? result.data.claims : [] };
+}

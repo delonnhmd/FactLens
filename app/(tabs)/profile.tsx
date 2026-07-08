@@ -34,6 +34,20 @@ import {
   uploadProfileAvatar,
   type PickedOptimizedImage,
 } from "../../services/imageUploadService";
+// TASK 2 + TASK 3 — admin moderation queues (Reported + Hidden claims). Rows
+// reuse the EXISTING hide/unhide/delete endpoints; these only add read lists.
+import {
+  deleteClaimAsAdmin,
+  fetchHiddenClaims,
+  fetchReportedClaims,
+  hideClaimFromFeeds,
+  unhideClaim,
+  type HiddenClaim,
+  type ReportedClaim,
+} from "../../services/moderationService";
+
+// Reason attached to a hide triggered from the reported-claims queue.
+const REPORTED_HIDE_REASON = "Reported content violation";
 
 type UsernameAvailabilityStatus = "idle" | "checking" | "available" | "unavailable" | "invalid";
 
@@ -79,6 +93,14 @@ export default function ProfileScreen() {
   const [avatarError, setAvatarError] = useState("");
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const profileAutoFixAttempted = useRef(false);
+  // TASK 2 + TASK 3 — admin moderation queues.
+  const isAdmin = Boolean(profile?.is_admin);
+  const [reportedClaims, setReportedClaims] = useState<ReportedClaim[]>([]);
+  const [hiddenClaims, setHiddenClaims] = useState<HiddenClaim[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueMessage, setQueueMessage] = useState("");
+  const [queueBusyId, setQueueBusyId] = useState<string | null>(null);
+  const [expandedClaimIds, setExpandedClaimIds] = useState<Record<string, boolean>>({});
 
   const displayName = profile?.display_name || profile?.username || fallbackProfile.displayName;
   const username = profile?.username ?? fallbackProfile.username;
@@ -386,6 +408,100 @@ export default function ProfileScreen() {
     } finally {
       setAvatarSaving(false);
     }
+  };
+
+  // TASK 2 + TASK 3 — load both admin queues. Reported is the actionable
+  // queue; Hidden is the reversible archive. Admin-only.
+  const loadAdminQueues = async () => {
+    setQueueLoading(true);
+    setQueueMessage("");
+
+    const [reported, hidden] = await Promise.all([fetchReportedClaims(), fetchHiddenClaims()]);
+
+    setReportedClaims(reported.claims);
+    setHiddenClaims(hidden.claims);
+    setQueueMessage(reported.error || hidden.error || "");
+    setQueueLoading(false);
+  };
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setReportedClaims([]);
+      setHiddenClaims([]);
+      return;
+    }
+
+    void loadAdminQueues();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  const toggleClaimExpanded = (claimId: string) => {
+    setExpandedClaimIds((current) => ({ ...current, [claimId]: !current[claimId] }));
+  };
+
+  // Hide a reported claim (calls the EXISTING /admin/claims/<id>/hide endpoint),
+  // then refetch the reported queue.
+  const handleHideReported = async (claim: ReportedClaim) => {
+    setQueueBusyId(claim.claim_id);
+    setQueueMessage("");
+    const reason = claim.reasons[0] ? `${REPORTED_HIDE_REASON}: ${claim.reasons[0]}` : REPORTED_HIDE_REASON;
+    const result = await hideClaimFromFeeds(claim.claim_id, reason);
+    setQueueBusyId(null);
+
+    if (!result.ok) {
+      setQueueMessage(result.error ?? "Could not hide this claim.");
+      return;
+    }
+
+    // Optimistically drop the row, then refetch to resync both queues.
+    setReportedClaims((current) => current.filter((item) => item.claim_id !== claim.claim_id));
+    await loadAdminQueues();
+  };
+
+  // Unhide a hidden claim (EXISTING /admin/claims/<id>/unhide), optimistic remove.
+  const handleUnhide = async (claim: HiddenClaim) => {
+    setQueueBusyId(claim.claim_id);
+    setQueueMessage("");
+    const result = await unhideClaim(claim.claim_id);
+    setQueueBusyId(null);
+
+    if (!result.ok) {
+      setQueueMessage(result.error ?? "Could not unhide this claim.");
+      return;
+    }
+
+    setHiddenClaims((current) => current.filter((item) => item.claim_id !== claim.claim_id));
+    await loadAdminQueues();
+  };
+
+  // Delete a claim (EXISTING admin delete endpoint) with confirmation.
+  const handleDeleteClaim = (claimId: string, title: string | null) => {
+    Alert.alert(
+      "Delete claim?",
+      `This permanently removes ${title ? `"${title.slice(0, 60)}"` : "this claim"} and related rows. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setQueueBusyId(claimId);
+            setQueueMessage("");
+            const result = await deleteClaimAsAdmin(claimId, "Removed by moderation.");
+            setQueueBusyId(null);
+
+            if (!result.ok) {
+              setQueueMessage(result.error ?? "Could not delete this claim.");
+              return;
+            }
+
+            setReportedClaims((current) => current.filter((item) => item.claim_id !== claimId));
+            setHiddenClaims((current) => current.filter((item) => item.claim_id !== claimId));
+            await loadAdminQueues();
+          },
+        },
+      ],
+    );
   };
 
   // PHASE 3 STEP 28
@@ -813,6 +929,128 @@ export default function ProfileScreen() {
                 <Text style={styles.legalLinkText}>Saved claims</Text>
               </TouchableOpacity>
             </View>
+
+            {/* TASK 3 — Reported claims (admin only). The 24-hour moderation
+                queue: act (Hide / Delete) without leaving the screen. Placed
+                above Hidden claims because reports are the actionable queue. */}
+            {isAdmin ? (
+              <View style={styles.adminQueueSection}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.detailLabel}>Reported claims</Text>
+                  {queueLoading ? (
+                    <Text style={styles.activityStatusText}>Loading...</Text>
+                  ) : (
+                    <TouchableOpacity onPress={() => void loadAdminQueues()} activeOpacity={0.8}>
+                      <Text style={styles.queueRefreshText}>Refresh</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {queueMessage ? <Text style={styles.errorText}>{queueMessage}</Text> : null}
+                {!queueLoading && reportedClaims.length === 0 ? (
+                  <Text style={styles.detailValue}>No reported claims. The queue is clear.</Text>
+                ) : null}
+                {reportedClaims.map((claim) => {
+                  const expanded = Boolean(expandedClaimIds[claim.claim_id]);
+                  const busy = queueBusyId === claim.claim_id;
+                  const notes = claim.reports.map((report) => report.note).filter((note): note is string => Boolean(note));
+
+                  return (
+                    <View key={claim.claim_id} style={styles.queueCard}>
+                      <TouchableOpacity activeOpacity={0.8} onPress={() => toggleClaimExpanded(claim.claim_id)}>
+                        <Text style={styles.queueTitle}>{claim.title || "Untitled claim"}</Text>
+                        <Text style={styles.queueMeta}>
+                          @{claim.author_username || "unknown"} {"·"} {claim.report_count}{" "}
+                          {claim.report_count === 1 ? "report" : "reports"}
+                        </Text>
+                        {claim.reasons.length > 0 ? (
+                          <Text style={styles.queueReason}>Reason: {claim.reasons.join(", ")}</Text>
+                        ) : null}
+                        {notes.map((note, index) => (
+                          <Text key={index} style={styles.queueNote} numberOfLines={expanded ? undefined : 2}>
+                            {"“"}
+                            {note}
+                            {"”"}
+                          </Text>
+                        ))}
+                        {expanded && claim.description ? (
+                          <Text style={styles.queueBody}>{claim.description}</Text>
+                        ) : (
+                          <Text style={styles.queueExpandHint}>{expanded ? "Tap to collapse" : "Tap to read full claim"}</Text>
+                        )}
+                      </TouchableOpacity>
+                      <View style={styles.queueActionRow}>
+                        <TouchableOpacity
+                          style={[styles.queueActionButton, busy && styles.disabledButton]}
+                          activeOpacity={0.8}
+                          disabled={busy}
+                          onPress={() => void handleHideReported(claim)}
+                        >
+                          <Text style={styles.queueActionText}>{claim.is_hidden ? "Hidden" : "Hide"}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
+                          activeOpacity={0.8}
+                          disabled={busy}
+                          onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
+                        >
+                          <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {/* TASK 2 — Hidden claims (admin only). Reversible archive: Unhide
+                restores to feeds, Delete removes permanently. */}
+            {isAdmin ? (
+              <View style={styles.adminQueueSection}>
+                <Text style={styles.detailLabel}>Hidden claims</Text>
+                {!queueLoading && hiddenClaims.length === 0 ? (
+                  <Text style={styles.detailValue}>No hidden claims.</Text>
+                ) : null}
+                {hiddenClaims.map((claim) => {
+                  const expanded = Boolean(expandedClaimIds[claim.claim_id]);
+                  const busy = queueBusyId === claim.claim_id;
+
+                  return (
+                    <View key={claim.claim_id} style={styles.queueCard}>
+                      <TouchableOpacity activeOpacity={0.8} onPress={() => toggleClaimExpanded(claim.claim_id)}>
+                        <Text style={styles.queueTitle}>{claim.title || "Untitled claim"}</Text>
+                        <Text style={styles.queueMeta}>@{claim.author_username || "unknown"}</Text>
+                        {claim.hidden_reason ? (
+                          <Text style={styles.queueReason}>Hidden: {claim.hidden_reason}</Text>
+                        ) : null}
+                        {expanded && claim.description ? (
+                          <Text style={styles.queueBody}>{claim.description}</Text>
+                        ) : (
+                          <Text style={styles.queueExpandHint}>{expanded ? "Tap to collapse" : "Tap to read full claim"}</Text>
+                        )}
+                      </TouchableOpacity>
+                      <View style={styles.queueActionRow}>
+                        <TouchableOpacity
+                          style={[styles.queueActionButton, busy && styles.disabledButton]}
+                          activeOpacity={0.8}
+                          disabled={busy}
+                          onPress={() => void handleUnhide(claim)}
+                        >
+                          <Text style={styles.queueActionText}>Unhide</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
+                          activeOpacity={0.8}
+                          disabled={busy}
+                          onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
+                        >
+                          <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
 
             {/* PHASE 5 STEP 2 */}
             {/* PHASE 5 STEP 4 */}
@@ -1328,6 +1566,81 @@ function createStyles(theme: AppTheme) {
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: 0.5,
     paddingVertical: theme.spacing.md,
+  },
+  // TASK 2 + TASK 3 — admin moderation queues
+  adminQueueSection: {
+    borderTopColor: theme.colors.lightBorder,
+    borderTopWidth: 0.5,
+    paddingVertical: theme.spacing.md,
+  },
+  queueRefreshText: {
+    color: theme.colors.link,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  queueCard: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    marginTop: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  queueTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  queueMeta: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  queueReason: {
+    color: theme.colors.text,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  queueNote: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontStyle: "italic",
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  queueBody: {
+    color: theme.colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  queueExpandHint: {
+    color: theme.colors.link,
+    fontSize: 11,
+    marginTop: 8,
+  },
+  queueActionRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  queueActionButton: {
+    alignItems: "center",
+    backgroundColor: theme.colors.sourceBg,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  queueActionText: {
+    color: theme.colors.sourceText,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  queueActionDanger: {
+    backgroundColor: theme.colors.dangerBg,
+  },
+  queueActionDangerText: {
+    color: theme.colors.danger,
   },
   // PHASE 5 STEP 4
   complianceNotice: {

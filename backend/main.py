@@ -5301,7 +5301,11 @@ def admin_resolve_report(report_id: str, payload: AdminReportActionRequest, requ
     if payload.hide_target:
         target_type = report_row.get("target_type") or "CLAIM"
         if target_type == "CLAIM" and report_row.get("claim_id"):
+            # is_hidden is the flag the restrictive RLS uses to remove a claim
+            # from feeds/search (see 040) and that the admin hidden list + inline
+            # hide use; set it alongside legacy `hidden` so every path agrees.
             supabase.table("claims").update({
+                "is_hidden": True,
                 "hidden": True,
                 "hidden_reason": payload.admin_note.strip() or "Removed for violating community guidelines.",
                 "hidden_at": datetime.now(timezone.utc).isoformat(),
@@ -5351,15 +5355,23 @@ def admin_hide_content(payload: AdminContentVisibilityRequest, request: Request)
         raise HTTPException(status_code=400, detail="Unsupported content target.")
 
     table_name = "claims" if target_type == "CLAIM" else "evidence"
+    update_fields = {
+        "hidden": True,
+        "hidden_reason": reason,
+        "hidden_at": datetime.now(timezone.utc).isoformat(),
+        "hidden_by": admin_user_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Claims use is_hidden for the feed-filtering RLS (040) and the admin hidden
+    # list; the inline hide sets it too. Keep both flags in agreement. Evidence
+    # has no is_hidden column, so only set it for claims.
+    if target_type == "CLAIM":
+        update_fields["is_hidden"] = True
+
     result = (
         supabase.table(table_name)
-        .update({
-            "hidden": True,
-            "hidden_reason": reason,
-            "hidden_at": datetime.now(timezone.utc).isoformat(),
-            "hidden_by": admin_user_id,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        .update(update_fields)
         .eq("id", target_id)
         .execute()
     )
@@ -5379,15 +5391,22 @@ def admin_restore_content(payload: AdminContentVisibilityRequest, request: Reque
         raise HTTPException(status_code=400, detail="Unsupported content target.")
 
     table_name = "claims" if target_type == "CLAIM" else "evidence"
+    update_fields = {
+        "hidden": False,
+        "hidden_reason": None,
+        "hidden_at": None,
+        "hidden_by": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Mirror the hide path: clear is_hidden for claims so the claim returns to
+    # feeds. Evidence has no is_hidden column.
+    if target_type == "CLAIM":
+        update_fields["is_hidden"] = False
+
     result = (
         supabase.table(table_name)
-        .update({
-            "hidden": False,
-            "hidden_reason": None,
-            "hidden_at": None,
-            "hidden_by": None,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        .update(update_fields)
         .eq("id", target_id)
         .execute()
     )
@@ -5702,6 +5721,158 @@ def admin_unhide_claim(claim_id: str, request: Request):
             print(f"[admin unhide] notification failed: {error}", flush=True)
 
     return {"ok": True, "claim_id": target_claim_id, "is_hidden": False, "updated": len(result.data or [])}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ADMIN QUEUE LISTS (NEW, additive) — read-only lists for the admin profile
+# page. Both are service-role reads that bypass the hide RLS, and both reuse
+# require_admin_user. They do NOT change any existing moderation flow: the
+# frontend rows call the existing hide/unhide/delete endpoints.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _usernames_for_ids(supabase: Any, user_ids: list[str]) -> dict[str, str | None]:
+    unique_ids = sorted({uid for uid in user_ids if uid})
+
+    if not unique_ids:
+        return {}
+
+    profiles_result = (
+        supabase.table("profiles")
+        .select("id,username")
+        .in_("id", unique_ids)
+        .execute()
+    )
+
+    return {
+        profile["id"]: profile.get("username")
+        for profile in (profiles_result.data or [])
+    }
+
+
+@app.get("/admin/claims/hidden")
+def admin_list_hidden_claims(request: Request, limit: int = 50):
+    require_admin_user(request)
+    safe_limit = max(1, min(50, int(limit or 50)))
+    supabase = get_supabase_client()
+
+    # Service-role read bypasses the restrictive is_hidden RLS policy, so the
+    # admin always sees hidden claims. Newest hidden first (hidden_at desc,
+    # nulls last for legacy rows hidden before hidden_at was populated).
+    result = (
+        supabase.table("claims")
+        .select(
+            "id,title,description,author_id,is_hidden,hidden_reason,hidden_at,"
+            "votes_true,votes_fake,votes_unsure,created_at"
+        )
+        .eq("is_hidden", True)
+        .order("hidden_at", desc=True)
+        .order("created_at", desc=True)
+        .limit(safe_limit)
+        .execute()
+    )
+    claims = result.data or []
+    usernames = _usernames_for_ids(supabase, [claim.get("author_id") for claim in claims])
+
+    for claim in claims:
+        author_id = claim.get("author_id")
+        claim["claim_id"] = claim.get("id")
+        claim["author_username"] = usernames.get(author_id or "")
+
+    return {"ok": True, "claims": claims}
+
+
+@app.get("/admin/claims/reported")
+def admin_list_reported_claims(request: Request, limit: int = 50):
+    require_admin_user(request)
+    safe_limit = max(1, min(50, int(limit or 50)))
+    supabase = get_supabase_client()
+
+    # Actionable queue: unresolved CLAIM reports only. Grouped by claim below.
+    reports_result = (
+        supabase.table("reports")
+        .select("id,claim_id,user_id,reason,note,status,created_at")
+        .eq("target_type", "CLAIM")
+        .in_("status", ["OPEN", "REVIEWING"])
+        .order("created_at", desc=True)
+        .limit(500)
+        .execute()
+    )
+    reports = [report for report in (reports_result.data or []) if report.get("claim_id")]
+
+    # Group reports by claim, preserving newest-first order of first appearance.
+    grouped: dict[str, dict] = {}
+    claim_order: list[str] = []
+
+    for report in reports:
+        claim_id = report["claim_id"]
+
+        if claim_id not in grouped:
+            grouped[claim_id] = {"claim_id": claim_id, "reports": []}
+            claim_order.append(claim_id)
+
+        grouped[claim_id]["reports"].append(report)
+
+    # Keep only the most recently reported claims (reports are already newest
+    # first, so claim_order is by latest report time).
+    claim_ids = claim_order[:safe_limit]
+
+    if not claim_ids:
+        return {"ok": True, "claims": []}
+
+    claims_result = (
+        supabase.table("claims")
+        .select("id,title,description,author_id,is_hidden,created_at")
+        .in_("id", claim_ids)
+        .execute()
+    )
+    claims_by_id = {claim["id"]: claim for claim in (claims_result.data or [])}
+
+    reporter_ids = [report.get("user_id") for report in reports]
+    author_ids = [claim.get("author_id") for claim in claims_by_id.values()]
+    usernames = _usernames_for_ids(supabase, reporter_ids + author_ids)
+
+    items = []
+
+    for claim_id in claim_ids:
+        claim_reports = grouped[claim_id]["reports"]
+        claim_row = claims_by_id.get(claim_id)
+
+        # A report may reference a claim that was hard-deleted; skip it.
+        if not claim_row:
+            continue
+
+        author_id = claim_row.get("author_id")
+        report_details = [
+            {
+                "reason": report.get("reason"),
+                "note": report.get("note"),
+                "reporter_id": report.get("user_id"),
+                "reporter_username": usernames.get(report.get("user_id") or ""),
+                "created_at": report.get("created_at"),
+            }
+            for report in claim_reports
+        ]
+        reasons = []
+        for detail in report_details:
+            reason = detail.get("reason")
+            if reason and reason not in reasons:
+                reasons.append(reason)
+
+        items.append({
+            "claim_id": claim_id,
+            "title": claim_row.get("title"),
+            "description": claim_row.get("description"),
+            "author_id": author_id,
+            "author_username": usernames.get(author_id or ""),
+            "is_hidden": bool(claim_row.get("is_hidden")),
+            "report_count": len(claim_reports),
+            "latest_report_at": claim_reports[0].get("created_at") if claim_reports else None,
+            "reasons": reasons,
+            "reports": report_details,
+        })
+
+    return {"ok": True, "claims": items}
 
 
 # ═══════════════════════════════════════════════════════════════════════
