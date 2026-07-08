@@ -1949,3 +1949,53 @@ export async function deleteClaim(id: string): Promise<{ error?: string }> {
 
   return {};
 }
+
+// AUTHOR SELF-DELETE (NEW, additive) — calls the authoritative backend endpoint
+// DELETE /api/claims/{id}, which enforces author-only + the 3-hour /
+// finalization window server-side (services can't be bypassed by a client). We
+// use the backend path rather than a direct supabase delete + RLS because the
+// endpoint already exists and encodes the exact locked rule; no RLS policy is
+// relied upon. A 403 (window passed / not author / finalized) is surfaced via
+// FastAPI's `detail` so the UI can show the precise reason.
+export interface DeleteOwnClaimResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function deleteOwnClaim(claimId: string): Promise<DeleteOwnClaimResult> {
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return { ok: false, error: "Could not remove the claim right now." };
+  }
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    const response = await fetch(`${backendUrl}/api/claims/${encodeURIComponent(claimId)}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+
+    const json = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      message?: string;
+      detail?: string;
+    };
+
+    if (response.ok && json.ok) {
+      return { ok: true, message: json.message ?? "Claim removed." };
+    }
+
+    // FastAPI HTTPException puts the 403/404 reason in `detail`.
+    return { ok: false, error: json.detail || "Could not remove the claim right now." };
+  } catch (error) {
+    console.log("[claims delete] request failed:", error);
+    return { ok: false, error: "Could not remove the claim right now." };
+  }
+}

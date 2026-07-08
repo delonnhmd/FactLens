@@ -23,6 +23,12 @@ import { MentionText } from "./MentionText";
 // APPLE GUIDELINE 1.2 — user blocking (NEW)
 import { useAuth } from "../context/AuthContext";
 import { useClaims } from "../context/ClaimsContext";
+// Author self-delete (NEW): 3-hour / finalization window rule (shared with detail).
+import {
+  canAuthorDeleteClaim,
+  formatDeleteWindowRemaining,
+  getClaimDeleteWindowMsRemaining,
+} from "../utils/claimDeletion";
 // Report reason picker + note (shared with claim detail)
 import { ReportNoteModal, showReportReasonPicker } from "./ReportClaimFlow";
 // Admin moderation: hide/unhide a post straight from the "..." menu (admins only)
@@ -224,7 +230,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
   const { currentUser, profile } = useAuth();
-  const { blockUser, savedClaimIds, toggleSaveClaim } = useClaims();
+  const { blockUser, savedClaimIds, toggleSaveClaim, deleteOwnClaim } = useClaims();
   // Public user profile navigation; anonymized/deleted authors are not tappable.
   const router = useRouter();
   const authorIsAnonymous =
@@ -344,6 +350,26 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
       .catch(() => Alert.alert("Could not update saved claims right now."));
   }, [claim.id, toggleSaveClaim]);
 
+  // Author self-delete (NEW): only shown to the author within the 3-hour window
+  // (see handleOptions). Confirm → backend delete → context removes it from the
+  // feed. A 403 (window just passed) surfaces the backend's exact message.
+  const handleDeleteOwnClaim = useCallback(() => {
+    Alert.alert("Delete this claim?", "This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          deleteOwnClaim(claim.id)
+            .then(() => Alert.alert("Claim removed."))
+            .catch((error) =>
+              Alert.alert(error instanceof Error ? error.message : "Could not remove the claim right now."),
+            );
+        },
+      },
+    ]);
+  }, [claim.id, deleteOwnClaim]);
+
   // Admin moderation (NEW): hide/unhide a post from the "..." menu. is_admin
   // comes from the authenticated profile — the same source the admin dashboard
   // uses. Non-admins never see these options. hiddenOverride is the optimistic
@@ -382,6 +408,12 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
   }, [claim.id, claimHidden]);
 
   const handleOptions = useCallback(() => {
+    // Author self-delete (NEW): compute at tap time so the 3-hour window is
+    // evaluated against the current clock. Hidden entirely once finalized or
+    // past 3h, and never shown on other users' claims.
+    const deleteMsRemaining = getClaimDeleteWindowMsRemaining(claim, Date.now());
+    const canDeleteOwnClaim = canAuthorDeleteClaim(claim, currentUser?.id, Date.now());
+
     Alert.alert("Post options", undefined, [
       // Save/unsave claims (logged-in only)
       ...(currentUser
@@ -391,6 +423,16 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
               onPress: () => {
                 void handleToggleSave();
               },
+            },
+          ]
+        : []),
+      // Author self-delete (NEW): own claim, not finalized, < 3h since posting.
+      ...(canDeleteOwnClaim
+        ? [
+            {
+              text: `Delete claim (${formatDeleteWindowRemaining(deleteMsRemaining)} left)`,
+              style: "destructive" as const,
+              onPress: handleDeleteOwnClaim,
             },
           ]
         : []),
@@ -433,10 +475,12 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport }: ClaimCardProps
     ]);
   }, [
     canBlockAuthor,
+    claim,
     claim.shareUrl,
     claimHidden,
     currentUser,
     handleBlock,
+    handleDeleteOwnClaim,
     handleToggleHidden,
     handleToggleSave,
     isAdmin,

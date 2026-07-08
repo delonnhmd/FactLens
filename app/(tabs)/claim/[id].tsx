@@ -63,6 +63,8 @@ import {
 import type { Evidence, EvidenceType, ReportReason, VoteOption } from "../../../types/claim";
 import { normalizeUrl } from "../../../utils/url";
 import { getTopBadges } from "../../../utils/reputation";
+// Author self-delete (NEW): 3-hour / finalization window rule (shared with feed).
+import { canAuthorDeleteClaim, formatDeleteWindowRemaining, getClaimDeleteWindowMsRemaining } from "../../../utils/claimDeletion";
 import { reportEvidence } from "../../../services/reportService";
 // Report note step (shared with the feed card "..." menu)
 import { ReportNoteModal } from "../../../components/ReportClaimFlow";
@@ -329,6 +331,8 @@ export default function ClaimDetailScreen() {
     // Save/unsave claims
     savedClaimIds,
     toggleSaveClaim,
+    // Author self-delete (3-hour window)
+    deleteOwnClaim,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -871,6 +875,34 @@ export default function ClaimDetailScreen() {
     toggleSaveClaim(claim.id)
       .then((saved) => Alert.alert(saved ? "Saved" : "Removed"))
       .catch(() => Alert.alert("Could not update saved claims right now."));
+  };
+
+  // Author self-delete (NEW): shown only to the author inside the 3-hour window.
+  // Confirm → backend delete (context removes it from state) → navigate back to
+  // the feed. A 403 (window passed / finalized) shows the backend's message and
+  // keeps the user on the page.
+  const handleDeleteOwnClaim = () => {
+    if (!claim) {
+      return;
+    }
+
+    Alert.alert("Delete this claim?", "This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          deleteOwnClaim(claim.id)
+            .then(() => {
+              router.back();
+              Alert.alert("Claim removed.");
+            })
+            .catch((error) =>
+              Alert.alert(error instanceof Error ? error.message : "Could not remove the claim right now."),
+            );
+        },
+      },
+    ]);
   };
 
   // PHASE 3 STEP 4
@@ -1466,6 +1498,23 @@ export default function ClaimDetailScreen() {
               <Ionicons name="ban-outline" size={14} color={appTheme.colors.danger} />
               <Text style={styles.blockUserButtonText}>
                 Block {claim.authorUsername ? `@${claim.authorUsername}` : "user"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {/* Author self-delete (NEW): own claim, not finalized, < 3h since
+              posting. Hidden entirely otherwise; backend re-enforces the rule. */}
+          {canAuthorDeleteClaim(claim, currentUser?.id) ? (
+            <TouchableOpacity
+              style={styles.deleteClaimButton}
+              activeOpacity={0.8}
+              onPress={handleDeleteOwnClaim}
+              accessibilityRole="button"
+              accessibilityLabel="Delete claim"
+              accessibilityHint="Permanently removes your claim within the 3-hour window"
+            >
+              <Ionicons name="trash-outline" size={14} color={appTheme.colors.danger} />
+              <Text style={styles.deleteClaimButtonText}>
+                Delete claim ({formatDeleteWindowRemaining(getClaimDeleteWindowMsRemaining(claim))} left)
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -2715,6 +2764,20 @@ function createStyles(theme: AppTheme) {
     minHeight: 32,
   },
   blockUserButtonText: {
+    color: theme.colors.danger,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
+  // Author self-delete (NEW): same compact-row shape as blockUserButton.
+  deleteClaimButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 8,
+    minHeight: 32,
+  },
+  deleteClaimButtonText: {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "500",

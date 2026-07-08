@@ -36,6 +36,8 @@ import {
   fetchMySavedClaimIds,
   saveClaim as saveRemoteClaim,
   unsaveClaim as unsaveRemoteClaim,
+  // Author self-delete (3-hour window)
+  deleteOwnClaim as deleteOwnClaimRequest,
   CLAIMS_LOAD_ERROR_MESSAGE,
   DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
@@ -149,6 +151,8 @@ interface ClaimsContextValue {
   blockedUserIds: string[];
   blockUser: (userId: string, sourceClaimId?: string | null) => Promise<void>;
   unblockUser: (userId: string) => Promise<void>;
+  // Author self-delete (3-hour window)
+  deleteOwnClaim: (claimId: string) => Promise<void>;
   // Save/unsave claims: ids loaded once at auth; toggle is optimistic and
   // resolves to the new saved state (true = now saved).
   savedClaimIds: string[];
@@ -1589,6 +1593,27 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentUser],
   );
 
+  // Author self-delete (NEW): calls the authoritative backend endpoint (which
+  // enforces author-only + the 3-hour / finalization window), then removes the
+  // claim from local state so it vanishes from the feed immediately. Throws with
+  // the backend's message on failure (e.g. 403 once the window has passed).
+  const deleteOwnClaim = useCallback(
+    async (claimId: string) => {
+      if (!currentUser) {
+        throw new Error("Please log in to remove your claim.");
+      }
+
+      const result = await deleteOwnClaimRequest(claimId);
+
+      if (!result.ok) {
+        throw new Error(result.error ?? "Could not remove the claim right now.");
+      }
+
+      setClaims((currentClaimsState) => currentClaimsState.filter((claim) => claim.id !== claimId));
+    },
+    [currentUser],
+  );
+
   // Save/unsave claims. Optimistic like blockUser: state flips BEFORE the
   // network call and is reverted only if the request fails. Resolves to the
   // new saved state so callers can toast "Saved" / "Removed".
@@ -1702,6 +1727,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       blockedUserIds,
       blockUser,
       unblockUser,
+      // Author self-delete (3-hour window)
+      deleteOwnClaim,
       // Save/unsave claims
       savedClaimIds,
       toggleSaveClaim,
@@ -1711,6 +1738,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       blockedUserIds,
       blockUser,
       unblockUser,
+      // Author self-delete (3-hour window)
+      deleteOwnClaim,
       // Save/unsave claims
       savedClaimIds,
       toggleSaveClaim,
