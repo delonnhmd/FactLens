@@ -32,7 +32,7 @@ from uuid import UUID
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 try:
@@ -47,6 +47,8 @@ try:
         classify_claim_stance,
         generate_claim_embedding,
     )
+    # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
+    from services.content_safety import check_content_safety
     from services.citation_service import (
         score_citation_source,
         validate_citation,
@@ -81,6 +83,8 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
         classify_claim_stance,
         generate_claim_embedding,
     )
+    # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
+    from backend.services.content_safety import check_content_safety
     from backend.services.citation_service import (
         score_citation_source,
         validate_citation,
@@ -2055,6 +2059,12 @@ class AiPrecheckRetryRequest(BaseModel):
 
 # PHASE 6 STEP 1 — Duplicate detection request bodies.
 class DuplicateCheckRequest(BaseModel):
+    title: str = ""
+    description: str = ""
+
+
+# CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
+class ContentSafetyRequest(BaseModel):
     title: str = ""
     description: str = ""
 
@@ -7080,6 +7090,62 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
         print(f"[check-duplicate] topic cluster lookup failed: {cluster_error}", flush=True)
 
     return {"duplicates": duplicates, "topic_cluster": topic_cluster}
+
+
+# CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
+# Separate from the truth/source AI analysis. Runs BEFORE the claim is saved
+# (claims are inserted client-side via Supabase, so the frontend calls this
+# first and only inserts when safe). FAIL-OPEN: check_content_safety never
+# raises on API failure, so a down safety API can never block posting.
+BLOCKED_CONTENT_MESSAGE = "This content violates our community guidelines and cannot be posted."
+
+
+def log_content_safety_block(supabase, user_id: str, title: str, category: str, reason: str) -> None:
+    """Record a blocked attempt for moderation visibility. Never fails the request."""
+    try:
+        supabase.table("content_safety_blocks").insert({
+            "user_id": user_id,
+            "title_snippet": str(title or "")[:120],
+            "category": str(category or "")[:40],
+            "reason": str(reason or "")[:200],
+        }).execute()
+    except Exception as error:
+        print(f"[content-safety] block log failed: {error}", flush=True)
+
+
+@app.post("/api/claims/safety-check")
+def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
+    """Classify a claim's SAFETY before it is saved.
+
+    Returns 200 {ok, safe:true} when clear; 400 {ok:false, blocked:true, ...}
+    when objectionable. Politically neutral — partisan/controversial factual
+    claims pass. Fails open: any classifier failure returns safe.
+    """
+    enforce_rate_limit(
+        request,
+        "content_safety",
+        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    user_id = get_authenticated_user_id(request)
+
+    verdict = check_content_safety(payload.title, payload.description)
+
+    if verdict.get("safe", True):
+        return {"ok": True, "safe": True, "category": "", "reason": ""}
+
+    category = str(verdict.get("category") or "objectionable")
+    log_content_safety_block(get_supabase_client(), user_id, payload.title, category, str(verdict.get("reason") or ""))
+
+    return JSONResponse(
+        status_code=400,
+        content={
+            "ok": False,
+            "blocked": True,
+            "reason": BLOCKED_CONTENT_MESSAGE,
+            "category": category,
+        },
+    )
 
 
 # PHASE 6 STEP 2 — Offline reference citations.

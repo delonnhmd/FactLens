@@ -20,6 +20,8 @@
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
 import { getBackendUrl } from "../constants/apiConfig";
+// CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
+import { checkContentSafety } from "./contentSafetyService";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
@@ -1785,6 +1787,18 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
     return {
       claim: null,
       error: authorProfile.suspension_reason || "This account is suspended from posting.",
+    };
+  }
+
+  // CONTENT SAFETY (NEW, additive) — objectionable-content gate BEFORE insert.
+  // Separate from truth/source AI. Fails open (checkContentSafety never blocks
+  // on error), so a down safety API can't stop a legitimate post.
+  const safety = await checkContentSafety(input.title, input.description);
+
+  if (safety.blocked) {
+    return {
+      claim: null,
+      error: safety.reason || "This content violates our community guidelines and cannot be posted.",
     };
   }
 
