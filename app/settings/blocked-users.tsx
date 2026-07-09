@@ -86,7 +86,7 @@ export default function BlockedUsersScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.headerButton}
+          style={styles.headerBackButton}
           activeOpacity={0.75}
           onPress={() => router.back()}
           accessibilityRole="button"
@@ -94,6 +94,7 @@ export default function BlockedUsersScreen() {
           accessibilityHint="Returns to the previous screen"
         >
           <Ionicons name="chevron-back" size={22} color={appTheme.colors.chipActiveText} />
+          <Text style={styles.headerBackText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Blocked users</Text>
         <View style={styles.headerButton} />
@@ -162,6 +163,19 @@ function createStyles(theme: AppTheme) {
       height: 44,
       justifyContent: "center",
       width: 44,
+    },
+    headerBackButton: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 2,
+      height: 44,
+      justifyContent: "center",
+      paddingRight: 8,
+    },
+    headerBackText: {
+      color: theme.colors.chipActiveText,
+      fontSize: Math.round(16 * (theme.typography.body.fontSize / 16)),
+      fontWeight: "500",
     },
     headerTitle: {
       color: theme.colors.chipActiveText,
