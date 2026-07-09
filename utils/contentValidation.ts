@@ -26,6 +26,11 @@ const BLOCKED_CONTENT_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
     message: "This content is not allowed on Verifact.",
   },
   {
+    pattern:
+      /\b(?:the\s+)?(?:he|she|they|them|him|her|someone|somebody|everyone|everybody|anyone|anybody|people|person|president|senator|representative|governor|mayor|judge|candidate|minister|officer|cop|police|teacher|doctor|boss|neighbor|family|group)\s+(?:needs?\s+to|should|must|has\s+to|have\s+to|deserves?\s+to)\s+(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|die)\b/i,
+    message: "This content is not allowed on Verifact.",
+  },
+  {
     pattern: /\b(go kill yourself|kill yourself)\b/i,
     message: "This content is not allowed on Verifact.",
   },
@@ -43,7 +48,7 @@ const BLOCKED_CONTENT_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   },
 ];
 
-function containsBlockedPattern(value: string): boolean {
+export function containsBlockedContentPattern(value: string): boolean {
   return BLOCKED_CONTENT_PATTERNS.some(({ pattern }) => pattern.test(value));
 }
 
@@ -79,7 +84,7 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
   const combinedContent = `${title} ${description}`;
   const nsfwModeration = moderateNsfwContent(combinedContent);
 
-  if (nsfwModeration.blocked || containsBlockedPattern(combinedContent)) {
+  if (nsfwModeration.blocked || containsBlockedContentPattern(combinedContent)) {
     errors.push("This content is not allowed on Verifact.");
   }
 

@@ -31,7 +31,7 @@ import { useDebounce } from "../../hooks/useDebounce";
 import { checkTopicClusterForDraft, type TopicClusterInfo } from "../../services/topicService";
 // CONTENT SAFETY (NEW) — live warning heads-up while typing (enforcement is server-side in createClaim).
 import { checkContentSafety } from "../../services/contentSafetyService";
-import { validateClaimContent } from "../../utils/contentValidation";
+import { containsBlockedContentPattern, validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
 import { getSourceQuality, getSourceTrustLabel } from "../../services/sourceQuality";
@@ -147,6 +147,17 @@ export default function CreateScreen() {
     let cancelled = false;
 
     void (async () => {
+      const localSafetyBlocked = containsBlockedContentPattern(
+        `${trimmedSafetyTitle} ${debouncedSafetyDescription.trim()}`,
+      );
+
+      if (localSafetyBlocked) {
+        if (!cancelled) {
+          setSafetyBlocked(true);
+        }
+        return;
+      }
+
       const result = await checkContentSafety(trimmedSafetyTitle, debouncedSafetyDescription.trim());
 
       if (!cancelled) {
