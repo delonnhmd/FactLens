@@ -129,8 +129,11 @@ INDIRECT_VIOLENCE_PATTERNS = [
     re.compile(
         rf"\b(?:{'|'.join(PERSON_OR_GROUP_TERMS)})\s+"
         r"(?:needs? to|should|must|has to|have to|deserves? to)\s+"
-        r"(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|die)\b"
+        r"(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|hanged|hung|die)\b"
     ),
+    re.compile(r"\b(?:needs? to|should|must|has to|have to|deserves? to)\s+die\b"),
+    re.compile(r"\b(?:kill|shoot|stab|execute|assassinate|hang|murder)\s+(?:him|her|them|you|us|me)\b"),
+    re.compile(r"\bdeath\s+threat\b"),
 ]
 
 
@@ -386,29 +389,59 @@ def check_content_safety(title: str, description: str) -> dict:
     Returns {"safe", "category", "severity", "reason", "matched_layer"}.
     The local blocklist always runs. OpenAI errors fail open after layer 1.
     """
-    text = f"{(title or '').strip()}\n\n{(description or '').strip()}".strip()[:MAX_TEXT_CHARS]
+    safe_title = (title or "").strip()
+    safe_description = (description or "").strip()
+    text = f"{safe_title}\n\n{safe_description}".strip()[:MAX_TEXT_CHARS]
+    log_context = {
+        "title_length": len(safe_title),
+        "description_length": len(safe_description),
+        "deterministic_safe": True,
+        "deterministic_layer": "",
+        "openai_moderation": "not_run",
+        "openai_semantic": "not_run",
+        "final_allowed": True,
+        "final_layer": "",
+    }
 
     if not text:
+        print(f"[content_safety] decision {log_context}", flush=True)
         return _safe()
 
     blocklist_verdict = _check_blocklist(text)
     if blocklist_verdict is not None:
+        log_context.update({
+            "deterministic_safe": False,
+            "deterministic_layer": blocklist_verdict.get("matched_layer", "blocklist"),
+            "final_allowed": False,
+            "final_layer": blocklist_verdict.get("matched_layer", "blocklist"),
+        })
         print(
             f"[content_safety] blocked by blocklist: {blocklist_verdict['reason']}",
             flush=True,
         )
+        print(f"[content_safety] decision {log_context}", flush=True)
         return blocklist_verdict
 
     indirect_violence_verdict = _check_indirect_violence_patterns(text)
     if indirect_violence_verdict is not None:
+        log_context.update({
+            "deterministic_safe": False,
+            "deterministic_layer": indirect_violence_verdict.get("matched_layer", "local_pattern"),
+            "final_allowed": False,
+            "final_layer": indirect_violence_verdict.get("matched_layer", "local_pattern"),
+        })
         print(
             f"[content_safety] blocked by local pattern: {indirect_violence_verdict['reason']}",
             flush=True,
         )
+        print(f"[content_safety] decision {log_context}", flush=True)
         return indirect_violence_verdict
 
     client = _get_client()
     if client is None:
+        log_context["openai_moderation"] = "unavailable"
+        log_context["openai_semantic"] = "unavailable"
+        print(f"[content_safety] decision {log_context}", flush=True)
         return _safe()
 
     try:
@@ -416,20 +449,42 @@ def check_content_safety(title: str, description: str) -> dict:
         result = moderation.results[0]
     except Exception as error:
         print(f"[content_safety] moderation error - failing open after blocklist: {error}", flush=True)
+        log_context["openai_moderation"] = f"error:{type(error).__name__}"
+        log_context["openai_semantic"] = "not_run"
+        print(f"[content_safety] decision {log_context}", flush=True)
         return _safe()
 
     moderation_verdict = _moderation_verdict(result)
     if moderation_verdict is not None:
+        log_context.update({
+            "openai_moderation": f"blocked:{moderation_verdict.get('category', '')}",
+            "final_allowed": False,
+            "final_layer": moderation_verdict.get("matched_layer", "moderation"),
+        })
         print(f"[content_safety] blocked by moderation: {moderation_verdict['category']}", flush=True)
+        print(f"[content_safety] decision {log_context}", flush=True)
         return moderation_verdict
+
+    log_context["openai_moderation"] = "allowed"
 
     try:
         semantic_verdict = _semantic_intent_check(client, text)
     except Exception as error:
         print(f"[content_safety] semantic intent error - failing open after blocklist: {error}", flush=True)
+        log_context["openai_semantic"] = f"error:{type(error).__name__}"
+        print(f"[content_safety] decision {log_context}", flush=True)
         return _safe()
 
     if not semantic_verdict.get("safe", True):
+        log_context.update({
+            "openai_semantic": f"blocked:{semantic_verdict.get('category', '')}",
+            "final_allowed": False,
+            "final_layer": semantic_verdict.get("matched_layer", "semantic_intent"),
+        })
         print(f"[content_safety] blocked by semantic intent: {semantic_verdict['category']}", flush=True)
+        print(f"[content_safety] decision {log_context}", flush=True)
+        return semantic_verdict
 
+    log_context["openai_semantic"] = "allowed"
+    print(f"[content_safety] decision {log_context}", flush=True)
     return semantic_verdict

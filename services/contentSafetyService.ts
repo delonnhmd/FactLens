@@ -47,6 +47,8 @@ export async function checkContentSafety(title: string, description: string): Pr
       safe?: boolean;
       blocked?: boolean;
       reason?: string;
+      message?: string;
+      code?: string;
       category?: string;
     };
 
@@ -57,7 +59,7 @@ export async function checkContentSafety(title: string, description: string): Pr
     if (response.status === 400 && json.blocked) {
       return {
         blocked: true,
-        reason: json.reason || "This content violates our community guidelines and cannot be posted.",
+        reason: json.message || json.reason || "This content violates our community guidelines and cannot be posted.",
         category: json.category,
       };
     }

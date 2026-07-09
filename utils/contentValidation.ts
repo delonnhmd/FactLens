@@ -3,6 +3,7 @@
 // PHASE 4 STEP 11 REVISED
 // PHASE 4 STEP 13B
 import { APP_CONFIG } from "../constants/appConfig";
+import { checkClaimSafety } from "./claimSafety";
 import { moderateNsfwContent } from "./nsfwModeration";
 import { isSupportedVideoUrl } from "./videoUrl";
 import { isValidSourceUrl, normalizeUrl } from "./url";
@@ -18,38 +19,6 @@ export interface ClaimContentValidationInput {
 interface ClaimContentValidationResult {
   ok: boolean;
   errors: string[];
-}
-
-const BLOCKED_CONTENT_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
-  {
-    pattern: /\b(i will|i am going to|going to)\s+(kill|shoot|stab|bomb|attack)\b/i,
-    message: "This content is not allowed on Verifact.",
-  },
-  {
-    pattern:
-      /\b(?:the\s+)?(?:he|she|they|them|him|her|someone|somebody|everyone|everybody|anyone|anybody|people|person|president|senator|representative|governor|mayor|judge|candidate|minister|officer|cop|police|teacher|doctor|boss|neighbor|family|group)\s+(?:needs?\s+to|should|must|has\s+to|have\s+to|deserves?\s+to)\s+(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|die)\b/i,
-    message: "This content is not allowed on Verifact.",
-  },
-  {
-    pattern: /\b(go kill yourself|kill yourself)\b/i,
-    message: "This content is not allowed on Verifact.",
-  },
-  {
-    pattern: /\b(how to|help me)\s+(kill myself|commit suicide|self harm)\b/i,
-    message: "This content is not allowed on Verifact.",
-  },
-  {
-    pattern: /\b(send me|dm me|cashapp me).*\b(money|cash|bitcoin|crypto)\b/i,
-    message: "This content is not allowed on Verifact.",
-  },
-  {
-    pattern: /\b(guaranteed profit|guaranteed returns|get rich quick|free money link|claim your prize now)\b/i,
-    message: "This content is not allowed on Verifact.",
-  },
-];
-
-export function containsBlockedContentPattern(value: string): boolean {
-  return BLOCKED_CONTENT_PATTERNS.some(({ pattern }) => pattern.test(value));
 }
 
 export function validateClaimContent(input: ClaimContentValidationInput): ClaimContentValidationResult {
@@ -83,8 +52,11 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
 
   const combinedContent = `${title} ${description}`;
   const nsfwModeration = moderateNsfwContent(combinedContent);
+  const claimSafety = checkClaimSafety(title, description);
 
-  if (nsfwModeration.blocked || containsBlockedContentPattern(combinedContent)) {
+  if (claimSafety.allowed === false) {
+    errors.push(claimSafety.reason || "This content is not allowed on Verifact.");
+  } else if (nsfwModeration.blocked) {
     errors.push("This content is not allowed on Verifact.");
   }
 

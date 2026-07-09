@@ -22,6 +22,7 @@ import { APP_CONFIG } from "../constants/appConfig";
 import { getBackendUrl } from "../constants/apiConfig";
 // CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
 import { checkContentSafety } from "./contentSafetyService";
+import { checkClaimSafety } from "../utils/claimSafety";
 import { VERIFICATION_MODE, getVerificationModeConfig } from "../constants/verificationConfig";
 import { generateClaimShareUrl, generateClaimSlug } from "./claimLinks";
 import { calculateTrendingScore } from "./trending";
@@ -1793,6 +1794,15 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   // CONTENT SAFETY (NEW, additive) — objectionable-content gate BEFORE insert.
   // Separate from truth/source AI. Fails open (checkContentSafety never blocks
   // on error), so a down safety API can't stop a legitimate post.
+  const localSafety = checkClaimSafety(input.title, input.description);
+
+  if (localSafety.allowed === false) {
+    return {
+      claim: null,
+      error: localSafety.reason || "This content violates our community guidelines and cannot be posted.",
+    };
+  }
+
   const safety = await checkContentSafety(input.title, input.description);
 
   if (safety.blocked) {

@@ -7099,7 +7099,7 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
 # (claims are inserted client-side via Supabase, so the frontend calls this
 # first and only inserts when safe). FAIL-OPEN: check_content_safety never
 # raises on API failure, so a down safety API can never block posting.
-BLOCKED_CONTENT_MESSAGE = "This content violates our community guidelines and cannot be posted."
+BLOCKED_CONTENT_MESSAGE = "This claim may contain violent or threatening language. Please rewrite it before posting."
 
 
 def log_content_safety_block(user_id: str, title: str, category: str, reason: str) -> None:
@@ -7147,7 +7147,8 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
     verdict = check_content_safety(payload.title, payload.description)
     print(
         f"[content-safety] ENDPOINT RAN user={user_id} "
-        f"title={str(payload.title or '')[:80]!r} verdict={verdict}",
+        f"title_length={len(str(payload.title or ''))} "
+        f"description_length={len(str(payload.description or ''))} verdict={verdict}",
         flush=True,
     )
 
@@ -7170,8 +7171,10 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
         status_code=400,
         content={
             "ok": False,
+            "code": "UNSAFE_CLAIM_TEXT",
             "safe": False,
             "blocked": True,
+            "message": BLOCKED_CONTENT_MESSAGE,
             "reason": BLOCKED_CONTENT_MESSAGE,
             "category": category,
             "severity": severity,

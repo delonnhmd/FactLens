@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "landing:build": "node scripts/build-landing.mjs",
     "typecheck": "tsc --noEmit",
+    "test:claim-safety": "node scripts/test-claim-safety.mjs",
     "test:moderation": "node scripts/test-nsfw-moderation.mjs",
     "test:mentions": "node scripts/test-mentions.mjs",
     "test:review-profile": "node scripts/test-contributor-review-fixes.mjs",

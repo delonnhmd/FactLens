@@ -31,7 +31,8 @@ import { useDebounce } from "../../hooks/useDebounce";
 import { checkTopicClusterForDraft, type TopicClusterInfo } from "../../services/topicService";
 // CONTENT SAFETY (NEW) — live warning heads-up while typing (enforcement is server-side in createClaim).
 import { checkContentSafety } from "../../services/contentSafetyService";
-import { containsBlockedContentPattern, validateClaimContent } from "../../utils/contentValidation";
+import { CLAIM_SAFETY_VIOLENCE_MESSAGE, checkClaimSafety } from "../../utils/claimSafety";
+import { validateClaimContent } from "../../utils/contentValidation";
 import { detectVideoPlatform, getYouTubeThumbnailUrl, isSupportedVideoUrl } from "../../utils/videoUrl";
 import { normalizeUrl } from "../../utils/url";
 import { getSourceQuality, getSourceTrustLabel } from "../../services/sourceQuality";
@@ -84,13 +85,9 @@ export default function CreateScreen() {
   const [topicCluster, setTopicCluster] = useState<TopicClusterInfo | null>(null);
   const [topicClusterDismissed, setTopicClusterDismissed] = useState(false);
   const debouncedTopicTitle = useDebounce(title, 800);
-  // CONTENT SAFETY (NEW) — LIVE WARNING (soft, cosmetic heads-up only). Shows a
-  // red banner while typing when the backend classifier flags the draft. This is
-  // NOT the enforcement: the real block is the server-authoritative gate inside
-  // createClaim (services/claimService.ts), which runs again on submit before any
-  // insert. Fails open (checkContentSafety never throws), so a down API shows no
-  // banner rather than a false alarm.
-  const [safetyBlocked, setSafetyBlocked] = useState(false);
+  // CONTENT SAFETY (NEW) — live heads-up. The deterministic local check drives
+  // immediate UI state; the debounced backend check adds server/AI coverage.
+  const [backendSafetyBlocked, setBackendSafetyBlocked] = useState(false);
   const debouncedSafetyTitle = useDebounce(title, 600);
   const debouncedSafetyDescription = useDebounce(description, 600);
 
@@ -103,6 +100,12 @@ export default function CreateScreen() {
     () => analyzeClaimDraft({ title, description, sourceUrl, category }),
     [title, description, sourceUrl, category],
   );
+  const claimSafety = useMemo(() => checkClaimSafety(title, description), [title, description]);
+  const safetyBlocked = claimSafety.allowed === false || backendSafetyBlocked;
+  const safetyWarningMessage =
+    claimSafety.category === "VIOLENCE"
+      ? CLAIM_SAFETY_VIOLENCE_MESSAGE
+      : claimSafety.reason || "This content appears to violate our community guidelines and cannot be posted.";
   const showClaimQualityBox = Boolean(title.trim() || description.trim() || sourceUrl.trim());
   // PHASE 6 STEP 4 (NEW): look up the nearest topic cluster once the user
   // pauses typing a meaningful title. Fire-and-forget; failures show nothing.
@@ -132,36 +135,28 @@ export default function CreateScreen() {
       cancelled = true;
     };
   }, [debouncedTopicTitle]);
-  // CONTENT SAFETY (NEW) — live heads-up. Once the user pauses typing a
-  // meaningful title (>= 8 chars), ask the backend classifier whether the draft
-  // is objectionable and show/hide the red banner. Cosmetic only; never blocks
-  // submit (the hard gate does). Fire-and-forget; a null/error result clears it.
+  // CONTENT SAFETY (NEW) — backend/AI heads-up. Deterministic local safety is
+  // handled synchronously above; this broadens coverage after the user pauses.
   useEffect(() => {
     const trimmedSafetyTitle = debouncedSafetyTitle.trim();
 
     if (trimmedSafetyTitle.length < 8) {
-      setSafetyBlocked(false);
+      setBackendSafetyBlocked(false);
       return;
     }
 
     let cancelled = false;
 
     void (async () => {
-      const localSafetyBlocked = containsBlockedContentPattern(
-        `${trimmedSafetyTitle} ${debouncedSafetyDescription.trim()}`,
-      );
-
-      if (localSafetyBlocked) {
-        if (!cancelled) {
-          setSafetyBlocked(true);
-        }
+      if (checkClaimSafety(trimmedSafetyTitle, debouncedSafetyDescription.trim()).allowed === false) {
+        setBackendSafetyBlocked(false);
         return;
       }
 
       const result = await checkContentSafety(trimmedSafetyTitle, debouncedSafetyDescription.trim());
 
       if (!cancelled) {
-        setSafetyBlocked(result.blocked);
+        setBackendSafetyBlocked(result.blocked);
       }
     })();
 
@@ -200,6 +195,8 @@ export default function CreateScreen() {
     Boolean(descriptionMentionLimitError) ||
     videoUrlInvalid ||
     !claimQuality.canSubmit ||
+    claimSafety.allowed === false ||
+    backendSafetyBlocked ||
     isSubmitting;
 
   const titleCounterStyle = useMemo(
@@ -342,6 +339,21 @@ export default function CreateScreen() {
         mimeType: selectedImage?.mimeType ?? null,
       });
 
+      const localSafety = checkClaimSafety(title, description);
+      console.log("[content-safety] LOCAL SUBMIT GATE RAN", {
+        allowed: localSafety.allowed,
+        category: localSafety.category,
+        titleLength: title.length,
+        descriptionLength: description.length,
+      });
+
+      if (localSafety.allowed === false) {
+        const blockMessage = localSafety.reason || "This content violates our community guidelines and can't be posted.";
+        setErrors({ general: blockMessage });
+        Alert.alert("Can't post this", blockMessage);
+        return;
+      }
+
       // CONTENT SAFETY HARD GATE — runs in the EXACT tapped path, BEFORE any
       // claim is written. createClaim() below is a direct supabase-js insert
       // (services/claimService.ts:1806), so this check must live here, in the
@@ -409,7 +421,14 @@ export default function CreateScreen() {
           ? "Description must be 1000 characters or fewer."
           : descriptionMentionLimitError || currentErrors.description,
         videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
-        general: !claimQuality.canSubmit ? claimQuality.warnings.join("\n") : currentErrors.general,
+        general:
+          claimSafety.allowed === false
+            ? safetyWarningMessage
+            : backendSafetyBlocked
+              ? safetyWarningMessage
+              : !claimQuality.canSubmit
+                ? claimQuality.warnings.join("\n")
+                : currentErrors.general,
       }));
       return;
     }
@@ -802,10 +821,7 @@ export default function CreateScreen() {
 
           {safetyBlocked ? (
             <View style={styles.safetyWarningPanel}>
-              <Text style={styles.safetyWarningText}>
-                ⚠️ This content appears to violate our community guidelines (hate, harassment, violence, sexual, or
-                spam) and cannot be posted.
-              </Text>
+              <Text style={styles.safetyWarningText}>{safetyWarningMessage}</Text>
             </View>
           ) : null}
 
