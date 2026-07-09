@@ -92,6 +92,46 @@ MODERATION_BLOCK_CATEGORIES = {
 
 SEMANTIC_ALLOWED_CATEGORIES = {"violence", "hate", "sexual", "spam", "none"}
 PUNCTUATION_TRANSLATION = str.maketrans({char: " " for char in string.punctuation})
+PERSON_OR_GROUP_TERMS = (
+    "he",
+    "she",
+    "they",
+    "them",
+    "him",
+    "her",
+    "someone",
+    "somebody",
+    "everyone",
+    "everybody",
+    "anyone",
+    "anybody",
+    "people",
+    "person",
+    "president",
+    "senator",
+    "representative",
+    "governor",
+    "mayor",
+    "judge",
+    "candidate",
+    "minister",
+    "officer",
+    "cop",
+    "police",
+    "teacher",
+    "doctor",
+    "boss",
+    "neighbor",
+    "family",
+    "group",
+)
+INDIRECT_VIOLENCE_PATTERNS = [
+    re.compile(
+        rf"\b(?:{'|'.join(PERSON_OR_GROUP_TERMS)})\s+"
+        r"(?:needs? to|should|must|has to|have to|deserves? to)\s+"
+        r"(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|die)\b"
+    ),
+]
 
 
 def _normalize_for_match(value: str) -> str:
@@ -182,6 +222,24 @@ def _check_blocklist(text: str) -> dict | None:
                 f"blocklist:{phrase}",
                 "blocklist",
                 entry["severity"],
+            )
+
+    return None
+
+
+def _check_indirect_violence_patterns(text: str) -> dict | None:
+    normalized_text = _normalize_for_match(text)
+
+    if not normalized_text:
+        return None
+
+    for pattern in INDIRECT_VIOLENCE_PATTERNS:
+        if pattern.search(normalized_text):
+            return _blocked(
+                "violence",
+                "local_pattern:indirect_violence",
+                "local_pattern",
+                "Critical",
             )
 
     return None
@@ -291,6 +349,14 @@ def check_content_safety(title: str, description: str) -> dict:
             flush=True,
         )
         return blocklist_verdict
+
+    indirect_violence_verdict = _check_indirect_violence_patterns(text)
+    if indirect_violence_verdict is not None:
+        print(
+            f"[content_safety] blocked by local pattern: {indirect_violence_verdict['reason']}",
+            flush=True,
+        )
+        return indirect_violence_verdict
 
     client = _get_client()
     if client is None:
