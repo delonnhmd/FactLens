@@ -256,6 +256,55 @@ def _get_client():
     return OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
 
+def get_content_safety_openai_status() -> dict:
+    """Admin diagnostic for the two OpenAI layers. Never returns secrets."""
+    status = {
+        "openai_api_key_configured": bool(os.environ.get("OPENAI_API_KEY", "")),
+        "openai_sdk_available": OpenAI is not None,
+        "moderation_model": MODERATION_MODEL,
+        "semantic_intent_model": SEMANTIC_INTENT_MODEL,
+        "moderation_ok": False,
+        "semantic_intent_ok": False,
+        "openai_ready": False,
+        "error_stage": "",
+        "error_type": "",
+    }
+
+    client = _get_client()
+    if client is None:
+        status["error_stage"] = "client"
+        status["error_type"] = "missing_configuration"
+        return status
+
+    try:
+        moderation = client.moderations.create(
+            model=MODERATION_MODEL,
+            input="Content safety OpenAI health check. This is a neutral test.",
+        )
+        result = moderation.results[0]
+        status["moderation_ok"] = hasattr(result, "flagged")
+    except Exception as error:
+        print(f"[content_safety] OpenAI moderation health check failed: {error}", flush=True)
+        status["error_stage"] = "moderation"
+        status["error_type"] = type(error).__name__
+        return status
+
+    try:
+        semantic_verdict = _semantic_intent_check(
+            client,
+            "The senator voted against the border bill.",
+        )
+        status["semantic_intent_ok"] = bool(semantic_verdict.get("safe", False))
+    except Exception as error:
+        print(f"[content_safety] OpenAI semantic health check failed: {error}", flush=True)
+        status["error_stage"] = "semantic_intent"
+        status["error_type"] = type(error).__name__
+        return status
+
+    status["openai_ready"] = bool(status["moderation_ok"] and status["semantic_intent_ok"])
+    return status
+
+
 def _normalize_category_key(key: str) -> str:
     return str(key or "").replace("/", "_").replace("-", "_")
 

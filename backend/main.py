@@ -49,6 +49,7 @@ try:
     )
     # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
     from services.content_safety import check_content_safety
+    from services.content_safety import get_content_safety_openai_status
     from services.citation_service import (
         score_citation_source,
         validate_citation,
@@ -85,6 +86,7 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
     )
     # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
     from backend.services.content_safety import check_content_safety
+    from backend.services.content_safety import get_content_safety_openai_status
     from backend.services.citation_service import (
         score_citation_source,
         validate_citation,
@@ -7116,6 +7118,15 @@ def log_content_safety_block(user_id: str, title: str, category: str, reason: st
 
 # /api/content/check-safety is the documented endpoint name; /api/claims/safety-check
 # is the original path the app already calls. Both map to the same handler (alias).
+@app.get("/admin/content-safety/openai-status")
+def admin_content_safety_openai_status(request: Request):
+    require_admin_role(request, {"SUPER_ADMIN", "ADMIN", "MODERATOR"})
+    return {
+        "ok": True,
+        "content_safety_openai": get_content_safety_openai_status(),
+    }
+
+
 @app.post("/api/content/check-safety")
 @app.post("/api/claims/safety-check")
 def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
