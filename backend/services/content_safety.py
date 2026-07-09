@@ -1,20 +1,27 @@
-# CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
+# CONTENT SAFETY (additive) - objectionable-content gate at submission.
 #
-# This is a SEPARATE gate from the truth/source AI analysis in
-# openai_factcheck.py (which this module does NOT touch). It judges SAFETY only:
-# hate, harassment, threats/violence, sexual content (incl. minors), self-harm,
-# and spam. It is deliberately POLITICALLY NEUTRAL — a partisan, controversial,
-# or hard-hitting FACTUAL claim is never objectionable here. OpenAI's moderation
-# has no "political" category, so partisan claims are not flagged by layer A, and
-# layer B is instructed explicitly to allow them.
+# This is separate from the truth/source AI analysis in openai_factcheck.py. It
+# judges safety only: hate, harassment, threats/violence, sexual content
+# including minors, self-harm, and obvious spam/fake engagement. It is
+# deliberately politically neutral: a partisan, controversial, or hard-hitting
+# factual claim is not objectionable here.
 #
-# Design rule (same as embedding_service): the safety check must NEVER block
-# posting because the safety API itself failed. Every path FAILS OPEN — on a
-# missing key, timeout, or error it returns safe=True and logs. The report flow
-# still catches anything that slips through.
+# Order matters:
+# 1. Local blocklist loaded from backend/data/moderation_blocklist.json.
+# 2. OpenAI Moderation API semantic categories.
+# 3. gpt-4.1-mini semantic intent backstop.
+#
+# The local blocklist always runs. OpenAI failures fail open after layer 1 so a
+# classifier outage cannot stop legitimate posting.
+
+from __future__ import annotations
 
 import json
 import os
+import re
+import string
+from pathlib import Path
+from typing import Any
 
 try:
     from openai import OpenAI
@@ -22,23 +29,55 @@ except ImportError:  # pragma: no cover - Render installs this from requirements
     OpenAI = None
 
 
-# Purpose-built, fast, and free — the first line of defense.
 MODERATION_MODEL = "omni-moderation-latest"
-# Cheap second pass; also the only layer that can see "spam" (moderation has no
-# spam category). Kept in sync with the rest of the backend's default model.
-SECOND_PASS_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
-
-# 5s hard ceiling per submission — a slow OpenAI call can't hold posting open.
+SEMANTIC_INTENT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
 OPENAI_TIMEOUT_SECONDS = 5.0
-
-# Only the leading text feeds the classifier; long bodies add cost/latency.
 MAX_TEXT_CHARS = 2000
 
-# Moderation categories we treat as hard blocks, normalized to underscores so we
-# match whether the SDK hands us alias ("sexual/minors") or field ("sexual_minors")
-# names. Value = the simple label we log / surface.
-BLOCK_CATEGORIES = {
-    "sexual_minors": "sexual_minors",
+BLOCKLIST_PATH = Path(__file__).resolve().parents[1] / "data" / "moderation_blocklist.json"
+
+# Preserve the exact local app-side threat/scam coverage that existed before
+# this backend list, and cover fake-engagement spam requested by the test plan.
+LEGACY_LOCAL_BLOCKLIST = [
+    {
+        "phrase": "i will kill",
+        "category": "Category A: Violence & Harm",
+        "subcategory": "Threats of Violence",
+        "severity": "Critical",
+        "action": "Immediate Ban & IP Log",
+    },
+    {
+        "phrase": "i am going to kill",
+        "category": "Category A: Violence & Harm",
+        "subcategory": "Threats of Violence",
+        "severity": "Critical",
+        "action": "Immediate Ban & IP Log",
+    },
+    {
+        "phrase": "we will kill",
+        "category": "Category A: Violence & Harm",
+        "subcategory": "Threats of Violence",
+        "severity": "Critical",
+        "action": "Immediate Ban & IP Log",
+    },
+    {
+        "phrase": "go kill yourself",
+        "category": "Category A: Violence & Harm",
+        "subcategory": "Direct Call to Action",
+        "severity": "Critical",
+        "action": "Immediate Ban / Flag Account",
+    },
+    {
+        "phrase": "buy followers",
+        "category": "Spam",
+        "subcategory": "Fake engagement",
+        "severity": "High",
+        "action": "Block Post & Warn User",
+    },
+]
+
+MODERATION_BLOCK_CATEGORIES = {
+    "sexual_minors": "sexual",
     "sexual": "sexual",
     "hate": "hate",
     "hate_threatening": "hate",
@@ -51,43 +90,120 @@ BLOCK_CATEGORIES = {
     "self_harm_instructions": "self_harm",
 }
 
-# A category-score at/above HARD is blocked even if the boolean flag is False;
-# scores in [BORDER, HARD) are "unclear" and defer to the layer-B LLM.
-HARD_SCORE = 0.5
-BORDER_SCORE = 0.3
+SEMANTIC_ALLOWED_CATEGORIES = {"violence", "hate", "sexual", "spam", "none"}
+PUNCTUATION_TRANSLATION = str.maketrans({char: " " for char in string.punctuation})
 
 
-def _safe(category: str = "", reason: str = "") -> dict:
-    return {"safe": True, "category": category, "reason": reason}
+def _normalize_for_match(value: str) -> str:
+    lowered = str(value or "").lower().translate(PUNCTUATION_TRANSLATION)
+    return re.sub(r"\s+", " ", lowered).strip()
 
 
-def _blocked(category: str, reason: str) -> dict:
-    return {"safe": False, "category": category, "reason": reason}
+def _entry_with_matcher(entry: dict[str, Any]) -> dict[str, Any] | None:
+    phrase = str(entry.get("phrase") or "").strip()
+    normalized_phrase = _normalize_for_match(phrase)
+
+    if not normalized_phrase:
+        return None
+
+    matcher = re.compile(rf"(?<!\w){re.escape(normalized_phrase)}(?!\w)")
+    return {
+        "phrase": phrase,
+        "category": str(entry.get("category") or "objectionable").strip() or "objectionable",
+        "subcategory": str(entry.get("subcategory") or "").strip(),
+        "severity": str(entry.get("severity") or "").strip(),
+        "action": str(entry.get("action") or "").strip(),
+        "normalized_phrase": normalized_phrase,
+        "matcher": matcher,
+    }
+
+
+def _load_blocklist() -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+
+    if BLOCKLIST_PATH.exists():
+        try:
+            raw_entries = json.loads(BLOCKLIST_PATH.read_text(encoding="utf-8"))
+            if isinstance(raw_entries, list):
+                for raw_entry in raw_entries:
+                    if isinstance(raw_entry, dict):
+                        entry = _entry_with_matcher(raw_entry)
+                        if entry is not None:
+                            entries.append(entry)
+            else:
+                print(f"[content_safety] blocklist is not a list: {BLOCKLIST_PATH}", flush=True)
+        except Exception as error:
+            print(f"[content_safety] blocklist load failed: {error}", flush=True)
+    else:
+        print(f"[content_safety] blocklist missing: {BLOCKLIST_PATH}", flush=True)
+
+    for raw_entry in LEGACY_LOCAL_BLOCKLIST:
+        entry = _entry_with_matcher(raw_entry)
+        if entry is not None:
+            entries.append(entry)
+
+    return entries
+
+
+BLOCKLIST_ENTRIES = _load_blocklist()
+
+
+def _safe(category: str = "", reason: str = "", severity: str = "", matched_layer: str = "") -> dict:
+    return {
+        "safe": True,
+        "category": category,
+        "severity": severity,
+        "reason": reason,
+        "matched_layer": matched_layer,
+    }
+
+
+def _blocked(category: str, reason: str, matched_layer: str, severity: str = "") -> dict:
+    return {
+        "safe": False,
+        "category": category,
+        "severity": severity,
+        "reason": reason,
+        "matched_layer": matched_layer,
+    }
+
+
+def _check_blocklist(text: str) -> dict | None:
+    normalized_text = _normalize_for_match(text)
+
+    if not normalized_text:
+        return None
+
+    for entry in BLOCKLIST_ENTRIES:
+        if entry["matcher"].search(normalized_text):
+            phrase = entry["phrase"]
+            return _blocked(
+                entry["category"],
+                f"blocklist:{phrase}",
+                "blocklist",
+                entry["severity"],
+            )
+
+    return None
 
 
 def _get_client():
-    """OpenAI client with the 5s timeout baked in, or None if unusable.
-
-    None is treated by callers identically to an API error: fail open.
-    """
+    """OpenAI client with the timeout baked in, or None if unusable."""
     api_key = os.environ.get("OPENAI_API_KEY", "")
 
     if not api_key or OpenAI is None:
-        print("[content_safety] OpenAI client unavailable — failing open (safe)", flush=True)
+        print("[content_safety] OpenAI client unavailable - failing open after blocklist", flush=True)
         return None
 
     return OpenAI(api_key=api_key, timeout=OPENAI_TIMEOUT_SECONDS)
 
 
-def _normalize_key(key: str) -> str:
-    return key.replace("/", "_").replace("-", "_")
+def _normalize_category_key(key: str) -> str:
+    return str(key or "").replace("/", "_").replace("-", "_")
 
 
-def _to_dict(obj) -> dict:
-    """Best-effort turn an OpenAI categories/scores object into a plain dict.
-
-    Defensive across SDK versions: model_dump (pydantic v2), dict fallback.
-    """
+def _to_dict(obj: Any) -> dict[str, Any]:
+    """Best-effort turn an OpenAI categories object into a plain dict."""
     if obj is None:
         return {}
 
@@ -107,58 +223,38 @@ def _to_dict(obj) -> dict:
         return {}
 
 
-def _moderation_verdict(result) -> "dict | None":
-    """Return a blocked verdict from a moderation result, or None if clean.
+def _moderation_verdict(result: Any) -> dict | None:
+    """Return a blocked verdict from an OpenAI moderation result, or None."""
+    if not bool(getattr(result, "flagged", False)):
+        return None
 
-    Blocks when a block-category boolean is True OR its score >= HARD_SCORE.
-    """
-    categories = {_normalize_key(k): v for k, v in _to_dict(getattr(result, "categories", None)).items()}
-    scores = {_normalize_key(k): v for k, v in _to_dict(getattr(result, "category_scores", None)).items()}
+    categories = {
+        _normalize_category_key(key): value
+        for key, value in _to_dict(getattr(result, "categories", None)).items()
+    }
 
-    for key, label in BLOCK_CATEGORIES.items():
-        flagged = categories.get(key) is True
-
-        try:
-            score = float(scores.get(key) or 0.0)
-        except (TypeError, ValueError):
-            score = 0.0
-
-        if flagged or score >= HARD_SCORE:
-            return _blocked(label, f"moderation:{key}")
+    for key, label in MODERATION_BLOCK_CATEGORIES.items():
+        if categories.get(key) is True:
+            return _blocked(label, f"moderation:{key}", "moderation", "High")
 
     return None
 
 
-def _is_borderline(result) -> bool:
-    scores = {_normalize_key(k): v for k, v in _to_dict(getattr(result, "category_scores", None)).items()}
-
-    for key in BLOCK_CATEGORIES:
-        try:
-            score = float(scores.get(key) or 0.0)
-        except (TypeError, ValueError):
-            score = 0.0
-
-        if BORDER_SCORE <= score < HARD_SCORE:
-            return True
-
-    return False
-
-
-def _second_pass(client, text: str) -> dict:
-    """gpt-4.1-mini backstop: catches spam (no moderation category) and borderline
-    safety cases. Explicitly told political/controversial factual claims are fine.
-    """
+def _semantic_intent_check(client: Any, text: str) -> dict:
     prompt = (
-        "You are a content-safety filter. Is this content hate speech, harassment, "
-        "a threat, sexual content, or spam? A political or controversial FACTUAL "
-        "claim is NOT objectionable. Return JSON "
-        '{"objectionable": true|false, "category": "..."}.'
+        "Does this text call for, threaten, endorse, or wish death or violence "
+        "against any person or group - including indirect or third-person "
+        "phrasing (e.g. 'X should be killed', 'someone needs to die')? Also "
+        "flag sexual content involving minors, targeted hate, and obvious spam "
+        "or fake engagement. A neutral political or factual claim is NOT a "
+        "violation. Return JSON {\"violation\": true|false, "
+        "\"category\": \"violence|hate|sexual|spam|none\"}."
     )
 
     response = client.chat.completions.create(
-        model=SECOND_PASS_MODEL,
+        model=SEMANTIC_INTENT_MODEL,
         temperature=0,
-        max_tokens=30,
+        max_tokens=40,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": prompt},
@@ -168,48 +264,57 @@ def _second_pass(client, text: str) -> dict:
     content = (response.choices[0].message.content or "").strip()
     data = json.loads(content)
 
-    if bool(data.get("objectionable")):
-        category = str(data.get("category") or "objectionable").strip().lower().replace(" ", "_")[:40]
-        return _blocked(category or "objectionable", "llm:objectionable")
+    if bool(data.get("violation")):
+        category = str(data.get("category") or "violence").strip().lower().replace(" ", "_")
+        if category not in SEMANTIC_ALLOWED_CATEGORIES or category == "none":
+            category = "violence"
+        return _blocked(category, f"semantic_intent:{category}", "semantic_intent", "High")
 
     return _safe()
 
 
 def check_content_safety(title: str, description: str) -> dict:
-    """Classify a claim's SAFETY (not truth, not politics).
+    """Classify a claim's safety, not truth or politics.
 
-    Returns {"safe": bool, "category": str, "reason": str}. Fails OPEN on any
-    error/timeout/missing key.
+    Returns {"safe", "category", "severity", "reason", "matched_layer"}.
+    The local blocklist always runs. OpenAI errors fail open after layer 1.
     """
     text = f"{(title or '').strip()}\n\n{(description or '').strip()}".strip()[:MAX_TEXT_CHARS]
 
     if not text:
         return _safe()
 
+    blocklist_verdict = _check_blocklist(text)
+    if blocklist_verdict is not None:
+        print(
+            f"[content_safety] blocked by blocklist: {blocklist_verdict['reason']}",
+            flush=True,
+        )
+        return blocklist_verdict
+
     client = _get_client()
-
     if client is None:
-        return _safe()  # fail open
+        return _safe()
 
-    # Layer A — OpenAI Moderation API (purpose-built, free, fast).
     try:
         moderation = client.moderations.create(model=MODERATION_MODEL, input=text)
         result = moderation.results[0]
     except Exception as error:
-        print(f"[content_safety] moderation error — failing open: {error}", flush=True)
-        return _safe()  # fail open
+        print(f"[content_safety] moderation error - failing open after blocklist: {error}", flush=True)
+        return _safe()
 
-    verdict = _moderation_verdict(result)
+    moderation_verdict = _moderation_verdict(result)
+    if moderation_verdict is not None:
+        print(f"[content_safety] blocked by moderation: {moderation_verdict['category']}", flush=True)
+        return moderation_verdict
 
-    if verdict is not None:
-        print(f"[content_safety] blocked by moderation: {verdict['category']}", flush=True)
-        return verdict
-
-    # Layer B — gpt-4.1-mini backstop. Moderation has no "spam" category, so this
-    # runs whenever layer A did not hard-block: it is what catches spam, and it
-    # resolves borderline safety scores. Fails open on any error.
     try:
-        return _second_pass(client, text)
+        semantic_verdict = _semantic_intent_check(client, text)
     except Exception as error:
-        print(f"[content_safety] second-pass error — failing open: {error}", flush=True)
-        return _safe()  # fail open
+        print(f"[content_safety] semantic intent error - failing open after blocklist: {error}", flush=True)
+        return _safe()
+
+    if not semantic_verdict.get("safe", True):
+        print(f"[content_safety] blocked by semantic intent: {semantic_verdict['category']}", flush=True)
+
+    return semantic_verdict

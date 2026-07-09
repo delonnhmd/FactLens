@@ -7100,9 +7100,10 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
 BLOCKED_CONTENT_MESSAGE = "This content violates our community guidelines and cannot be posted."
 
 
-def log_content_safety_block(supabase, user_id: str, title: str, category: str, reason: str) -> None:
+def log_content_safety_block(user_id: str, title: str, category: str, reason: str) -> None:
     """Record a blocked attempt for moderation visibility. Never fails the request."""
     try:
+        supabase = get_supabase_client()
         supabase.table("content_safety_blocks").insert({
             "user_id": user_id,
             "title_snippet": str(title or "")[:120],
@@ -7140,18 +7141,30 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
     )
 
     if verdict.get("safe", True):
-        return {"ok": True, "safe": True, "category": "", "reason": ""}
+        return {
+            "ok": True,
+            "safe": True,
+            "category": "",
+            "severity": "",
+            "reason": "",
+            "matched_layer": "",
+        }
 
     category = str(verdict.get("category") or "objectionable")
-    log_content_safety_block(get_supabase_client(), user_id, payload.title, category, str(verdict.get("reason") or ""))
+    severity = str(verdict.get("severity") or "")
+    matched_layer = str(verdict.get("matched_layer") or "")
+    log_content_safety_block(user_id, payload.title, category, str(verdict.get("reason") or ""))
 
     return JSONResponse(
         status_code=400,
         content={
             "ok": False,
+            "safe": False,
             "blocked": True,
             "reason": BLOCKED_CONTENT_MESSAGE,
             "category": category,
+            "severity": severity,
+            "matched_layer": matched_layer,
         },
     )
 

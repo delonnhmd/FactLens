@@ -1,0 +1,471 @@
+[
+  {
+    "phrase": "kill yourself",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "go die",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "end your life",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "hang yourself",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "drink bleach",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "slit your wrists",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "jump off a bridge",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "commit suicide",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Direct Call to Action",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "will kill you",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "going to shoot",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "stab you",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "murder you",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "hunt you down",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "track your house",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "slit your throat",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "beat you to death",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Threats of Violence",
+    "severity": "Critical",
+    "action": "Immediate Ban & IP Log"
+  },
+  {
+    "phrase": "bomb",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "terrorism",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "massacre",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "assassinate",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "shooting up the",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "pipe bomb",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "detonate",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "Critical",
+    "action": "Immediate Block & Admin Alert"
+  },
+  {
+    "phrase": "blow up",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Mass Violence / Terrorism",
+    "severity": "High",
+    "action": "Filter & Human Review"
+  },
+  {
+    "phrase": "decapitate",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Action Verbs (Proximity)",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "slaughter",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Action Verbs (Proximity)",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "execute",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Action Verbs (Proximity)",
+    "severity": "High",
+    "action": "Filter & Context Check"
+  },
+  {
+    "phrase": "mutilate",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Action Verbs (Proximity)",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "torture",
+    "category": "Category A: Violence & Harm",
+    "subcategory": "Action Verbs (Proximity)",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "child porn",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Exploitation (Minors)",
+    "severity": "Critical",
+    "action": "Permanent IP Ban & Report"
+  },
+  {
+    "phrase": "cp",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Exploitation (Minors)",
+    "severity": "Critical",
+    "action": "Permanent IP Ban & Report"
+  },
+  {
+    "phrase": "pedophile",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Exploitation (Minors)",
+    "severity": "Critical",
+    "action": "Permanent IP Ban & Report"
+  },
+  {
+    "phrase": "pedo",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Exploitation (Minors)",
+    "severity": "Critical",
+    "action": "Permanent IP Ban & Report"
+  },
+  {
+    "phrase": "underage sex",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Exploitation (Minors)",
+    "severity": "Critical",
+    "action": "Permanent IP Ban & Report"
+  },
+  {
+    "phrase": "loli",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Exploitation (Minors)",
+    "severity": "Critical",
+    "action": "Permanent IP Ban & Report"
+  },
+  {
+    "phrase": "rape",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Sexual Violence",
+    "severity": "Critical",
+    "action": "Immediate Block & Flag Account"
+  },
+  {
+    "phrase": "molest",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Sexual Violence",
+    "severity": "Critical",
+    "action": "Immediate Block & Flag Account"
+  },
+  {
+    "phrase": "forced sex",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Sexual Violence",
+    "severity": "Critical",
+    "action": "Immediate Block & Flag Account"
+  },
+  {
+    "phrase": "non-consensual",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Sexual Violence",
+    "severity": "High",
+    "action": "Filter & Context Check"
+  },
+  {
+    "phrase": "sexual assault",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Sexual Violence",
+    "severity": "High",
+    "action": "Filter & Context Check"
+  },
+  {
+    "phrase": "fuck",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "dick",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "pussy",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "cock",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "tits",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "bitch",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Warn User"
+  },
+  {
+    "phrase": "slut",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "whore",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "cum",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "horny",
+    "category": "Category B: Sexual Content",
+    "subcategory": "Anatomical & Explicit",
+    "severity": "Low",
+    "action": "Contextual Review Only"
+  },
+  {
+    "phrase": "nigger",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "Critical",
+    "action": "Immediate Ban / Zero Tolerance"
+  },
+  {
+    "phrase": "faggot",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "Critical",
+    "action": "Immediate Ban / Zero Tolerance"
+  },
+  {
+    "phrase": "kike",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "Critical",
+    "action": "Immediate Ban / Zero Tolerance"
+  },
+  {
+    "phrase": "chink",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "Critical",
+    "action": "Immediate Ban / Zero Tolerance"
+  },
+  {
+    "phrase": "spic",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "Critical",
+    "action": "Immediate Ban / Zero Tolerance"
+  },
+  {
+    "phrase": "tranny",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "Critical",
+    "action": "Immediate Ban / Zero Tolerance"
+  },
+  {
+    "phrase": "retard",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "subhuman",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "go back to your country",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Targeted Degradation",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "worthless piece of",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "Medium",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "piece of shit",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "motherfucker",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "Medium",
+    "action": "Soft Filter / Replace with ****"
+  },
+  {
+    "phrase": "die slow",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "waste of space",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "Medium",
+    "action": "Warn User"
+  },
+  {
+    "phrase": "hope you get cancer",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "High",
+    "action": "Block Post & Warn User"
+  },
+  {
+    "phrase": "kill your family",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "Critical",
+    "action": "Immediate Ban / Flag Account"
+  },
+  {
+    "phrase": "trash",
+    "category": "Category C: Harassment & Hate",
+    "subcategory": "Severe Insults",
+    "severity": "Low",
+    "action": "Contextual Review Only"
+  }
+]
