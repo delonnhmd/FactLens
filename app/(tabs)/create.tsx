@@ -375,6 +375,7 @@ export default function CreateScreen() {
         return; // STOP — do not reach createClaim / the supabase.from("claims").insert
       }
 
+      console.log(">>> ABOUT TO CREATE CLAIM");
       const createdClaim = await createClaim({
         title,
         description,
@@ -413,6 +414,7 @@ export default function CreateScreen() {
   // PHASE 4 STEP 11
   // PHASE 4 STEP 11 REVISED
   const handleSubmit = async () => {
+    console.log(">>> POST HANDLER RAN");
     if (submitDisabled) {
       setErrors((currentErrors) => ({
         ...currentErrors,
