@@ -1,3 +1,5 @@
+import { findModerationBlocklistMatch } from "./moderationBlocklist";
+
 export type ClaimSafetyCategory = "VIOLENCE" | "HARASSMENT" | "SEXUAL" | "SPAM" | null;
 
 export interface ClaimSafetyResult {
@@ -8,6 +10,7 @@ export interface ClaimSafetyResult {
 
 export const CLAIM_SAFETY_VIOLENCE_MESSAGE =
   "This claim may contain violent or threatening language. Please rewrite it before posting.";
+const CLAIM_SAFETY_BLOCKLIST_MESSAGE = "This content is not allowed on Verifact.";
 
 // Keep these patterns in lockstep with the backend's INDIRECT_VIOLENCE_PATTERNS
 // in backend/services/content_safety.py — both are exercised by the same
@@ -76,6 +79,15 @@ function normalizeForMatch(value: string): string {
 
 export function checkClaimSafety(title: string, description: string): ClaimSafetyResult {
   const text = normalizeForMatch(`${title || ""} ${description || ""}`);
+  const blocklistMatch = findModerationBlocklistMatch(text);
+
+  if (blocklistMatch) {
+    return {
+      allowed: false,
+      reason: blocklistMatch.category === "VIOLENCE" ? CLAIM_SAFETY_VIOLENCE_MESSAGE : CLAIM_SAFETY_BLOCKLIST_MESSAGE,
+      category: blocklistMatch.category,
+    };
+  }
 
   if (VIOLENCE_PATTERNS.some((pattern) => pattern.test(text))) {
     return {

@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # from the blocklist or the local threat patterns.
 os.environ.pop("OPENAI_API_KEY", None)
 
-from services.content_safety import check_content_safety  # noqa: E402
+from services.content_safety import BLOCKLIST_ENTRIES, check_content_safety  # noqa: E402
 
 
 def _blocked(title, description=""):
@@ -70,6 +70,12 @@ NORMALIZATION_BLOCK = [
 def test_must_block():
     for text in MUST_BLOCK:
         assert _blocked(text), f"expected BLOCK: {text!r}"
+
+
+def test_blocklist_entries_block():
+    for entry in BLOCKLIST_ENTRIES:
+        phrase = entry["phrase"]
+        assert _blocked(phrase), f"expected BLOCK from blocklist: {phrase!r}"
 
 
 def test_must_allow():

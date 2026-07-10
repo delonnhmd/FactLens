@@ -84,12 +84,20 @@ try {
 
   const requireFromBuild = createRequire(path.join(outDir, "test.cjs"));
   const { checkClaimSafety } = requireFromBuild("./claimSafety.js");
+  const { MODERATION_BLOCKLIST } = requireFromBuild("./moderationBlocklist.js");
 
   for (const title of blockedTitles) {
     const result = checkClaimSafety(title, "");
     assert.equal(result.allowed, false, `${title} should be blocked`);
     assert.equal(result.category, "VIOLENCE", `${title} should be VIOLENCE`);
     assert.ok(result.reason, `${title} should include a reason`);
+  }
+
+  for (const entry of MODERATION_BLOCKLIST) {
+    const result = checkClaimSafety(entry.phrase, "");
+    assert.equal(result.allowed, false, `${entry.phrase} should be blocked by the moderation blocklist`);
+    assert.equal(result.category, entry.category, `${entry.phrase} should use the blocklist category`);
+    assert.ok(result.reason, `${entry.phrase} should include a reason`);
   }
 
   for (const title of allowedTitles) {
