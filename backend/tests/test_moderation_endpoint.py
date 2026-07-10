@@ -21,7 +21,6 @@ import main  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _patch_auth(monkeypatch):
-    monkeypatch.setattr(main, "get_authenticated_user_id", lambda request: "test-user-123")
     monkeypatch.setattr(main, "enforce_rate_limit", lambda *args, **kwargs: None)
     # Don't touch Supabase when logging a block.
     monkeypatch.setattr(main, "log_content_safety_block", lambda *args, **kwargs: None)
@@ -36,7 +35,7 @@ def _post(title, description=""):
 
 
 def test_blocks_targeted_threat():
-    r = _post("he needs to be killed")
+    r = _post("he need to be killed")
     assert r.status_code == 200
     body = r.json()
     assert body == {

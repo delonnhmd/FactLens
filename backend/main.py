@@ -7102,7 +7102,7 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
 BLOCKED_CONTENT_MESSAGE = "This claim may contain violent or threatening language. Please rewrite it before posting."
 
 
-def log_content_safety_block(user_id: str, title: str, category: str, reason: str) -> None:
+def log_content_safety_block(user_id: str | None, title: str, category: str, reason: str) -> None:
     """Record a blocked attempt for moderation visibility. Never fails the request."""
     try:
         supabase = get_supabase_client()
@@ -7192,7 +7192,8 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
 # ALWAYS runs and blocks targeted threats regardless of OpenAI availability; only
 # the OpenAI moderation/semantic layers fail open when the API is unreachable, so
 # a classifier outage never blocks legitimate posting (Render free-tier cold
-# starts + active Apple review). Available to any authenticated user; NOT admin.
+# starts + active Apple review). Public endpoint; authentication is optional and
+# used only to associate moderation logs with a user when a bearer token exists.
 MODERATION_TITLE_MAX = 300
 MODERATION_DESCRIPTION_MAX = 2000
 MODERATION_VIOLENCE_MESSAGE = "This claim may contain violent or threatening language. Please rewrite it before posting."
@@ -7217,6 +7218,18 @@ def _moderation_category_label(verdict: dict) -> str:
     return "OBJECTIONABLE"
 
 
+def get_optional_authenticated_user_id(request: Request) -> str | None:
+    authorization = request.headers.get("authorization", "")
+
+    if not authorization.lower().startswith("bearer "):
+        return None
+
+    try:
+        return get_authenticated_user_id(request)
+    except HTTPException:
+        return None
+
+
 @app.post("/moderation/check")
 def moderation_check(payload: ContentSafetyRequest, request: Request):
     """Classify a claim's SAFETY (not truth/politics) before it is saved.
@@ -7232,7 +7245,7 @@ def moderation_check(payload: ContentSafetyRequest, request: Request):
         DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
         AI_RATE_LIMIT_WINDOW_SECONDS,
     )
-    user_id = get_authenticated_user_id(request)
+    user_id = get_optional_authenticated_user_id(request)
 
     title = str(payload.title or "").strip()
     description = str(payload.description or "").strip()

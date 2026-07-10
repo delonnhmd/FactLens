@@ -15,6 +15,41 @@ export interface ContentSafetyResult {
   category?: string;
 }
 
+type ModerationCheckResponse = {
+  ok?: boolean;
+  allowed?: boolean;
+  flagged?: boolean;
+  blocked?: boolean;
+  safe?: boolean;
+  reason?: string;
+  message?: string;
+  code?: string;
+  category?: string | null;
+};
+
+function readBlockedResponse(json: ModerationCheckResponse, responseStatus: number): ContentSafetyResult {
+  const reason = json.message || json.reason || "This content violates our community guidelines and cannot be posted.";
+  const category = json.category || undefined;
+
+  if (json.allowed === false || json.flagged === true || json.blocked === true) {
+    return {
+      blocked: true,
+      reason,
+      category,
+    };
+  }
+
+  if (responseStatus === 400 && json.safe === false) {
+    return {
+      blocked: true,
+      reason,
+      category,
+    };
+  }
+
+  return { blocked: false };
+}
+
 export async function checkContentSafety(title: string, description: string): Promise<ContentSafetyResult> {
   const backendUrl = getBackendUrl();
 
@@ -32,7 +67,7 @@ export async function checkContentSafety(title: string, description: string): Pr
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
 
-    const response = await fetch(`${backendUrl}/api/claims/safety-check`, {
+    const response = await fetch(`${backendUrl}/moderation/check`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -42,29 +77,11 @@ export async function checkContentSafety(title: string, description: string): Pr
       signal: controller.signal,
     });
 
-    const json = (await response.json().catch(() => ({}))) as {
-      ok?: boolean;
-      safe?: boolean;
-      blocked?: boolean;
-      reason?: string;
-      message?: string;
-      code?: string;
-      category?: string;
-    };
+    const json = (await response.json().catch(() => ({}))) as ModerationCheckResponse;
 
     console.log("[content-safety] backend responded →", { status: response.status, json });
 
-    // Only a definitive "blocked" (HTTP 400 + blocked:true) stops posting. Any
-    // other shape (200 safe, or an unexpected error status) fails open.
-    if (response.status === 400 && json.blocked) {
-      return {
-        blocked: true,
-        reason: json.message || json.reason || "This content violates our community guidelines and cannot be posted.",
-        category: json.category,
-      };
-    }
-
-    return { blocked: false };
+    return readBlockedResponse(json, response.status);
   } catch (error) {
     console.log("[content-safety] check failed — failing open:", error);
     return { blocked: false }; // fail open (network error, abort/timeout)
