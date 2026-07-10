@@ -92,6 +92,12 @@ MODERATION_BLOCK_CATEGORIES = {
 
 SEMANTIC_ALLOWED_CATEGORIES = {"violence", "hate", "sexual", "spam", "none"}
 PUNCTUATION_TRANSLATION = str.maketrans({char: " " for char in string.punctuation})
+# Keep these patterns in lockstep with the frontend VIOLENCE_PATTERNS in
+# utils/claimSafety.ts — both are exercised by the same must-block / must-allow
+# lists (backend/tests/test_content_safety_patterns.py and
+# utils/__tests__/claimSafety.test.ts). Base-form verb lists (kill, shoot, …)
+# deliberately exclude past participles (killed, shot) so factual reporting like
+# "the victim was killed" is NOT blocked, while commands ("kill him") are.
 PERSON_OR_GROUP_TERMS = (
     "he",
     "she",
@@ -124,15 +130,39 @@ PERSON_OR_GROUP_TERMS = (
     "neighbor",
     "family",
     "group",
+    "politician",
+    "congressman",
+    "congresswoman",
 )
+_PERSON_GROUP = "(?:%s)" % "|".join(PERSON_OR_GROUP_TERMS)
+_VIOLENCE_VERB = "(?:kill|shoot|stab|execute|assassinate|hang|murder|behead|lynch|strangle|slaughter)"
+# Targets include third-person pronouns AND person nouns (optionally preceded by
+# "the"), so "assassinate the president" is caught while "kill jobs" is not.
+_DIRECT_TARGET = (
+    "(?:him|her|them|you|us|me|president|senator|representative|governor|mayor|"
+    "judge|candidate|minister|officer|cop|police|politician|congressman|"
+    "congresswoman|prime\\s+minister)"
+)
+# Patterns run on text already passed through _normalize_for_match (lowercased,
+# punctuation -> space, whitespace collapsed), so no IGNORECASE flag is needed.
 INDIRECT_VIOLENCE_PATTERNS = [
+    # 1. First-person / group stated intent.
     re.compile(
-        rf"\b(?:{'|'.join(PERSON_OR_GROUP_TERMS)})\s+"
-        r"(?:needs? to|should|must|has to|have to|deserves? to)\s+"
-        r"(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|hanged|hung|die)\b"
+        r"\b(?:i|we)\s+(?:will|shall|am going to|are going to|gonna|plan to|want to|intend to)\s+"
+        r"(?:kill|shoot|stab|bomb|attack|murder|assassinate|behead|lynch)\b"
     ),
-    re.compile(r"\b(?:needs? to|should|must|has to|have to|deserves? to)\s+die\b"),
-    re.compile(r"\b(?:kill|shoot|stab|execute|assassinate|hang|murder)\s+(?:him|her|them|you|us|me)\b"),
+    re.compile(r"\bgoing to\s+(?:kill|shoot|stab|bomb|attack|murder|assassinate)\b"),
+    # 2. Advocacy / wish that a person or group be killed (incl. third-person phrasing).
+    re.compile(
+        rf"\b(?:the\s+)?{_PERSON_GROUP}\s+"
+        r"(?:needs? to|should|must|has to|have to|deserves? to|ought to|gotta)\s+"
+        r"(?:be\s+)?(?:killed|murdered|shot|stabbed|executed|assassinated|hanged|hung|lynched|beheaded|die|died|dead)\b"
+    ),
+    # 3. Bare "... should/needs to die".
+    re.compile(r"\b(?:needs? to|should|must|has to|have to|deserves? to|ought to)\s+die\b"),
+    # 4. Imperative / command to attack a target (base-form verb keeps reporting safe).
+    re.compile(rf"\b{_VIOLENCE_VERB}\s+(?:the\s+)?{_DIRECT_TARGET}\b"),
+    # 5. Literal death threat.
     re.compile(r"\bdeath\s+threat\b"),
 ]
 

@@ -11,11 +11,19 @@ const outDir = mkdtempSync(path.join(tmpdir(), "verifact-claim-safety-"));
 const tscBin = path.join(repoRoot, "node_modules", "typescript", "bin", "tsc");
 
 const blockedTitles = [
+  // Spec must-block list
   "he need to be killed",
   "he needs to be killed",
+  "she should be killed",
+  "they deserve to die",
+  "kill him",
+  "kill her now",
+  "someone should shoot him",
+  "assassinate the president",
+  "hang them all",
+  // Additional targeted-threat coverage
   "he should be killed",
   "they should be killed",
-  "kill him",
   "kill her",
   "kill them",
   "needs to die",
@@ -27,14 +35,32 @@ const blockedTitles = [
   "assassinate him",
   "hang him",
   "murder him",
+  "someone should murder him",
   "death threat",
+  // First-person intent
+  "I will kill you",
+  "we are going to shoot them",
+  "going to bomb the place",
+  // Normalization / evasion: uppercase, extra spaces, punctuation, contractions
+  "HE NEED TO BE KILLED",
+  "he    need   to   be   killed",
+  "he,need.to!be?killed",
+  "I'll kill you",
+  "we're going to shoot them",
 ];
 
 const allowedTitles = [
+  // Spec must-allow list
+  "The victim was killed according to police.",
+  "Was the bill killed in committee?",
+  "This policy killed jobs.",
+  "The character was killed in the movie.",
+  "Did the report accurately state that someone was killed?",
+  // Additional legitimate reporting
   "The movie character was killed in the story",
-  "The bill was killed in committee",
   "The team killed the clock",
-  "This policy killed jobs",
+  "The senator voted against the border bill.",
+  "Did the policy kill 10,000 jobs?",
 ];
 
 try {

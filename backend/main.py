@@ -7183,6 +7183,101 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
     )
 
 
+# MODERATION CHECK (NEW) — dedicated endpoint with a single, stable response
+# contract for the Create Claim screen's moderation state machine. It wraps the
+# same check_content_safety() classifier used by /api/claims/safety-check, but
+# returns the {ok, allowed, flagged, category, message} shape the client expects.
+#
+# FAIL-OPEN (product decision): the deterministic layer inside check_content_safety
+# ALWAYS runs and blocks targeted threats regardless of OpenAI availability; only
+# the OpenAI moderation/semantic layers fail open when the API is unreachable, so
+# a classifier outage never blocks legitimate posting (Render free-tier cold
+# starts + active Apple review). Available to any authenticated user; NOT admin.
+MODERATION_TITLE_MAX = 300
+MODERATION_DESCRIPTION_MAX = 2000
+MODERATION_VIOLENCE_MESSAGE = "This claim may contain violent or threatening language. Please rewrite it before posting."
+MODERATION_GENERIC_MESSAGE = "This content violates our community guidelines and cannot be posted."
+
+
+def _moderation_category_label(verdict: dict) -> str:
+    """Map an internal safety verdict to a stable public category label."""
+    raw = f"{verdict.get('category', '')} {verdict.get('matched_layer', '')} {verdict.get('reason', '')}".lower()
+    if "violence" in raw or "threat" in raw or "kill" in raw or "indirect_violence" in raw:
+        return "THREATENING_VIOLENCE"
+    if "hate" in raw:
+        return "HATE"
+    if "harassment" in raw:
+        return "HARASSMENT"
+    if "sexual" in raw:
+        return "SEXUAL"
+    if "self_harm" in raw or "self-harm" in raw:
+        return "SELF_HARM"
+    if "spam" in raw:
+        return "SPAM"
+    return "OBJECTIONABLE"
+
+
+@app.post("/moderation/check")
+def moderation_check(payload: ContentSafetyRequest, request: Request):
+    """Classify a claim's SAFETY (not truth/politics) before it is saved.
+
+    Request:  {"title": "...", "description": "optional"}
+    Allowed:  200 {"ok": true,  "allowed": true,  "flagged": false, "category": null, "message": null}
+    Blocked:  200 {"ok": true,  "allowed": false, "flagged": true,  "category": "THREATENING_VIOLENCE", "message": "..."}
+    Bad input: 400 {"ok": false, "code": "INVALID_INPUT", "message": "..."}
+    """
+    enforce_rate_limit(
+        request,
+        "moderation_check",
+        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    user_id = get_authenticated_user_id(request)
+
+    title = str(payload.title or "").strip()
+    description = str(payload.description or "").strip()
+
+    if not title:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "code": "INVALID_INPUT", "message": "A claim title is required."},
+        )
+    if len(title) > MODERATION_TITLE_MAX:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "code": "INVALID_INPUT", "message": "Claim title is too long."},
+        )
+    if len(description) > MODERATION_DESCRIPTION_MAX:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "code": "INVALID_INPUT", "message": "Claim description is too long."},
+        )
+
+    verdict = check_content_safety(title, description)
+    allowed = bool(verdict.get("safe", True))
+    print(
+        f"[moderation-check] user={user_id} title_length={len(title)} "
+        f"description_length={len(description)} allowed={allowed} "
+        f"layer={verdict.get('matched_layer', '')} category={verdict.get('category', '')}",
+        flush=True,
+    )
+
+    if allowed:
+        return {"ok": True, "allowed": True, "flagged": False, "category": None, "message": None}
+
+    category = _moderation_category_label(verdict)
+    message = MODERATION_VIOLENCE_MESSAGE if category == "THREATENING_VIOLENCE" else MODERATION_GENERIC_MESSAGE
+    log_content_safety_block(user_id, title, category, message)
+
+    return {
+        "ok": True,
+        "allowed": False,
+        "flagged": True,
+        "category": category,
+        "message": message,
+    }
+
+
 # PHASE 6 STEP 2 — Offline reference citations.
 # Evidence types accepted, mirroring the existing evidence table CHECK constraint.
 CITATION_EVIDENCE_TYPES = {"SUPPORTS_TRUE", "SUPPORTS_FAKE", "ADDS_CONTEXT", "UNCLEAR"}

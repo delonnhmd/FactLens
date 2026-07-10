@@ -47,6 +47,8 @@ const politicsSubCategories = ["Election 2026", "Policy", "Politician", "Governm
 
 type FieldName = "title" | "description" | "sourceUrl" | "videoUrl" | "politicianTag";
 type FormErrors = Partial<Record<FieldName | "category" | "general", string>>;
+// CONTENT SAFETY — moderation lifecycle for the Create Claim screen.
+type ModerationStatus = "idle" | "checking" | "allowed" | "blocked" | "error";
 
 export default function CreateScreen() {
   const router = useRouter();
@@ -85,9 +87,15 @@ export default function CreateScreen() {
   const [topicCluster, setTopicCluster] = useState<TopicClusterInfo | null>(null);
   const [topicClusterDismissed, setTopicClusterDismissed] = useState(false);
   const debouncedTopicTitle = useDebounce(title, 800);
-  // CONTENT SAFETY (NEW) — live heads-up. The deterministic local check drives
-  // immediate UI state; the debounced backend check adds server/AI coverage.
-  const [backendSafetyBlocked, setBackendSafetyBlocked] = useState(false);
+  // CONTENT SAFETY — explicit moderation state machine. The deterministic local
+  // check (checkClaimSafety) is authoritative and synchronous, so a targeted
+  // threat like "he needs to be killed" blocks instantly with no network. The
+  // debounced backend check adds OpenAI moderation coverage on top. FAIL-OPEN:
+  // a backend error resolves to "allowed" (never a stuck-disabled button) — the
+  // deterministic layer is the guarantee that threats are always caught.
+  const [moderationStatus, setModerationStatus] = useState<ModerationStatus>("idle");
+  // Monotonic request id: only the newest backend response may update the UI.
+  const moderationRequestId = useRef(0);
   const debouncedSafetyTitle = useDebounce(title, 600);
   const debouncedSafetyDescription = useDebounce(description, 600);
 
@@ -101,7 +109,10 @@ export default function CreateScreen() {
     [title, description, sourceUrl, category],
   );
   const claimSafety = useMemo(() => checkClaimSafety(title, description), [title, description]);
-  const safetyBlocked = claimSafety.allowed === false || backendSafetyBlocked;
+  // Live deterministic result is authoritative; the backend "blocked" state is
+  // additive coverage. "checking"/"error" never mark content unsafe (fail-open).
+  const localSafetyBlocked = claimSafety.allowed === false;
+  const safetyBlocked = localSafetyBlocked || moderationStatus === "blocked";
   const safetyWarningMessage =
     claimSafety.category === "VIOLENCE"
       ? CLAIM_SAFETY_VIOLENCE_MESSAGE
@@ -135,28 +146,44 @@ export default function CreateScreen() {
       cancelled = true;
     };
   }, [debouncedTopicTitle]);
-  // CONTENT SAFETY (NEW) — backend/AI heads-up. Deterministic local safety is
-  // handled synchronously above; this broadens coverage after the user pauses.
+  // CONTENT SAFETY — moderation state machine driven by the debounced text.
+  // 1. Local deterministic block wins immediately (no network, authoritative).
+  // 2. Otherwise, for a meaningful title, debounce a backend check.
+  // 3. Only the newest request (moderationRequestId) may update the UI, so a
+  //    stale slow response can never override newer text (race protection).
+  // 4. Backend errors resolve to "allowed" — fail-open (checkContentSafety also
+  //    never throws), so the deterministic layer is the sole hard gate.
   useEffect(() => {
     const trimmedSafetyTitle = debouncedSafetyTitle.trim();
+    const trimmedSafetyDescription = debouncedSafetyDescription.trim();
 
-    if (trimmedSafetyTitle.length < 8) {
-      setBackendSafetyBlocked(false);
+    if (checkClaimSafety(trimmedSafetyTitle, trimmedSafetyDescription).allowed === false) {
+      setModerationStatus("blocked");
       return;
     }
 
+    if (trimmedSafetyTitle.length < 8) {
+      setModerationStatus("idle");
+      return;
+    }
+
+    const requestId = moderationRequestId.current + 1;
+    moderationRequestId.current = requestId;
+    setModerationStatus("checking");
     let cancelled = false;
 
     void (async () => {
-      if (checkClaimSafety(trimmedSafetyTitle, debouncedSafetyDescription.trim()).allowed === false) {
-        setBackendSafetyBlocked(false);
-        return;
-      }
-
-      const result = await checkContentSafety(trimmedSafetyTitle, debouncedSafetyDescription.trim());
-
-      if (!cancelled) {
-        setBackendSafetyBlocked(result.blocked);
+      try {
+        const result = await checkContentSafety(trimmedSafetyTitle, trimmedSafetyDescription);
+        if (cancelled || requestId !== moderationRequestId.current) {
+          return; // a newer keystroke superseded this request
+        }
+        setModerationStatus(result.blocked ? "blocked" : "allowed");
+      } catch {
+        if (cancelled || requestId !== moderationRequestId.current) {
+          return;
+        }
+        setModerationStatus("allowed"); // FAIL-OPEN: never block on backend error
       }
     })();
 
@@ -195,8 +222,8 @@ export default function CreateScreen() {
     Boolean(descriptionMentionLimitError) ||
     videoUrlInvalid ||
     !claimQuality.canSubmit ||
-    claimSafety.allowed === false ||
-    backendSafetyBlocked ||
+    safetyBlocked ||
+    moderationStatus === "checking" ||
     isSubmitting;
 
   const titleCounterStyle = useMemo(
@@ -375,7 +402,7 @@ export default function CreateScreen() {
         return; // STOP — do not reach createClaim / the supabase.from("claims").insert
       }
 
-      console.log(">>> ABOUT TO CREATE CLAIM");
+      console.log("[moderation] final recheck passed — inserting claim");
       const createdClaim = await createClaim({
         title,
         description,
@@ -414,7 +441,7 @@ export default function CreateScreen() {
   // PHASE 4 STEP 11
   // PHASE 4 STEP 11 REVISED
   const handleSubmit = async () => {
-    console.log(">>> POST HANDLER RAN");
+    console.log("[moderation] handleSubmit tapped", { moderationStatus, localSafetyBlocked, submitDisabled });
     if (submitDisabled) {
       setErrors((currentErrors) => ({
         ...currentErrors,
@@ -423,14 +450,13 @@ export default function CreateScreen() {
           ? "Description must be 1000 characters or fewer."
           : descriptionMentionLimitError || currentErrors.description,
         videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
-        general:
-          claimSafety.allowed === false
-            ? safetyWarningMessage
-            : backendSafetyBlocked
-              ? safetyWarningMessage
-              : !claimQuality.canSubmit
-                ? claimQuality.warnings.join("\n")
-                : currentErrors.general,
+        general: safetyBlocked
+          ? safetyWarningMessage
+          : moderationStatus === "checking"
+            ? "Checking content safety…"
+            : !claimQuality.canSubmit
+              ? claimQuality.warnings.join("\n")
+              : currentErrors.general,
       }));
       return;
     }
@@ -825,6 +851,11 @@ export default function CreateScreen() {
             <View style={styles.safetyWarningPanel}>
               <Text style={styles.safetyWarningText}>{safetyWarningMessage}</Text>
             </View>
+          ) : moderationStatus === "checking" ? (
+            <View style={styles.moderationCheckingRow}>
+              <ActivityIndicator size="small" color={appTheme.colors.subtext} />
+              <Text style={styles.moderationCheckingText}>Checking content safety…</Text>
+            </View>
           ) : null}
 
           <TouchableOpacity
@@ -963,6 +994,17 @@ function createStyles(theme: AppTheme) {
     color: theme.colors.danger,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "600",
+  },
+  moderationCheckingRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  moderationCheckingText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
   },
   generalError: {
     color: theme.colors.danger,
