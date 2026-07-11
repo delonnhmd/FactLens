@@ -377,7 +377,16 @@ def _moderation_verdict(result: Any) -> dict | None:
         if categories.get(key) is True:
             return _blocked(label, f"moderation:{key}", "moderation", "High")
 
-    return None
+    # flagged=True but no MAPPED category matched (e.g. a category OpenAI adds
+    # later, or a non-bool value). Every omni-moderation category is harmful, so
+    # any flagged result blocks. Report the true categories for observability.
+    flagged_keys = sorted(key for key, value in categories.items() if value is True)
+    return _blocked(
+        "objectionable",
+        f"moderation:flagged:{','.join(flagged_keys) or 'unmapped'}",
+        "moderation",
+        "High",
+    )
 
 
 def _semantic_intent_check(client: Any, text: str) -> dict:
