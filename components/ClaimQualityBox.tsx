@@ -14,6 +14,7 @@ import type { TopicClusterInfo } from "../services/topicService";
 
 type ClaimQualityBoxProps = {
   analysis: ClaimDraftAnalysis;
+  hideBlockedSafetyFeedback?: boolean;
   onUseSuggestedTitle?: (title: string) => void;
   // PHASE 6 STEP 4 (NEW, optional): informational topic card shown above the
   // existing warnings. Never blocks submit; parent clears it on dismiss.
@@ -27,7 +28,13 @@ const qualityCopy: Record<ClaimDraftQualityLevel, string> = {
   blocked: "This content cannot be posted.",
 };
 
-export function ClaimQualityBox({ analysis, onUseSuggestedTitle, topicCluster, onDismissTopicCluster }: ClaimQualityBoxProps) {
+export function ClaimQualityBox({
+  analysis,
+  hideBlockedSafetyFeedback = false,
+  onUseSuggestedTitle,
+  topicCluster,
+  onDismissTopicCluster,
+}: ClaimQualityBoxProps) {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const canUseSuggestedTitle = Boolean(analysis.rewrittenTitle && onUseSuggestedTitle);
@@ -64,38 +71,40 @@ export function ClaimQualityBox({ analysis, onUseSuggestedTitle, topicCluster, o
           ) : null}
         </View>
       ) : null}
-      <View style={[styles.container, styles[analysis.qualityLevel]]}>
-      <Text style={[styles.heading, styles[`${analysis.qualityLevel}Text`]]}>{qualityCopy[analysis.qualityLevel]}</Text>
-      <Text style={styles.meta}>Detected type: {analysis.detectedType}</Text>
+      {!(hideBlockedSafetyFeedback && analysis.qualityLevel === "blocked") ? (
+        <View style={[styles.container, styles[analysis.qualityLevel]]}>
+          <Text style={[styles.heading, styles[`${analysis.qualityLevel}Text`]]}>{qualityCopy[analysis.qualityLevel]}</Text>
+          <Text style={styles.meta}>Detected type: {analysis.detectedType}</Text>
 
-      {analysis.warnings.map((warning) => (
-        <Text key={warning} style={styles.bodyText}>
-          {warning}
-        </Text>
-      ))}
+          {analysis.warnings.map((warning) => (
+            <Text key={warning} style={styles.bodyText}>
+              {warning}
+            </Text>
+          ))}
 
-      {analysis.suggestions.map((suggestion) => (
-        <Text key={suggestion} style={styles.bodyText}>
-          {suggestion}
-        </Text>
-      ))}
+          {analysis.suggestions.map((suggestion) => (
+            <Text key={suggestion} style={styles.bodyText}>
+              {suggestion}
+            </Text>
+          ))}
 
-      {analysis.rewrittenTitle ? (
-        <View style={styles.rewritePanel}>
-          <Text style={styles.rewriteLabel}>Suggested title</Text>
-          <Text style={styles.rewriteText}>{analysis.rewrittenTitle}</Text>
-          {canUseSuggestedTitle ? (
-            <TouchableOpacity
-              style={styles.rewriteButton}
-              activeOpacity={0.8}
-              onPress={() => onUseSuggestedTitle?.(analysis.rewrittenTitle ?? "")}
-            >
-              <Text style={styles.rewriteButtonText}>Use suggested title</Text>
-            </TouchableOpacity>
+          {analysis.rewrittenTitle ? (
+            <View style={styles.rewritePanel}>
+              <Text style={styles.rewriteLabel}>Suggested title</Text>
+              <Text style={styles.rewriteText}>{analysis.rewrittenTitle}</Text>
+              {canUseSuggestedTitle ? (
+                <TouchableOpacity
+                  style={styles.rewriteButton}
+                  activeOpacity={0.8}
+                  onPress={() => onUseSuggestedTitle?.(analysis.rewrittenTitle ?? "")}
+                >
+                  <Text style={styles.rewriteButtonText}>Use suggested title</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           ) : null}
         </View>
       ) : null}
-      </View>
     </>
   );
 }

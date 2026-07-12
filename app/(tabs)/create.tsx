@@ -673,9 +673,22 @@ export default function CreateScreen() {
             </View>
           </View>
 
+          {/* One safety banner for the union of the local and AI checks. */}
+          {safetyBlocked ? (
+            <View style={styles.safetyWarningPanel}>
+              <Text style={styles.safetyWarningText}>{`⚠️ ${CLAIM_SAFETY_VIOLENCE_MESSAGE}`}</Text>
+            </View>
+          ) : moderationStatus === "checking" ? (
+            <View style={styles.moderationCheckingRow}>
+              <ActivityIndicator size="small" color={appTheme.colors.subtext} />
+              <Text style={styles.moderationCheckingText}>Checking content safety…</Text>
+            </View>
+          ) : null}
+
           {showClaimQualityBox ? (
             <ClaimQualityBox
               analysis={claimQuality}
+              hideBlockedSafetyFeedback={safetyBlocked}
               onUseSuggestedTitle={(rewrittenTitle) => updateField("title", rewrittenTitle)}
               // PHASE 6 STEP 4 (NEW): informational topic card, dismissible.
               topicCluster={topicClusterDismissed ? null : topicCluster}
@@ -846,17 +859,6 @@ export default function CreateScreen() {
             {imageError ? <Text style={styles.errorText}>{imageError}</Text> : null}
             <Text style={styles.helperText}>Images are compressed to JPEG and thumbnails are generated before upload.</Text>
           </View>
-
-          {safetyBlocked ? (
-            <View style={styles.safetyWarningPanel}>
-              <Text style={styles.safetyWarningText}>{safetyWarningMessage}</Text>
-            </View>
-          ) : moderationStatus === "checking" ? (
-            <View style={styles.moderationCheckingRow}>
-              <ActivityIndicator size="small" color={appTheme.colors.subtext} />
-              <Text style={styles.moderationCheckingText}>Checking content safety…</Text>
-            </View>
-          ) : null}
 
           <TouchableOpacity
             style={[styles.button, submitDisabled && styles.buttonDisabled]}
