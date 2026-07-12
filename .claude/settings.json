@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(npx eas *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(python -c \"import json;print\\(len\\(json.load\\(open\\('backend/data/moderation_blocklist.json'\\)\\)\\)\\)\")",
+      "Bash(python -m pytest tests/test_content_safety_patterns.py tests/test_moderation_endpoint.py -q)",
+      "Bash(python -c \"import ast,sys; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('AST_OK main.py'\\)\")",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts||{}; console.log\\(JSON.stringify\\(s,null,1\\)\\)\")",
+      "Bash(git commit -m 'feat: server-side content-safety gate \\(RLS + Layer 0 trigger + webhook/sweep AI\\) + author status badge *)",
+      "Bash(git commit -m 'chore: share Claude Code tool permissions \\(content-safety session\\) *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\mdnoi\\.claude\\projects\\c--FactLens\\memory"
     ]
   }
 }
