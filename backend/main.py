@@ -16,6 +16,7 @@
 # PHASE 4 STEP 27
 import json
 import hashlib
+import hmac
 import os
 import re
 import sys
@@ -49,6 +50,7 @@ try:
     )
     # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
     from services.content_safety import check_content_safety
+    from services.content_safety import classify_for_gate
     from services.content_safety import get_content_safety_openai_status
     from services.citation_service import (
         score_citation_source,
@@ -86,6 +88,7 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
     )
     # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
     from backend.services.content_safety import check_content_safety
+    from backend.services.content_safety import classify_for_gate
     from backend.services.content_safety import get_content_safety_openai_status
     from backend.services.citation_service import (
         score_citation_source,
@@ -7289,6 +7292,169 @@ def moderation_check(payload: ContentSafetyRequest, request: Request):
         "category": category,
         "message": message,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SERVER-SIDE SAFETY GATE — Layers 1+2 via database webhook (Part 1c).
+# ═══════════════════════════════════════════════════════════════════════════
+# Claims are inserted client-side (supabase-js). A Supabase Database Webhook
+# fires INSERT on public.claims -> POST /internal/safety-check with the
+# X-Safety-Secret header. This runs OpenAI moderation + gpt-4.1-mini semantic
+# (classify_for_gate — the SAME layer helpers as /api/content/check-safety, but
+# fail-CLOSED) and writes safety_status APPROVED/BLOCKED. Layer 0 (the Postgres
+# trigger in migration 048) has already stamped hard blocklist/regex hits BLOCKED
+# before we ever see the row, so this only decides rows that arrive PENDING.
+#
+# The RLS policy "Only approved claims visible" (048) is the real enforcement:
+# a PENDING or BLOCKED claim is invisible to everyone except its author/admins
+# regardless of what any client does. This endpoint just resolves PENDING -> a
+# final state; it can never make unsafe content visible.
+#
+# /internal/safety-sweep re-checks PENDING claims older than 2 minutes so a
+# missed or failed webhook self-heals (driven by a Render cron).
+SAFETY_BLOCKED_NOTIFICATION_TITLE = "Claim removed"
+SAFETY_SWEEP_MIN_AGE_SECONDS = 120
+SAFETY_SWEEP_BATCH_SIZE = 50
+
+
+def _require_safety_secret(request: Request) -> None:
+    """Guard the internal safety endpoints with the shared webhook secret."""
+    expected = os.environ.get("SAFETY_WEBHOOK_SECRET", "")
+    provided = request.headers.get("x-safety-secret", "")
+
+    if not expected or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized safety request.")
+
+
+def _notify_claim_blocked(supabase: Any, author_id: str | None, claim_id: str | None, category: str) -> None:
+    """Tell the author their claim was removed. Never fails the caller."""
+    if not author_id:
+        return
+
+    label = (category or "objectionable content").strip() or "objectionable content"
+    try:
+        supabase.table("notifications").insert({
+            "user_id": author_id,
+            "type": "claim_blocked",
+            "title": SAFETY_BLOCKED_NOTIFICATION_TITLE,
+            "body": f"Your claim was removed for violating community guidelines: {label}.",
+            "claim_id": claim_id,
+        }).execute()
+    except Exception as error:
+        print(f"[safety-gate] blocked notification failed claim={claim_id}: {error}", flush=True)
+
+
+def _process_claim_safety(supabase: Any, record: dict) -> dict:
+    """Resolve one claim row's safety_status. Idempotent, never raises.
+
+    - APPROVED already: nothing to do.
+    - BLOCKED already (Layer 0 trigger): ensure the author is notified once.
+    - PENDING: run the AI layers; write APPROVED/BLOCKED, or leave PENDING on
+      an OpenAI error (fail-CLOSED — the sweep retries; we never approve blind).
+    """
+    claim_id = str(record.get("id") or "").strip()
+    author_id = record.get("author_id")
+    current = str(record.get("safety_status") or "PENDING").upper()
+
+    if not claim_id:
+        return {"ok": False, "reason": "missing_claim_id"}
+
+    if current == "APPROVED":
+        return {"ok": True, "claim_id": claim_id, "status": "APPROVED", "action": "skipped"}
+
+    if current == "BLOCKED":
+        # Layer 0 trigger already blocked it — still notify the author once
+        # (the webhook fires exactly once per INSERT, so no duplicate).
+        _notify_claim_blocked(supabase, author_id, claim_id, str(record.get("safety_category") or "violence"))
+        return {"ok": True, "claim_id": claim_id, "status": "BLOCKED", "action": "notified"}
+
+    verdict = classify_for_gate(
+        str(record.get("title") or ""),
+        str(record.get("description") or ""),
+        log_id=claim_id,
+    )
+    decision = verdict.get("decision", "PENDING")
+
+    if decision == "PENDING":
+        # Could not verify (OpenAI down/errored). Leave PENDING for the sweep.
+        print(f"[safety-gate] left PENDING claim={claim_id} reason={verdict.get('reason', '')}", flush=True)
+        return {"ok": True, "claim_id": claim_id, "status": "PENDING", "action": "deferred"}
+
+    category = str(verdict.get("category") or "")
+    try:
+        supabase.table("claims").update({
+            "safety_status": decision,
+            "safety_category": category or None,
+            "safety_checked_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", claim_id).eq("safety_status", "PENDING").execute()
+    except Exception as error:
+        print(f"[safety-gate] update failed claim={claim_id}: {error}", flush=True)
+        return {"ok": False, "claim_id": claim_id, "reason": "update_failed"}
+
+    if decision == "BLOCKED":
+        _notify_claim_blocked(supabase, author_id, claim_id, category)
+
+    print(f"[safety-gate] claim={claim_id} -> {decision} layer={verdict.get('matched_layer', '')}", flush=True)
+    return {"ok": True, "claim_id": claim_id, "status": decision, "action": "updated"}
+
+
+@app.post("/internal/safety-check")
+async def internal_safety_check(request: Request):
+    """Supabase Database Webhook target — INSERT on public.claims.
+
+    Body (Supabase supafunc webhook shape):
+      {"type":"INSERT","table":"claims","record":{...},"old_record":null,...}
+    We also accept a bare claim row for manual retries.
+    """
+    _require_safety_secret(request)
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.")
+
+    record = body.get("record") if isinstance(body, dict) else None
+    if not isinstance(record, dict):
+        record = body if isinstance(body, dict) else {}
+
+    supabase = get_supabase_client()
+    result = _process_claim_safety(supabase, record)
+    return {"ok": bool(result.get("ok")), **result}
+
+
+@app.post("/internal/safety-sweep")
+def internal_safety_sweep(request: Request):
+    """Re-check PENDING claims older than 2 minutes (missed/failed webhooks).
+
+    Driven by a Render cron. Self-heals any claim a webhook never resolved.
+    """
+    _require_safety_secret(request)
+
+    supabase = get_supabase_client()
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=SAFETY_SWEEP_MIN_AGE_SECONDS)).isoformat()
+
+    try:
+        query = (
+            supabase.table("claims")
+            .select("id,title,description,author_id,safety_status,safety_category,created_at")
+            .eq("safety_status", "PENDING")
+            .lt("created_at", cutoff)
+            .order("created_at", desc=False)
+            .limit(SAFETY_SWEEP_BATCH_SIZE)
+        )
+        rows = query.execute().data or []
+    except Exception as error:
+        print(f"[safety-sweep] query failed: {error}", flush=True)
+        raise HTTPException(status_code=500, detail="Sweep query failed.")
+
+    results = {"APPROVED": 0, "BLOCKED": 0, "PENDING": 0}
+    for record in rows:
+        outcome = _process_claim_safety(supabase, record)
+        status = str(outcome.get("status") or "PENDING")
+        results[status] = results.get(status, 0) + 1
+
+    print(f"[safety-sweep] checked={len(rows)} results={results}", flush=True)
+    return {"ok": True, "checked": len(rows), "results": results}
 
 
 # PHASE 6 STEP 2 — Offline reference citations.

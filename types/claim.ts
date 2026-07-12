@@ -204,6 +204,11 @@ export interface Claim {
   hidden: boolean;
   hiddenReason: string | null;
   hiddenAt: string | null;
+  // CONTENT SAFETY server gate — author-only lifecycle badge. Public readers
+  // never receive PENDING/BLOCKED rows (RLS), so a non-APPROVED value here means
+  // the viewer is the author (or an admin) looking at their own claim.
+  safetyStatus: "PENDING" | "APPROVED" | "BLOCKED";
+  safetyCategory: string | null;
   isFeatured?: boolean;
   featuredAt?: string | null;
   createdAt: string;

@@ -56,6 +56,9 @@ const verificationFields = (createdAt: string) => ({
   hidden: false,
   hiddenReason: null,
   hiddenAt: null,
+  // CONTENT SAFETY server gate
+  safetyStatus: "APPROVED" as const,
+  safetyCategory: null,
 });
 
 const userTrustFields = {

@@ -1132,6 +1132,28 @@ export default function ClaimDetailScreen() {
       <ScrollView contentContainerStyle={contentContainerStyle} showsVerticalScrollIndicator={false}>
         {/* PHASE 3 STEP 12 */}
         {liveUpdatesOn ? <Text style={styles.liveText}>Live updates on</Text> : null}
+
+        {/* CONTENT SAFETY server gate — author-only lifecycle badge. Public
+            readers never receive PENDING/BLOCKED rows (RLS), so this only ever
+            renders for the author (or an admin) viewing their own claim. */}
+        {currentUser?.id === claim.authorId && claim.safetyStatus !== "APPROVED" ? (
+          <View style={claim.safetyStatus === "BLOCKED" ? styles.safetyBadgeBlocked : styles.safetyBadgePending}>
+            <Ionicons
+              name={claim.safetyStatus === "BLOCKED" ? "close-circle-outline" : "time-outline"}
+              size={16}
+              color={claim.safetyStatus === "BLOCKED" ? appTheme.colors.danger : appTheme.colors.warningText}
+            />
+            <Text
+              style={
+                claim.safetyStatus === "BLOCKED" ? styles.safetyBadgeBlockedText : styles.safetyBadgePendingText
+              }
+            >
+              {claim.safetyStatus === "BLOCKED"
+                ? "Removed — community guidelines. Only you can see this."
+                : "Under review — visible to others shortly."}
+            </Text>
+          </View>
+        ) : null}
         {detailLoading ? <Text style={styles.inlineLoadingText}>Loading claim detail...</Text> : null}
         <View style={styles.cardFlush}>
           <VerdictBanner
@@ -1896,6 +1918,43 @@ function createStyles(theme: AppTheme) {
     marginBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  // CONTENT SAFETY server gate — author-only lifecycle badges.
+  safetyBadgePending: {
+    alignItems: "center",
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  safetyBadgePendingText: {
+    color: theme.colors.warningText,
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
+  safetyBadgeBlocked: {
+    alignItems: "center",
+    backgroundColor: theme.colors.dangerBg ?? theme.colors.warningBg,
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  safetyBadgeBlockedText: {
+    color: theme.colors.danger,
+    flex: 1,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "600",
   },
   // PHASE 4 STEP 24
   inlineLoadingText: {

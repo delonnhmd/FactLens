@@ -183,6 +183,9 @@ export interface ClaimRow {
   hidden?: boolean | null;
   hidden_reason?: string | null;
   hidden_at?: string | null;
+  // CONTENT SAFETY server gate (migration 048)
+  safety_status?: string | null;
+  safety_category?: string | null;
   is_featured?: boolean | null;
   featured_at?: string | null;
   red_flags?: unknown;
@@ -927,6 +930,11 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
     hidden: Boolean(row.hidden),
     hiddenReason: row.hidden_reason ?? null,
     hiddenAt: row.hidden_at ?? null,
+    // CONTENT SAFETY server gate — default unknown/missing to APPROVED so feeds
+    // and pre-gate rows render normally; only explicit PENDING/BLOCKED show a badge.
+    safetyStatus:
+      row.safety_status === "BLOCKED" || row.safety_status === "PENDING" ? row.safety_status : "APPROVED",
+    safetyCategory: row.safety_category ?? null,
     isFeatured: Boolean(row.is_featured),
     featuredAt: row.featured_at ?? null,
     createdAt,
@@ -1062,6 +1070,10 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
     hidden: Boolean(row.hidden),
     hiddenReason: row.hidden_reason ?? null,
     hiddenAt: row.hidden_at ?? null,
+    // CONTENT SAFETY server gate — default unknown/missing to APPROVED.
+    safetyStatus:
+      row.safety_status === "BLOCKED" || row.safety_status === "PENDING" ? row.safety_status : "APPROVED",
+    safetyCategory: row.safety_category ?? null,
     isFeatured: Boolean(row.is_featured),
     featuredAt: row.featured_at ?? null,
     createdAt,

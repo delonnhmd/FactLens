@@ -527,3 +527,85 @@ def check_content_safety(title: str, description: str) -> dict:
     log_context["openai_semantic"] = "allowed"
     print(f"[content_safety] decision {log_context}", flush=True)
     return semantic_verdict
+
+
+def classify_for_gate(title: str, description: str, log_id: str = "") -> dict:
+    """Strict gate classification for the server-side webhook/sweep (Part 1c).
+
+    Shares every layer helper with check_content_safety() — one implementation,
+    two entry points — but with the OPPOSITE failure posture. check_content_safety
+    fails OPEN (a classifier outage returns "safe" so a legitimate post is never
+    blocked from the user-facing /check-safety path). This gate fails CLOSED: when
+    the OpenAI layers cannot run or error, it returns decision "PENDING" so the
+    claim stays under review and the retry sweep re-checks it. It NEVER approves
+    on error.
+
+    Returns {"decision": "BLOCKED"|"APPROVED"|"PENDING", "category", "severity",
+             "reason", "matched_layer"}.
+    """
+    safe_title = (title or "").strip()
+    safe_description = (description or "").strip()
+    text = f"{safe_title}\n\n{safe_description}".strip()[:MAX_TEXT_CHARS]
+
+    if not text:
+        return {"decision": "APPROVED", "category": "", "severity": "", "reason": "empty", "matched_layer": ""}
+
+    # Layer 0 — deterministic, always runs (blocklist + indirect-violence regex).
+    deterministic = _check_blocklist(text) or _check_indirect_violence_patterns(text)
+    if deterministic is not None:
+        print(f"[safety-gate] {log_id} BLOCKED deterministic {deterministic['reason']}", flush=True)
+        return {
+            "decision": "BLOCKED",
+            "category": deterministic.get("category", "objectionable"),
+            "severity": deterministic.get("severity", ""),
+            "reason": deterministic.get("reason", ""),
+            "matched_layer": deterministic.get("matched_layer", ""),
+        }
+
+    client = _get_client()
+    if client is None:
+        # Fail CLOSED: cannot verify -> leave PENDING for the sweep. Never approve.
+        print(f"[safety-gate] {log_id} PENDING openai_unavailable", flush=True)
+        return {"decision": "PENDING", "category": "", "severity": "", "reason": "openai_unavailable", "matched_layer": ""}
+
+    # Layer 1 — OpenAI moderation. Log the RAW response for Render-log proof.
+    try:
+        moderation = client.moderations.create(model=MODERATION_MODEL, input=text)
+        result = moderation.results[0]
+        flagged = bool(getattr(result, "flagged", False))
+        categories_json = json.dumps(_to_dict(getattr(result, "categories", None)), default=str)
+        print("[moderation raw]", log_id, flagged, categories_json, flush=True)
+    except Exception as error:
+        print(f"[safety-gate] {log_id} PENDING moderation_error:{type(error).__name__}", flush=True)
+        return {"decision": "PENDING", "category": "", "severity": "", "reason": f"moderation_error:{type(error).__name__}", "matched_layer": ""}
+
+    moderation_verdict = _moderation_verdict(result)
+    if moderation_verdict is not None:
+        print(f"[safety-gate] {log_id} BLOCKED moderation {moderation_verdict['reason']}", flush=True)
+        return {
+            "decision": "BLOCKED",
+            "category": moderation_verdict.get("category", "objectionable"),
+            "severity": moderation_verdict.get("severity", ""),
+            "reason": moderation_verdict.get("reason", ""),
+            "matched_layer": moderation_verdict.get("matched_layer", "moderation"),
+        }
+
+    # Layer 2 — gpt-4.1-mini semantic intent backstop.
+    try:
+        semantic_verdict = _semantic_intent_check(client, text)
+    except Exception as error:
+        print(f"[safety-gate] {log_id} PENDING semantic_error:{type(error).__name__}", flush=True)
+        return {"decision": "PENDING", "category": "", "severity": "", "reason": f"semantic_error:{type(error).__name__}", "matched_layer": ""}
+
+    if not semantic_verdict.get("safe", True):
+        print(f"[safety-gate] {log_id} BLOCKED semantic {semantic_verdict['reason']}", flush=True)
+        return {
+            "decision": "BLOCKED",
+            "category": semantic_verdict.get("category", "violence"),
+            "severity": semantic_verdict.get("severity", ""),
+            "reason": semantic_verdict.get("reason", ""),
+            "matched_layer": semantic_verdict.get("matched_layer", "semantic_intent"),
+        }
+
+    print(f"[safety-gate] {log_id} APPROVED", flush=True)
+    return {"decision": "APPROVED", "category": "", "severity": "", "reason": "", "matched_layer": ""}
