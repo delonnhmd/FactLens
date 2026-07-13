@@ -12,7 +12,10 @@
       "Bash(git -C c:/FactLens --no-pager diff)",
       "Bash(git -C c:/FactLens add -A)",
       "Bash(git -C c:/FactLens commit -m 'ui: temporarily hide non-functional admin delete button \\(ADMIN_DELETE_ENABLED flag\\); hide/unhide unaffected *)",
-      "Bash(git -C c:/FactLens push)"
+      "Bash(git -C c:/FactLens push)",
+      "Bash(git -C c:/FactLens status --short)",
+      "Bash(git -C c:/FactLens log --oneline -3)",
+      "Bash(git -C c:/FactLens commit -m 'chore: share Claude Code tool permissions \\(admin delete hide session\\) *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\mdnoi\\.claude\\projects\\c--FactLens\\memory"
