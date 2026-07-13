@@ -8,7 +8,11 @@
       "Bash(python -c \"import ast,sys; ast.parse\\(open\\('main.py'\\).read\\(\\)\\); print\\('AST_OK main.py'\\)\")",
       "Bash(node -e \"const s=require\\('./package.json'\\).scripts||{}; console.log\\(JSON.stringify\\(s,null,1\\)\\)\")",
       "Bash(git commit -m 'feat: server-side content-safety gate \\(RLS + Layer 0 trigger + webhook/sweep AI\\) + author status badge *)",
-      "Bash(git commit -m 'chore: share Claude Code tool permissions \\(content-safety session\\) *)"
+      "Bash(git commit -m 'chore: share Claude Code tool permissions \\(content-safety session\\) *)",
+      "Bash(git -C c:/FactLens --no-pager diff)",
+      "Bash(git -C c:/FactLens add -A)",
+      "Bash(git -C c:/FactLens commit -m 'ui: temporarily hide non-functional admin delete button \\(ADMIN_DELETE_ENABLED flag\\); hide/unhide unaffected *)",
+      "Bash(git -C c:/FactLens push)"
     ],
     "additionalDirectories": [
       "c:\\Users\\mdnoi\\.claude\\projects\\c--FactLens\\memory"

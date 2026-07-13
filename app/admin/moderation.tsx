@@ -42,6 +42,12 @@ import {
   type ModerationAppeal,
 } from "../../services/appealService";
 
+// TEMPORARY: the admin "Delete" / "Delete claim" action is non-functional
+// (tapping it flickers and does nothing), so it is hidden until the underlying
+// delete is fixed. The handler (confirmDeleteClaim / deleteClaimAsAdmin) is left
+// fully intact — flip this back to true to re-enable the button everywhere.
+const ADMIN_DELETE_ENABLED = false;
+
 type ReportStatus = "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED" | "ALL";
 type UserFilter = "all" | "suspended" | "blocked";
 type ClaimFilter = "all" | "hidden" | "visible";
@@ -492,7 +498,10 @@ export default function ModerationScreen() {
                   <>
                     <AdminAction label="Lock voting" styles={styles} onPress={() => runAction(() => lockClaimVoting(targetId, reason), "Voting locked.")} />
                     <AdminAction label="Feature" styles={styles} onPress={() => runAction(() => markClaimFeatured(targetId, true), "Claim featured.")} />
-                    <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(targetId)} />
+                    {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+                    {ADMIN_DELETE_ENABLED ? (
+                      <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(targetId)} />
+                    ) : null}
                     {/* HIDE/UNHIDE CLAIM (NEW, additive) — reversible alternative to delete */}
                     <AdminAction label="Hide claim" danger styles={styles} onPress={() => runAction(() => hideClaimFromFeeds(targetId, reason), "Claim hidden from feeds.")} />
                     <AdminAction label="Unhide claim" styles={styles} onPress={() => runAction(() => unhideClaim(targetId), "Claim restored to feeds.")} />
@@ -631,7 +640,10 @@ export default function ModerationScreen() {
             <AdminAction label="Unhide claim" styles={styles} onPress={() => runAction(() => unhideClaim(claimId.trim()), "Claim restored to feeds.")} />
             <AdminAction label="Lock voting" styles={styles} onPress={() => runAction(() => lockClaimVoting(claimId.trim(), reason), "Voting locked.")} />
             <AdminAction label="Feature" styles={styles} onPress={() => runAction(() => markClaimFeatured(claimId.trim(), true), "Claim featured.")} />
-            <AdminAction label="Delete claim" danger styles={styles} onPress={() => confirmDeleteClaim(claimId.trim())} />
+            {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+            {ADMIN_DELETE_ENABLED ? (
+              <AdminAction label="Delete claim" danger styles={styles} onPress={() => confirmDeleteClaim(claimId.trim())} />
+            ) : null}
             <AdminAction label="Suspend user" danger styles={styles} onPress={() => runAction(() => suspendUser(userId.trim(), reason), "User suspended.")} />
           </View>
         </View>
@@ -760,7 +772,10 @@ export default function ModerationScreen() {
                   onPress={() => runClaimAction(() => hideClaimFromFeeds(claim.id, reason), "Claim hidden from feeds.")}
                 />
               )}
-              <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(claim.id)} />
+              {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+              {ADMIN_DELETE_ENABLED ? (
+                <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(claim.id)} />
+              ) : null}
             </View>
           </View>
         ))}

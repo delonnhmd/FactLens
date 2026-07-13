@@ -49,6 +49,13 @@ import {
 // Reason attached to a hide triggered from the reported-claims queue.
 const REPORTED_HIDE_REASON = "Reported content violation";
 
+// TEMPORARY: the admin "Delete" action in the Reported/Hidden claim queues is
+// non-functional (tapping it flickers and does nothing), so it is hidden until
+// the underlying delete is fixed. The handler (handleDeleteClaim /
+// deleteClaimAsAdmin) is left intact — flip this to true to re-enable it.
+// Hide/Unhide are unaffected.
+const ADMIN_DELETE_ENABLED = false;
+
 type UsernameAvailabilityStatus = "idle" | "checking" | "available" | "unavailable" | "invalid";
 
 export default function ProfileScreen() {
@@ -996,14 +1003,17 @@ export default function ProfileScreen() {
                         >
                           <Text style={styles.queueActionText}>{claim.is_hidden ? "Hidden" : "Hide"}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
-                          activeOpacity={0.8}
-                          disabled={busy}
-                          onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
-                        >
-                          <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
-                        </TouchableOpacity>
+                        {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+                        {ADMIN_DELETE_ENABLED ? (
+                          <TouchableOpacity
+                            style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
+                            activeOpacity={0.8}
+                            disabled={busy}
+                            onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
+                          >
+                            <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
                   );
@@ -1046,14 +1056,17 @@ export default function ProfileScreen() {
                         >
                           <Text style={styles.queueActionText}>Unhide</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
-                          activeOpacity={0.8}
-                          disabled={busy}
-                          onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
-                        >
-                          <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
-                        </TouchableOpacity>
+                        {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+                        {ADMIN_DELETE_ENABLED ? (
+                          <TouchableOpacity
+                            style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
+                            activeOpacity={0.8}
+                            disabled={busy}
+                            onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
+                          >
+                            <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
+                          </TouchableOpacity>
+                        ) : null}
                       </View>
                     </View>
                   );
