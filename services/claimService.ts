@@ -247,6 +247,11 @@ export interface ClaimUpdates {
 interface ClaimResult {
   claim: Claim | null;
   error?: string;
+  // TASK 1 (claim images) — set when a claim posted successfully but its
+  // attached image could not be uploaded after a retry. The claim is still
+  // created (fail-soft), but this lets the caller tell the user instead of the
+  // old behavior: silently dropping the image with no feedback at all.
+  imageUploadFailed?: boolean;
 }
 
 export interface ClaimsResult {
@@ -1863,20 +1868,34 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   };
 
   // PHASE 5 STEP 6
+  // TASK 1 (claim images not showing): the upload is two sequential storage
+  // PUTs (main + thumbnail). A single transient failure on either used to be
+  // swallowed here, so the claim posted with NO image and NO error — exactly
+  // the "images don't show on the feed" report. Now we retry once and, if it
+  // still fails, flag it on the result so the caller can tell the user rather
+  // than silently dropping the picture. Posting itself never fails on this.
+  let imageUploadFailed = false;
+
   if (input.imageAsset) {
-    try {
-      console.log("[create claim] image upload start:", {
-        claimId: insertedClaimId,
-        userId: user.id,
-      });
-      const uploadedImage = await uploadClaimImage(user.id, insertedClaimId, input.imageAsset);
-      console.log("[create claim] image upload complete:", uploadedImage);
-      mediaUpdatePayload.image_url = uploadedImage.imageUrl;
-      mediaUpdatePayload.image_path = uploadedImage.imagePath;
-      mediaUpdatePayload.thumbnail_url = uploadedImage.thumbnailUrl;
-    } catch (uploadError) {
-      console.log("[create claim] image upload warning:", uploadError);
-      console.log("CREATE_CLAIM_IMAGE_UPLOAD_ERROR", uploadError);
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        console.log("[create claim] image upload start:", {
+          claimId: insertedClaimId,
+          userId: user.id,
+          attempt,
+        });
+        const uploadedImage = await uploadClaimImage(user.id, insertedClaimId, input.imageAsset);
+        console.log("[create claim] image upload complete:", uploadedImage);
+        mediaUpdatePayload.image_url = uploadedImage.imageUrl;
+        mediaUpdatePayload.image_path = uploadedImage.imagePath;
+        mediaUpdatePayload.thumbnail_url = uploadedImage.thumbnailUrl;
+        imageUploadFailed = false;
+        break;
+      } catch (uploadError) {
+        imageUploadFailed = true;
+        console.log(`[create claim] image upload attempt ${attempt} failed:`, uploadError);
+        console.log("CREATE_CLAIM_IMAGE_UPLOAD_ERROR", uploadError);
+      }
     }
   }
 
@@ -1902,7 +1921,7 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
   const refreshedClaim = await fetchClaimById(insertedClaimId);
 
   if (refreshedClaim.claim) {
-    return refreshedClaim;
+    return { ...refreshedClaim, imageUploadFailed };
   }
 
   if (refreshedClaim.error) {
@@ -1916,6 +1935,7 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
     claim: mapClaimRowToClaim(
       attachAuthorProfile((updatedData as ClaimRow | null) ?? { ...insertedRow, share_url: shareUrl }, authorProfile),
     ),
+    imageUploadFailed,
   };
 }
 

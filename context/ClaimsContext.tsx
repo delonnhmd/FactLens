@@ -17,6 +17,9 @@
 // PHASE 4 STEP 20
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+// TASK 1 (claim images): used to tell the user when a claim posted but its
+// attached image failed to upload, instead of silently dropping the picture.
+import { Alert } from "react-native";
 import { useAuth } from "./AuthContext";
 import { supabaseConfigError } from "../lib/supabase";
 import { applyCurrentClaimStatus, isVotingOpen } from "../services/claimVoting";
@@ -1069,6 +1072,19 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     }
 
     const createdClaim = result.claim;
+
+    // TASK 1 (claim images not showing): the claim posted, but its attached
+    // image could not be uploaded even after a retry. Tell the user instead of
+    // silently dropping it — they can edit the claim to re-add the image. We do
+    // NOT use aiPrecheckNotice here because the AI pre-check flow below
+    // immediately overwrites that banner.
+    if (result.imageUploadFailed) {
+      Alert.alert(
+        "Claim posted without image",
+        "Your claim was posted, but its image couldn't be uploaded. Open the claim and edit it to add the image again.",
+      );
+    }
+
     locallyCreatedClaimIdsRef.current.add(createdClaim.id);
     setClaims((currentClaimsState) => [
       createdClaim,

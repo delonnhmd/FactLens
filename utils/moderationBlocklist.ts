@@ -73,6 +73,40 @@ export const MODERATION_BLOCKLIST: ModerationBlocklistEntry[] = [
   { phrase: "hope you get cancer", category: "HARASSMENT" },
   { phrase: "kill your family", category: "HARASSMENT" },
   { phrase: "trash", category: "HARASSMENT" },
+  // TASK 3 — Vietnamese abuse phrases (instant, offline pre-submit block).
+  // OpenAI moderation (backend) is the multilingual primary defense; these are
+  // the deterministic client mirror. normalizeBlocklistPhrase preserves Unicode
+  // letters (\p{L}) and does NOT strip diacritics, so accented forms match
+  // accented input. Common unaccented forms are added only where they don't
+  // collide with everyday Vietnamese words ('lồn'/'cặc' stay accented-only
+  // because 'lon'/'cac' collide with 'lợn'/'các'). Conservative for neutrality.
+  { phrase: "giết mày", category: "VIOLENCE" },
+  { phrase: "giet may", category: "VIOLENCE" },
+  { phrase: "tao giết mày", category: "VIOLENCE" },
+  { phrase: "tao giet may", category: "VIOLENCE" },
+  { phrase: "giết cả nhà mày", category: "VIOLENCE" },
+  { phrase: "giet ca nha may", category: "VIOLENCE" },
+  { phrase: "đâm chết mày", category: "VIOLENCE" },
+  { phrase: "dam chet may", category: "VIOLENCE" },
+  { phrase: "đánh chết mày", category: "VIOLENCE" },
+  { phrase: "danh chet may", category: "VIOLENCE" },
+  { phrase: "cho mày chết", category: "VIOLENCE" },
+  { phrase: "thảm sát", category: "VIOLENCE" },
+  { phrase: "khủng bố", category: "VIOLENCE" },
+  { phrase: "đánh bom", category: "VIOLENCE" },
+  { phrase: "địt mẹ", category: "SEXUAL" },
+  { phrase: "dit me", category: "SEXUAL" },
+  { phrase: "đụ má", category: "SEXUAL" },
+  { phrase: "đụ mẹ", category: "SEXUAL" },
+  { phrase: "lồn", category: "SEXUAL" },
+  { phrase: "cặc", category: "SEXUAL" },
+  { phrase: "hiếp dâm", category: "SEXUAL" },
+  { phrase: "hiep dam", category: "SEXUAL" },
+  { phrase: "ấu dâm", category: "SEXUAL" },
+  { phrase: "au dam", category: "SEXUAL" },
+  { phrase: "đồ chó chết", category: "HARASSMENT" },
+  { phrase: "con điếm", category: "HARASSMENT" },
+  { phrase: "thằng chó chết", category: "HARASSMENT" },
 ];
 
 function escapeRegExp(value: string): string {

@@ -5438,43 +5438,47 @@ def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
         raise HTTPException(status_code=400, detail="claim_id is required")
 
     supabase = get_supabase_client()
+    reason = payload.reason.strip() or "Violation of Verifact Terms of Use"
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    # MODERATION NOTIFICATION (NEW, additive) — capture author + title BEFORE
-    # the row is deleted; the moderation screen already sends `reason` in
-    # this payload (services/moderationService.ts deleteClaimAsAdmin), it was
-    # just unused here until now. Fetch failure must not block deletion.
-    author_id = None
-    title_snippet = ""
+    # TASK 4a — SOFT DELETE (fix for the intermittent "admin action could not be
+    # completed"). A hard DELETE failed whenever the claim was referenced by a
+    # row with a NO-ACTION foreign key — saved_claims.claim_id,
+    # moderation_appeals.claim_id, user_blocks.source_claim_id, or another
+    # claim's canonical_claim_id — which is why it worked on some claims and not
+    # others. Soft delete removes the claim from every feed, search, and topic
+    # via the SAME is_hidden RLS gate that Hide uses, so it is 100% reliable
+    # regardless of what references the claim, and it is REVERSIBLE (Unhide
+    # restores it). status='DELETED' marks it as a removal, distinct from a
+    # plain moderation hide. A single UPDATE, returning author_id + title so we
+    # can still notify the author.
+    result = (
+        supabase.table("claims")
+        .update({
+            "status": "DELETED",
+            "is_hidden": True,
+            "hidden": True,
+            "hidden_reason": reason,
+            "hidden_at": now_iso,
+            "updated_at": now_iso,
+        })
+        .eq("id", claim_id)
+        .execute()
+    )
 
-    try:
-        pre_delete_result = (
-            supabase.table("claims")
-            .select("author_id,title")
-            .eq("id", claim_id)
-            .limit(1)
-            .execute()
-        )
-        pre_delete_row = (pre_delete_result.data or [None])[0]
+    updated_rows = result.data or []
 
-        if pre_delete_row:
-            author_id = pre_delete_row.get("author_id")
-            title_snippet = str(pre_delete_row.get("title") or "")[:80]
-    except Exception as error:
-        print("[admin delete] pre-delete lookup failed:", str(error), flush=True)
+    if not updated_rows:
+        raise HTTPException(status_code=404, detail="Claim not found.")
 
-    result = supabase.table("claims").delete().eq("id", claim_id).execute()
+    author_id = updated_rows[0].get("author_id")
+    title_snippet = str(updated_rows[0].get("title") or "")[:80]
 
-    # MODERATION NOTIFICATION (NEW, additive) — tell the author why their
-    # claim was removed (Apple 1.2 moderation transparency). Rules:
-    # - only after a successful delete of an existing row
-    # - author_id None (anonymized account) → skip silently
-    # - claim_id stays NULL on the notification: the claims row is already
-    #   hard-deleted, so referencing it would fail the FK (the ON DELETE SET
-    #   NULL on notifications.claim_id only protects existing rows)
-    # - failure NEVER fails the deletion — response below is unchanged
-    if (result.data or []) and author_id:
-        reason = payload.reason.strip() or "Violation of Verifact Terms of Use"
-
+    # MODERATION NOTIFICATION — tell the author why their claim was removed
+    # (Apple 1.2 moderation transparency). The row still exists (soft delete),
+    # so the notification can safely reference claim_id. Failure NEVER fails the
+    # action.
+    if author_id:
         try:
             supabase.table("notifications").insert({
                 "user_id": author_id,
@@ -5485,12 +5489,12 @@ def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
                     f"Reason: {reason}. Repeated violations may result in account "
                     "suspension. See the Terms of Use for our content rules."
                 ),
-                "claim_id": None,
+                "claim_id": claim_id,
             }).execute()
         except Exception as error:
             print(f"[admin delete] notification failed: {error}", flush=True)
 
-    return {"ok": True, "claim_id": claim_id, "deleted": len(result.data or [])}
+    return {"ok": True, "claim_id": claim_id, "deleted": len(updated_rows)}
 
 
 @app.post("/admin/claims/lock-voting")
@@ -6228,21 +6232,24 @@ def admin_manage_claims(request: Request, search: str = "", filter: str = "all")
     claims = result.data or []
     author_ids = sorted({claim["author_id"] for claim in claims if claim.get("author_id")})
     usernames: dict[str, str] = {}
+    # TASK 4c — author suspension state so each claim row can show Ban/Unban.
+    suspended_by_id: dict[str, bool] = {}
 
     if author_ids:
         profiles_result = (
             supabase.table("profiles")
-            .select("id,username")
+            .select("id,username,is_suspended")
             .in_("id", author_ids)
             .execute()
         )
-        usernames = {
-            profile["id"]: profile.get("username") or ""
-            for profile in (profiles_result.data or [])
-        }
+        for profile in (profiles_result.data or []):
+            usernames[profile["id"]] = profile.get("username") or ""
+            suspended_by_id[profile["id"]] = bool(profile.get("is_suspended"))
 
     for claim in claims:
-        claim["author_username"] = usernames.get(claim.get("author_id") or "", None)
+        author_id = claim.get("author_id") or ""
+        claim["author_username"] = usernames.get(author_id, None)
+        claim["author_is_suspended"] = suspended_by_id.get(author_id, False)
 
     return {"ok": True, "claims": claims}
 

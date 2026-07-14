@@ -390,13 +390,19 @@ def _moderation_verdict(result: Any) -> dict | None:
 
 
 def _semantic_intent_check(client: Any, text: str) -> dict:
+    # TASK 3 (multilingual): the text may be in ANY language (e.g. Vietnamese).
+    # gpt-4.1-mini judges meaning regardless of language; this prompt evaluates
+    # intent, not English-specific wording, and must stay politically neutral
+    # across languages.
     prompt = (
-        "Does this text call for, threaten, endorse, or wish death or violence "
-        "against any person or group - including indirect or third-person "
-        "phrasing (e.g. 'X should be killed', 'someone needs to die')? Also "
-        "flag sexual content involving minors, targeted hate, and obvious spam "
-        "or fake engagement. A neutral political or factual claim is NOT a "
-        "violation. Return JSON {\"violation\": true|false, "
+        "The text may be in ANY language (for example English or Vietnamese); "
+        "judge its meaning, not its language. Does this text call for, threaten, "
+        "endorse, or wish death or violence against any person or group - "
+        "including indirect or third-person phrasing (e.g. 'X should be killed', "
+        "'someone needs to die')? Also flag sexual content involving minors, "
+        "targeted hate, and obvious spam or fake engagement. A neutral political "
+        "or factual claim is NOT a violation, in any language. Return JSON "
+        "{\"violation\": true|false, "
         "\"category\": \"violence|hate|sexual|spam|none\"}."
     )
 

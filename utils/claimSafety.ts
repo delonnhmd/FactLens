@@ -62,6 +62,9 @@ const HARASSMENT_PATTERNS: RegExp[] = [
 const SPAM_PATTERNS: RegExp[] = [
   /\b(?:send me|dm me|cashapp me).*\b(?:money|cash|bitcoin|crypto)\b/i,
   /\b(?:guaranteed profit|guaranteed returns|get rich quick|free money link|claim your prize now|buy followers)\b/i,
+  // TASK 3 — Vietnamese fake-engagement spam. Runs on normalized text (accents
+  // preserved), matched on whitespace boundaries so it works with Vietnamese.
+  /(?:^|\s)(?:mua like|mua follow|mua follower|mua lượt theo dõi|mua luot theo doi)(?=$|\s)/i,
 ];
 
 // Mirror of the backend's _normalize_for_match: lowercase, turn any punctuation

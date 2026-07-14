@@ -249,6 +249,8 @@ export interface ManagedClaim {
   title: string | null;
   author_id: string | null;
   author_username: string | null;
+  // TASK 4c — author suspension state so each claim row can show Ban/Unban.
+  author_is_suspended?: boolean;
   is_hidden: boolean;
   hidden: boolean | null;
   hidden_reason: string | null;

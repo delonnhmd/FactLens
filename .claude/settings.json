@@ -15,7 +15,14 @@
       "Bash(git -C c:/FactLens push)",
       "Bash(git -C c:/FactLens status --short)",
       "Bash(git -C c:/FactLens log --oneline -3)",
-      "Bash(git -C c:/FactLens commit -m 'chore: share Claude Code tool permissions \\(admin delete hide session\\) *)"
+      "Bash(git -C c:/FactLens commit -m 'chore: share Claude Code tool permissions \\(admin delete hide session\\) *)",
+      "mcp__claude_ai_Supabase__get_logs",
+      "Bash(curl -s -m 90 -X POST https://factlens-e8uf.onrender.com/moderation/check -H \"Content-Type: application/json\" -d '{\"title\":\"Tao sẽ giết mày\",\"description\":\"Tao sẽ tìm và giết cả nhà mày\"}')",
+      "Bash(curl -s -m 90 -X POST https://factlens-e8uf.onrender.com/moderation/check -H \"Content-Type: application/json\" -d '{\"title\":\"Tổng thống đã ký dự luật\",\"description\":\"Dự luật mới được thông qua hôm nay\"}')",
+      "Bash(printf '%s' '{\"title\":\"Tao sẽ giết mày\",\"description\":\"Tao sẽ tìm tới nhà và giết cả gia đình mày\"}')",
+      "Bash(printf '%s' '{\"title\":\"Tổng thống đã ký dự luật\",\"description\":\"Dự luật mới được Quốc hội thông qua hôm nay\"}')",
+      "Bash(curl -s -m 90 -X POST https://factlens-e8uf.onrender.com/moderation/check -H \"Content-Type: application/json; charset=utf-8\" --data-binary @vi_threat.json)",
+      "Bash(curl -s -m 90 -X POST https://factlens-e8uf.onrender.com/moderation/check -H \"Content-Type: application/json; charset=utf-8\" --data-binary @vi_neutral.json)"
     ],
     "additionalDirectories": [
       "c:\\Users\\mdnoi\\.claude\\projects\\c--FactLens\\memory"

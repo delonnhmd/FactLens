@@ -467,5 +467,41 @@
     "subcategory": "Severe Insults",
     "severity": "Low",
     "action": "Contextual Review Only"
-  }
+  },
+
+  {
+    "_comment_vietnamese": "TASK 3 — Vietnamese abuse phrases. OpenAI moderation (omni-moderation-latest) is already multilingual and is the primary defense; these deterministic entries add fast, offline coverage. Normalization here preserves Vietnamese diacritics (backend _normalize_for_match only maps ASCII punctuation to spaces and uses Unicode \\w word boundaries), so accented forms match accented input. Common UNACCENTED forms are added ONLY where they do not collide with everyday Vietnamese words (e.g. 'lồn'/'cặc' are kept accented-only because 'lon'/'cac' collide with 'lợn'/'các'). Chosen conservatively to preserve political/news neutrality."
+  },
+  { "phrase": "giết mày", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "giet may", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "tao giết mày", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "tao giet may", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "giết cả nhà mày", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "giet ca nha may", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "đâm chết mày", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "dam chet may", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "đánh chết mày", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "danh chet may", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "Critical", "action": "Immediate Ban & IP Log" },
+  { "phrase": "cho mày chết", "category": "Category A: Violence & Harm", "subcategory": "Threats of Violence", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "thảm sát", "category": "Category A: Violence & Harm", "subcategory": "Mass Violence / Terrorism", "severity": "Critical", "action": "Immediate Block & Admin Alert" },
+  { "phrase": "khủng bố", "category": "Category A: Violence & Harm", "subcategory": "Mass Violence / Terrorism", "severity": "Critical", "action": "Immediate Block & Admin Alert" },
+  { "phrase": "đánh bom", "category": "Category A: Violence & Harm", "subcategory": "Mass Violence / Terrorism", "severity": "Critical", "action": "Immediate Block & Admin Alert" },
+  { "phrase": "địt mẹ", "category": "Category B: Sexual Content", "subcategory": "Anatomical & Explicit", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "dit me", "category": "Category B: Sexual Content", "subcategory": "Anatomical & Explicit", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "đụ má", "category": "Category B: Sexual Content", "subcategory": "Anatomical & Explicit", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "đụ mẹ", "category": "Category B: Sexual Content", "subcategory": "Anatomical & Explicit", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "lồn", "category": "Category B: Sexual Content", "subcategory": "Anatomical & Explicit", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "cặc", "category": "Category B: Sexual Content", "subcategory": "Anatomical & Explicit", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "hiếp dâm", "category": "Category B: Sexual Content", "subcategory": "Sexual Violence", "severity": "Critical", "action": "Immediate Block & Flag Account" },
+  { "phrase": "hiep dam", "category": "Category B: Sexual Content", "subcategory": "Sexual Violence", "severity": "Critical", "action": "Immediate Block & Flag Account" },
+  { "phrase": "ấu dâm", "category": "Category B: Sexual Content", "subcategory": "Exploitation (Minors)", "severity": "Critical", "action": "Permanent IP Ban & Report" },
+  { "phrase": "au dam", "category": "Category B: Sexual Content", "subcategory": "Exploitation (Minors)", "severity": "Critical", "action": "Permanent IP Ban & Report" },
+  { "phrase": "đồ chó chết", "category": "Category C: Harassment & Hate", "subcategory": "Severe Insults", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "con điếm", "category": "Category C: Harassment & Hate", "subcategory": "Targeted Degradation", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "thằng chó chết", "category": "Category C: Harassment & Hate", "subcategory": "Severe Insults", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "mua like", "category": "Spam", "subcategory": "Fake engagement", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "mua follow", "category": "Spam", "subcategory": "Fake engagement", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "mua follower", "category": "Spam", "subcategory": "Fake engagement", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "mua lượt theo dõi", "category": "Spam", "subcategory": "Fake engagement", "severity": "High", "action": "Block Post & Warn User" },
+  { "phrase": "mua luot theo doi", "category": "Spam", "subcategory": "Fake engagement", "severity": "High", "action": "Block Post & Warn User" }
 ]

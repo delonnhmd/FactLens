@@ -173,6 +173,14 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(normalized * 100)}%`;
 }
 
+// TASK 2 (admin badge): the author's badge_list is joined into every claim
+// (CLAIM_PROFILE_SELECT -> mapAuthor.badgeList), so we can show an "Admin" badge
+// on the author row from the same data the profile screens use. The badge is
+// added to badge_list by SQL for the admin accounts.
+function hasAdminBadge(badges: ReadonlyArray<{ id?: string; name?: string }> | null | undefined): boolean {
+  return Boolean(badges?.some((badge) => badge?.id === "admin" || badge?.name?.toLowerCase() === "admin"));
+}
+
 function getSourceDomain(sourceUrl: string): string {
   const trimmedUrl = sourceUrl.trim();
 
@@ -268,6 +276,8 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
   const aiSummary = getAiSummary(claim);
   const avatarInitial = (claim.authorUsername || claim.authorDisplayName || "U").slice(0, 1).toUpperCase();
   const authorHandle = claim.authorUsername ? `@${claim.authorUsername}` : "Contributor";
+  // TASK 2 (admin badge): show an Admin badge on the author row for admin accounts.
+  const authorIsAdmin = !authorIsAnonymous && hasAdminBadge(claim.author?.badgeList);
   // PHASE 5 STEP 6
   const thumbnailUrl = claim.media.thumbnailUrl || claim.media.imageUrl || null;
   const showAvatarImage = Boolean(claim.authorAvatarUrl && !avatarLoadFailed && !authorIsAnonymous);
@@ -554,6 +564,16 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
                 <Text style={styles.avatarText}>{avatarInitial}</Text>
               )}
             </View>
+            {/* TASK 2 (admin badge): distinct Admin pill for admin authors. */}
+            {authorIsAdmin ? (
+              <Text
+                style={styles.adminBadge}
+                accessibilityRole="text"
+                accessibilityLabel="Admin account"
+              >
+                Admin
+              </Text>
+            ) : null}
             <Text style={styles.authorMeta} numberOfLines={1}>
               {authorHandle} {"\u00B7"} {claim.author.rankTitle} {"\u00B7"} {getRelativeTime(claim.createdAt)}
             </Text>
@@ -730,6 +750,18 @@ function createStyles(theme: AppTheme) {
     flex: 1,
     fontSize: theme.typography.small.fontSize,
     fontWeight: "400",
+  },
+  // TASK 2 (admin badge): distinct red pill so admin accounts are recognizable
+  // on the author row of every claim card.
+  adminBadge: {
+    backgroundColor: theme.colors.danger,
+    borderRadius: 999,
+    color: theme.colors.chipActiveText,
+    fontSize: Math.round(10 * (theme.typography.body.fontSize / 16)),
+    fontWeight: "700",
+    overflow: "hidden",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   title: {
     color: theme.colors.text,

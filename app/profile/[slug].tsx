@@ -217,11 +217,16 @@ export default function PublicProfileScreen() {
               <Text style={styles.detailLabel}>Badges</Text>
               {topBadges.length > 0 ? (
                 <View style={styles.badgeWrap}>
-                  {topBadges.map((badge) => (
-                    <Text key={badge.id} style={styles.badge}>
-                      {badge.name}
-                    </Text>
-                  ))}
+                  {topBadges.map((badge) => {
+                    // TASK 2 (admin badge): distinct red styling for the Admin badge.
+                    const isAdminBadge = badge.id === "admin" || badge.name.toLowerCase() === "admin";
+
+                    return (
+                      <Text key={badge.id} style={[styles.badge, isAdminBadge && styles.badgeAdmin]}>
+                        {badge.name}
+                      </Text>
+                    );
+                  })}
                 </View>
               ) : (
                 <Text style={styles.detailValue}>No badges yet.</Text>
@@ -388,6 +393,14 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     paddingHorizontal: 9,
     paddingVertical: 5,
+  },
+  // TASK 2 (admin badge) — red Admin pill (danger tint; this screen uses the
+  // static theme, which has no chipActiveText token).
+  badgeAdmin: {
+    backgroundColor: theme.colors.dangerBg,
+    color: theme.colors.danger,
+    fontWeight: "700",
+    overflow: "hidden",
   },
   errorText: {
     color: theme.colors.danger,

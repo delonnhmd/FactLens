@@ -42,11 +42,11 @@ import {
   type ModerationAppeal,
 } from "../../services/appealService";
 
-// TEMPORARY: the admin "Delete" / "Delete claim" action is non-functional
-// (tapping it flickers and does nothing), so it is hidden until the underlying
-// delete is fixed. The handler (confirmDeleteClaim / deleteClaimAsAdmin) is left
-// fully intact — flip this back to true to re-enable the button everywhere.
-const ADMIN_DELETE_ENABLED = false;
+// TASK 4a — the admin "Delete" action is fixed: the backend now soft-deletes
+// (reliable regardless of foreign-key references, and reversible via Unhide)
+// instead of a hard delete that intermittently failed on FK-constrained claims.
+// Re-enabled everywhere.
+const ADMIN_DELETE_ENABLED = true;
 
 type ReportStatus = "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED" | "ALL";
 type UserFilter = "all" | "suspended" | "blocked";
@@ -306,17 +306,46 @@ export default function ModerationScreen() {
     [appealReviewNotes, loadAppeals, loadManagedClaims, loadManagedUsers],
   );
 
-  const confirmDeleteClaim = (targetClaimId: string) => {
-    Alert.alert("Delete claim?", "This permanently removes the claim and related rows.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void runAction(() => deleteClaimAsAdmin(targetClaimId, reason), "Claim deleted.");
+  const confirmDeleteClaim = (targetClaimId: string, onDone?: () => void | Promise<void>) => {
+    Alert.alert(
+      "Delete claim?",
+      "This removes the claim from all feeds and search. It is reversible — you can restore it with Unhide.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              const result = await deleteClaimAsAdmin(targetClaimId, reason);
+              if (!result.ok) {
+                setMessage(result.error ?? "Admin action failed.");
+                return;
+              }
+              setMessage("Claim deleted.");
+              if (onDone) {
+                await onDone();
+              } else {
+                await loadReports();
+              }
+            })();
+          },
         },
-      },
-    ]);
+      ],
+    );
+  };
+
+  // TASK 4b/4c — confirmation dialog before banning (suspending) a user. Runs
+  // the passed action (which decides which list to refetch) only on confirm.
+  const confirmBanUser = (label: string, run: () => void) => {
+    Alert.alert(
+      `Ban ${label}?`,
+      "They will be blocked from posting, voting, and reporting, and will be notified. You can unban them later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Ban", style: "destructive", onPress: run },
+      ],
+    );
   };
 
   const pendingAppeals = appeals.filter((appeal) => appeal.status === "pending");
@@ -498,7 +527,6 @@ export default function ModerationScreen() {
                   <>
                     <AdminAction label="Lock voting" styles={styles} onPress={() => runAction(() => lockClaimVoting(targetId, reason), "Voting locked.")} />
                     <AdminAction label="Feature" styles={styles} onPress={() => runAction(() => markClaimFeatured(targetId, true), "Claim featured.")} />
-                    {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
                     {ADMIN_DELETE_ENABLED ? (
                       <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(targetId)} />
                     ) : null}
@@ -509,10 +537,15 @@ export default function ModerationScreen() {
                 ) : null}
                 {(report.target_type === "PROFILE" && targetId) || ownerId ? (
                   <AdminAction
-                    label="Suspend user"
+                    label="Ban user"
                     danger
                     styles={styles}
-                    onPress={() => runAction(() => suspendUser((report.target_type === "PROFILE" ? targetId : ownerId) ?? "", reason), "User suspended.")}
+                    onPress={() => {
+                      const banTargetId = (report.target_type === "PROFILE" ? targetId : ownerId) ?? "";
+                      confirmBanUser("this user", () =>
+                        runAction(() => suspendUser(banTargetId, reason), "User banned."),
+                      );
+                    }}
                   />
                 ) : null}
               </View>
@@ -640,11 +673,24 @@ export default function ModerationScreen() {
             <AdminAction label="Unhide claim" styles={styles} onPress={() => runAction(() => unhideClaim(claimId.trim()), "Claim restored to feeds.")} />
             <AdminAction label="Lock voting" styles={styles} onPress={() => runAction(() => lockClaimVoting(claimId.trim(), reason), "Voting locked.")} />
             <AdminAction label="Feature" styles={styles} onPress={() => runAction(() => markClaimFeatured(claimId.trim(), true), "Claim featured.")} />
-            {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
             {ADMIN_DELETE_ENABLED ? (
               <AdminAction label="Delete claim" danger styles={styles} onPress={() => confirmDeleteClaim(claimId.trim())} />
             ) : null}
-            <AdminAction label="Suspend user" danger styles={styles} onPress={() => runAction(() => suspendUser(userId.trim(), reason), "User suspended.")} />
+            <AdminAction
+              label="Ban user"
+              danger
+              styles={styles}
+              onPress={() =>
+                confirmBanUser("this user", () =>
+                  runAction(() => suspendUser(userId.trim(), reason), "User banned."),
+                )
+              }
+            />
+            <AdminAction
+              label="Unban user"
+              styles={styles}
+              onPress={() => runAction(() => unsuspendUser(userId.trim()), "User unbanned.")}
+            />
           </View>
         </View>
 
@@ -695,16 +741,20 @@ export default function ModerationScreen() {
             <View style={styles.actionRow}>
               {user.is_suspended ? (
                 <AdminAction
-                  label="Unsuspend"
+                  label="Unban"
                   styles={styles}
-                  onPress={() => runUserAction(() => unsuspendUser(user.id), "User unsuspended.")}
+                  onPress={() => runUserAction(() => unsuspendUser(user.id), "User unbanned.")}
                 />
               ) : (
                 <AdminAction
-                  label="Suspend"
+                  label="Ban"
                   danger
                   styles={styles}
-                  onPress={() => runUserAction(() => suspendUser(user.id, reason), "User suspended.")}
+                  onPress={() =>
+                    confirmBanUser(`@${user.username || "this user"}`, () =>
+                      runUserAction(() => suspendUser(user.id, reason), "User banned."),
+                    )
+                  }
                 />
               )}
             </View>
@@ -772,9 +822,36 @@ export default function ModerationScreen() {
                   onPress={() => runClaimAction(() => hideClaimFromFeeds(claim.id, reason), "Claim hidden from feeds.")}
                 />
               )}
-              {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
               {ADMIN_DELETE_ENABLED ? (
-                <AdminAction label="Delete" danger styles={styles} onPress={() => confirmDeleteClaim(claim.id)} />
+                <AdminAction
+                  label="Delete"
+                  danger
+                  styles={styles}
+                  onPress={() => confirmDeleteClaim(claim.id, loadManagedClaims)}
+                />
+              ) : null}
+              {/* TASK 4c — Ban/Unban the claim's author directly from the row. */}
+              {claim.author_id ? (
+                claim.author_is_suspended ? (
+                  <AdminAction
+                    label="Unban author"
+                    styles={styles}
+                    onPress={() =>
+                      runClaimAction(() => unsuspendUser(claim.author_id as string), "Author unbanned.")
+                    }
+                  />
+                ) : (
+                  <AdminAction
+                    label="Ban author"
+                    danger
+                    styles={styles}
+                    onPress={() =>
+                      confirmBanUser(`@${claim.author_username || "author"}`, () =>
+                        runClaimAction(() => suspendUser(claim.author_id as string, reason), "Author banned."),
+                      )
+                    }
+                  />
+                )
               ) : null}
             </View>
           </View>

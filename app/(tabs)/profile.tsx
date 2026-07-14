@@ -835,16 +835,33 @@ export default function ProfileScreen() {
                   <Text style={styles.detailLabel}>Badges earned</Text>
                   {badges.length > 0 ? (
                     <View style={styles.badgeWrap}>
-                      {badges.map((badge) => (
-                        <TouchableOpacity
-                          key={badge.id}
-                          style={styles.contributorBadge}
-                          activeOpacity={0.8}
-                          onPress={() => Alert.alert(badge.name, "Badge earned through Verifact contributions.")}
-                        >
-                          <Text style={styles.contributorBadgeText}>{badge.name}</Text>
-                        </TouchableOpacity>
-                      ))}
+                      {badges.map((badge) => {
+                        // TASK 2 (admin badge): distinct red styling + copy for the Admin badge.
+                        const isAdminBadge =
+                          badge.id === "admin" || badge.name.toLowerCase() === "admin";
+
+                        return (
+                          <TouchableOpacity
+                            key={badge.id}
+                            style={[styles.contributorBadge, isAdminBadge && styles.contributorBadgeAdmin]}
+                            activeOpacity={0.8}
+                            onPress={() =>
+                              Alert.alert(
+                                badge.name,
+                                isAdminBadge
+                                  ? "Verifact administrator account."
+                                  : "Badge earned through Verifact contributions.",
+                              )
+                            }
+                          >
+                            <Text
+                              style={[styles.contributorBadgeText, isAdminBadge && styles.contributorBadgeAdminText]}
+                            >
+                              {badge.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   ) : (
                     <Text style={styles.detailValue}>No badges yet.</Text>
@@ -1538,6 +1555,14 @@ function createStyles(theme: AppTheme) {
     color: theme.colors.sourceText,
     fontSize: 11,
     fontWeight: "500",
+  },
+  // TASK 2 (admin badge)
+  contributorBadgeAdmin: {
+    backgroundColor: theme.colors.danger,
+  },
+  contributorBadgeAdminText: {
+    color: theme.colors.chipActiveText,
+    fontWeight: "700",
   },
   successText: {
     color: theme.colors.success,
