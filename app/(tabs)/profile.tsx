@@ -49,12 +49,11 @@ import {
 // Reason attached to a hide triggered from the reported-claims queue.
 const REPORTED_HIDE_REASON = "Reported content violation";
 
-// TEMPORARY: the admin "Delete" action in the Reported/Hidden claim queues is
-// non-functional (tapping it flickers and does nothing), so it is hidden until
-// the underlying delete is fixed. The handler (handleDeleteClaim /
-// deleteClaimAsAdmin) is left intact — flip this to true to re-enable it.
-// Hide/Unhide are unaffected.
-const ADMIN_DELETE_ENABLED = false;
+// Admin "Delete" in the Reported/Hidden claim queues. The old flicker-then-
+// nothing was the hard-delete FK failure; delete is now a FK-safe soft delete
+// (see backend admin_delete_claim), so this is re-enabled. handleDeleteClaim
+// surfaces the backend's real error and refetches the queues on success.
+const ADMIN_DELETE_ENABLED = true;
 
 type UsernameAvailabilityStatus = "idle" | "checking" | "available" | "unavailable" | "invalid";
 
@@ -482,10 +481,10 @@ export default function ProfileScreen() {
   };
 
   // Delete a claim (EXISTING admin delete endpoint) with confirmation.
-  const handleDeleteClaim = (claimId: string, title: string | null) => {
+  const handleDeleteClaim = (claimId: string) => {
     Alert.alert(
-      "Delete claim?",
-      `This removes ${title ? `"${title.slice(0, 60)}"` : "this claim"} from all feeds and search. It is reversible — you can restore it with Unhide.`,
+      "Delete this claim?",
+      "It will be removed from the app. You can restore it from the admin dashboard.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -505,6 +504,7 @@ export default function ProfileScreen() {
             setReportedClaims((current) => current.filter((item) => item.claim_id !== claimId));
             setHiddenClaims((current) => current.filter((item) => item.claim_id !== claimId));
             await loadAdminQueues();
+            setQueueMessage("Claim deleted.");
           },
         },
       ],
@@ -1020,13 +1020,13 @@ export default function ProfileScreen() {
                         >
                           <Text style={styles.queueActionText}>{claim.is_hidden ? "Hidden" : "Hide"}</Text>
                         </TouchableOpacity>
-                        {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+                        {/* Admin soft-delete is FK-safe and reversible. */}
                         {ADMIN_DELETE_ENABLED ? (
                           <TouchableOpacity
                             style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
                             activeOpacity={0.8}
                             disabled={busy}
-                            onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
+                            onPress={() => handleDeleteClaim(claim.claim_id)}
                           >
                             <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
                           </TouchableOpacity>
@@ -1038,8 +1038,8 @@ export default function ProfileScreen() {
               </View>
             ) : null}
 
-            {/* TASK 2 — Hidden claims (admin only). Reversible archive: Unhide
-                restores to feeds, Delete removes permanently. */}
+            {/* TASK 2 — Hidden claims (admin only): Unhide restores a normal
+                hide; Delete soft-deletes and can be restored in moderation. */}
             {isAdmin ? (
               <View style={styles.adminQueueSection}>
                 <Text style={styles.detailLabel}>Hidden claims</Text>
@@ -1077,13 +1077,13 @@ export default function ProfileScreen() {
                         >
                           <Text style={styles.queueActionText}>{claim.is_deleted ? "Restore" : "Unhide"}</Text>
                         </TouchableOpacity>
-                        {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
+                        {/* Admin soft-delete is FK-safe and reversible. */}
                         {ADMIN_DELETE_ENABLED ? (
                           <TouchableOpacity
                             style={[styles.queueActionButton, styles.queueActionDanger, busy && styles.disabledButton]}
                             activeOpacity={0.8}
                             disabled={busy}
-                            onPress={() => handleDeleteClaim(claim.claim_id, claim.title)}
+                            onPress={() => handleDeleteClaim(claim.claim_id)}
                           >
                             <Text style={[styles.queueActionText, styles.queueActionDangerText]}>Delete</Text>
                           </TouchableOpacity>

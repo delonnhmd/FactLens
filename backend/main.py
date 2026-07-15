@@ -5879,6 +5879,9 @@ def admin_list_hidden_claims(request: Request, limit: int = 50):
             "hidden_reason,hidden_at,votes_true,votes_fake,votes_unsure,created_at"
         )
         .eq("is_hidden", True)
+        # Soft-deleted claims leave the Hidden list — they are removals, not
+        # hides. They remain restorable from the admin dashboard (moderation).
+        .eq("is_deleted", False)
         .order("hidden_at", desc=True)
         .order("created_at", desc=True)
         .limit(safe_limit)
@@ -5937,6 +5940,9 @@ def admin_list_reported_claims(request: Request, limit: int = 50):
         supabase.table("claims")
         .select("id,title,description,author_id,is_hidden,created_at")
         .in_("id", claim_ids)
+        # A deleted claim leaves the actionable reported queue (its row is
+        # skipped below when claim_row is missing).
+        .eq("is_deleted", False)
         .execute()
     )
     claims_by_id = {claim["id"]: claim for claim in (claims_result.data or [])}

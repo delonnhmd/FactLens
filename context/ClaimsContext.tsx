@@ -45,6 +45,8 @@ import {
   DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
 import type { ClaimSearchFilters, ClaimsResult } from "../services/claimService";
+// Admin moderation: soft-delete a claim from the feed "..." menu (admins only).
+import { deleteClaimAsAdmin } from "../services/moderationService";
 import {
   fetchUserVoteForClaim,
   voteOnClaim as voteOnRemoteClaim,
@@ -156,6 +158,8 @@ interface ClaimsContextValue {
   unblockUser: (userId: string) => Promise<void>;
   // Author self-delete (3-hour window)
   deleteOwnClaim: (claimId: string) => Promise<void>;
+  // Admin moderation soft-delete (removes from feed state on success)
+  adminDeleteClaim: (claimId: string, reason?: string) => Promise<void>;
   // Save/unsave claims: ids loaded once at auth; toggle is optimistic and
   // resolves to the new saved state (true = now saved).
   savedClaimIds: string[];
@@ -1630,6 +1634,23 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     [currentUser],
   );
 
+  // Admin moderation delete (NEW): soft-delete a claim (is_deleted=true) via the
+  // admin endpoint, then drop it from feed state so it vanishes immediately —
+  // same optimistic-removal pattern as deleteOwnClaim. Throws the backend's
+  // exact error so the caller can surface it (never a generic string).
+  const adminDeleteClaim = useCallback(
+    async (claimId: string, reason = "Removed by moderation.") => {
+      const result = await deleteClaimAsAdmin(claimId, reason);
+
+      if (!result.ok) {
+        throw new Error(result.error ?? "Could not delete this claim right now.");
+      }
+
+      setClaims((currentClaimsState) => currentClaimsState.filter((claim) => claim.id !== claimId));
+    },
+    [],
+  );
+
   // Save/unsave claims. Optimistic like blockUser: state flips BEFORE the
   // network call and is reverted only if the request fails. Resolves to the
   // new saved state so callers can toast "Saved" / "Removed".
@@ -1745,6 +1766,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       unblockUser,
       // Author self-delete (3-hour window)
       deleteOwnClaim,
+      // Admin moderation soft-delete
+      adminDeleteClaim,
       // Save/unsave claims
       savedClaimIds,
       toggleSaveClaim,
@@ -1756,6 +1779,8 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       unblockUser,
       // Author self-delete (3-hour window)
       deleteOwnClaim,
+      // Admin moderation soft-delete
+      adminDeleteClaim,
       // Save/unsave claims
       savedClaimIds,
       toggleSaveClaim,

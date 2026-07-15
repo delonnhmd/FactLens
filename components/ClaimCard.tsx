@@ -242,7 +242,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   // APPLE GUIDELINE 1.2 — user blocking (NEW)
   const { currentUser, profile } = useAuth();
-  const { blockUser, savedClaimIds, toggleSaveClaim, deleteOwnClaim } = useClaims();
+  const { blockUser, savedClaimIds, toggleSaveClaim, deleteOwnClaim, adminDeleteClaim } = useClaims();
   // Public user profile navigation; anonymized/deleted authors are not tappable.
   const router = useRouter();
   const authorIsAnonymous =
@@ -414,15 +414,46 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
         }
         Alert.alert(currentlyHidden ? "Post unhidden." : "Post hidden from feeds.");
       })
-      .catch(() => {
+      .catch((error) => {
+        // Roll back the optimistic flip and surface the BACKEND's actual error
+        // (not a generic string) so failures are diagnosable.
         setHiddenOverride(currentlyHidden);
         Alert.alert(
-          currentlyHidden
-            ? "Could not unhide this post right now."
-            : "Could not hide this post right now.",
+          error instanceof Error
+            ? error.message
+            : currentlyHidden
+              ? "Could not unhide this post right now."
+              : "Could not hide this post right now.",
         );
       });
   }, [claim.id, claimHidden]);
+
+  // Admin moderation delete (NEW): soft-delete from the "..." menu / hidden card.
+  // Admins only. Confirms, then removes from feed state (context) + any local
+  // list state (onDeleted), and surfaces the backend's exact error on failure.
+  const handleAdminDelete = useCallback(() => {
+    Alert.alert(
+      "Delete this claim?",
+      "It will be removed from the app. You can restore it from the admin dashboard.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            adminDeleteClaim(claim.id)
+              .then(() => {
+                onDeleted?.(claim.id);
+                Alert.alert("Claim deleted.");
+              })
+              .catch((error) =>
+                Alert.alert(error instanceof Error ? error.message : "Could not delete this claim right now."),
+              );
+          },
+        },
+      ],
+    );
+  }, [adminDeleteClaim, claim.id, onDeleted]);
 
   const handleOptions = useCallback(() => {
     // Author self-delete (NEW): compute at tap time so the 3-hour window is
@@ -471,13 +502,18 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
             },
           ]
         : []),
-      // Admin moderation (NEW): hide/unhide the post. Admins only.
+      // Admin moderation (NEW): hide/unhide + delete the post. Admins only.
       ...(isAdmin
         ? [
             {
               text: claimHidden ? "Unhide post" : "Hide post",
               style: claimHidden ? ("default" as const) : ("destructive" as const),
               onPress: handleToggleHidden,
+            },
+            {
+              text: "Delete claim",
+              style: "destructive" as const,
+              onPress: handleAdminDelete,
             },
           ]
         : []),
@@ -496,6 +532,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
     claim.shareUrl,
     claimHidden,
     currentUser,
+    handleAdminDelete,
     handleBlock,
     handleDeleteOwnClaim,
     handleToggleHidden,
@@ -515,17 +552,29 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
             This content was removed for violating community guidelines.
           </Text>
           {/* Admin moderation (NEW): a hidden claim shows this placeholder
-              instead of the "..." menu, so admins get an Unhide action here. */}
+              instead of the "..." menu, so admins get Unhide AND Delete here.
+              Delete works on a hidden claim directly (no need to unhide first). */}
           {isAdmin ? (
-            <TouchableOpacity
-              style={styles.hiddenUnhideButton}
-              activeOpacity={0.8}
-              onPress={handleToggleHidden}
-              accessibilityRole="button"
-              accessibilityLabel="Unhide post"
-            >
-              <Text style={styles.hiddenUnhideButtonText}>Unhide post</Text>
-            </TouchableOpacity>
+            <View style={styles.hiddenAdminActions}>
+              <TouchableOpacity
+                style={styles.hiddenUnhideButton}
+                activeOpacity={0.8}
+                onPress={handleToggleHidden}
+                accessibilityRole="button"
+                accessibilityLabel="Unhide post"
+              >
+                <Text style={styles.hiddenUnhideButtonText}>Unhide post</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.hiddenDeleteButton}
+                activeOpacity={0.8}
+                onPress={handleAdminDelete}
+                accessibilityRole="button"
+                accessibilityLabel="Delete claim"
+              >
+                <Text style={styles.hiddenDeleteButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
       </View>
@@ -984,12 +1033,29 @@ function createStyles(theme: AppTheme) {
     borderColor: theme.colors.border,
     borderRadius: theme.radius.sm,
     borderWidth: 1,
-    marginTop: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   hiddenUnhideButtonText: {
     color: theme.colors.link,
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
+    fontWeight: "500",
+  },
+  // Admin actions row on the hidden "Content removed" card: Unhide + Delete.
+  hiddenAdminActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  hiddenDeleteButton: {
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  hiddenDeleteButtonText: {
+    color: theme.colors.danger,
     fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },

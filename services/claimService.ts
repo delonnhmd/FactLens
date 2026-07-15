@@ -1274,9 +1274,15 @@ export async function fetchLatestClaimsPage(
   try {
     console.log("CLAIMS_FETCH_START", { limit, offset });
 
+    // Exclude soft-deleted claims from the feed. RLS already hides them from
+    // normal users, but admins bypass that policy — without this filter a claim
+    // an admin just deleted would reappear as a "Content removed" card on the
+    // next refetch. Hidden-but-not-deleted claims still come through (so admins
+    // keep the inline Unhide/Delete actions).
     const { data, error, status, statusText } = await supabase
       .from("claims")
       .select("*")
+      .eq("is_deleted", false)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

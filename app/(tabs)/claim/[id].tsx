@@ -33,6 +33,8 @@ import { MentionText } from "../../../components/MentionText";
 import { MentionTextInput } from "../../../components/MentionTextInput";
 import { useAuth } from "../../../context/AuthContext";
 import { useClaims } from "../../../context/ClaimsContext";
+// Admin moderation: hide/unhide a claim from the detail screen (admins only).
+import { hideClaimFromFeeds, unhideClaim } from "../../../services/moderationService";
 import type { AppTheme } from "../../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../../context/TabBarVisibilityContext";
 import { useAppTheme } from "../../../hooks/useTheme";
@@ -315,7 +317,9 @@ export default function ClaimDetailScreen() {
     [contentBottomPadding, styles.content],
   );
   // PHASE 2 STEP 9
-  const { currentUser, isAuthenticated, isVerified } = useAuth();
+  const { currentUser, isAuthenticated, isVerified, profile } = useAuth();
+  // Admin moderation: hide/unhide + delete from the claim detail (admins only).
+  const isAdmin = Boolean(profile?.is_admin);
   // PHASE 2 STEP 3
   const {
     getClaimById,
@@ -333,6 +337,8 @@ export default function ClaimDetailScreen() {
     toggleSaveClaim,
     // Author self-delete (3-hour window)
     deleteOwnClaim,
+    // Admin moderation soft-delete (removes from feed state on success)
+    adminDeleteClaim,
   } = useClaims();
   // PHASE 2 STEP 4
   const [evidenceUrl, setEvidenceUrl] = useState("");
@@ -905,6 +911,114 @@ export default function ClaimDetailScreen() {
     ]);
   };
 
+  // Admin moderation (NEW): hide/unhide this claim from the detail screen.
+  // Surfaces the backend's exact error; refetches the claim on success so the
+  // hidden badge/state updates in place.
+  const handleAdminToggleHidden = () => {
+    if (!claim) {
+      return;
+    }
+
+    const currentlyHidden = Boolean(claim.hidden);
+    const request = currentlyHidden
+      ? unhideClaim(claim.id)
+      : hideClaimFromFeeds(claim.id, "Hidden by moderation.");
+
+    request
+      .then((result) => {
+        if (!result.ok) {
+          throw new Error(result.error ?? "Admin action failed.");
+        }
+        void fetchClaimById(claim.id);
+        Alert.alert(currentlyHidden ? "Post unhidden." : "Post hidden from feeds.");
+      })
+      .catch((error) =>
+        Alert.alert(error instanceof Error ? error.message : "Could not update this claim right now."),
+      );
+  };
+
+  // Admin moderation (NEW): soft-delete this claim, then leave the detail screen
+  // (context drops it from feed state). Surfaces the backend's exact error.
+  const handleAdminDeleteClaim = () => {
+    if (!claim) {
+      return;
+    }
+
+    Alert.alert(
+      "Delete this claim?",
+      "It will be removed from the app. You can restore it from the admin dashboard.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            adminDeleteClaim(claim.id)
+              .then(() => {
+                router.back();
+                Alert.alert("Claim deleted.");
+              })
+              .catch((error) =>
+                Alert.alert(error instanceof Error ? error.message : "Could not delete this claim right now."),
+              );
+          },
+        },
+      ],
+    );
+  };
+
+  // Claim detail "..." menu. Keep everyday actions first, followed by admin-
+  // only moderation actions, so normal users never see Hide/Delete.
+  const handleOptions = () => {
+    if (!claim) {
+      return;
+    }
+
+    Alert.alert("Post options", undefined, [
+      {
+        text: "Report",
+        style: "destructive",
+        onPress: handleReportButtonPress,
+      },
+      ...(currentUser && currentUser.id !== claim.authorId
+        ? [
+            {
+              text: "Block user",
+              style: "destructive" as const,
+              onPress: handleBlockAuthor,
+            },
+          ]
+        : []),
+      ...(currentUser
+        ? [
+            {
+              text: claimIsSaved ? "Unsave claim" : "Save claim",
+              onPress: () => void handleToggleSaveClaim(),
+            },
+          ]
+        : []),
+      ...(isAdmin
+        ? [
+            {
+              text: claim.hidden ? "Unhide post" : "Hide post",
+              style: claim.hidden ? ("default" as const) : ("destructive" as const),
+              onPress: handleAdminToggleHidden,
+            },
+            {
+              text: "Delete claim",
+              style: "destructive" as const,
+              onPress: handleAdminDeleteClaim,
+            },
+          ]
+        : []),
+      {
+        text: "Share",
+        onPress: shareClaim,
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
   // PHASE 3 STEP 4
   const handleVote = async (vote: VoteOption) => {
     if (!claim || voteSubmitting) {
@@ -1124,8 +1238,13 @@ export default function ClaimDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={appTheme.colors.bannerSubtitle} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Claim details</Text>
-        <TouchableOpacity onPress={shareClaim} hitSlop={8}>
-          <Ionicons name="share-outline" size={22} color={appTheme.colors.bannerSubtitle} />
+        <TouchableOpacity
+          onPress={handleOptions}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="More claim options"
+        >
+          <Ionicons name="ellipsis-horizontal" size={22} color={appTheme.colors.bannerSubtitle} />
         </TouchableOpacity>
       </View>
 
