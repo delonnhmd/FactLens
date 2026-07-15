@@ -26,6 +26,7 @@ import {
   lockClaimVoting,
   markClaimFeatured,
   resolveModerationReport,
+  restoreDeletedClaim,
   restoreModerationTarget,
   suspendUser,
   unhideClaim,
@@ -802,13 +803,21 @@ export default function ModerationScreen() {
             <Text style={styles.note}>
               True {claim.votes_true ?? 0} {"·"} Fake {claim.votes_fake ?? 0} {"·"} Not sure {claim.votes_unsure ?? 0}
             </Text>
-            {claim.is_hidden ? (
+            {claim.is_deleted ? (
+              <Text style={styles.hiddenText}>Deleted{claim.deleted_reason ? ` — ${claim.deleted_reason}` : ""}</Text>
+            ) : claim.is_hidden ? (
               <Text style={styles.hiddenText}>Hidden{claim.hidden_reason ? ` — ${claim.hidden_reason}` : ""}</Text>
             ) : claim.hidden ? (
               <Text style={styles.hiddenText}>Removed (legacy hide){claim.hidden_reason ? ` — ${claim.hidden_reason}` : ""}</Text>
             ) : null}
             <View style={styles.actionRow}>
-              {claim.is_hidden ? (
+              {claim.is_deleted ? (
+                <AdminAction
+                  label="Restore"
+                  styles={styles}
+                  onPress={() => runClaimAction(() => restoreDeletedClaim(claim.id), "Claim restored.")}
+                />
+              ) : claim.is_hidden ? (
                 <AdminAction
                   label="Unhide"
                   styles={styles}
@@ -822,7 +831,7 @@ export default function ModerationScreen() {
                   onPress={() => runClaimAction(() => hideClaimFromFeeds(claim.id, reason), "Claim hidden from feeds.")}
                 />
               )}
-              {ADMIN_DELETE_ENABLED ? (
+              {ADMIN_DELETE_ENABLED && !claim.is_deleted ? (
                 <AdminAction
                   label="Delete"
                   danger

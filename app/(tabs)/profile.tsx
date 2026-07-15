@@ -485,7 +485,7 @@ export default function ProfileScreen() {
   const handleDeleteClaim = (claimId: string, title: string | null) => {
     Alert.alert(
       "Delete claim?",
-      `This permanently removes ${title ? `"${title.slice(0, 60)}"` : "this claim"} and related rows. This cannot be undone.`,
+      `This removes ${title ? `"${title.slice(0, 60)}"` : "this claim"} from all feeds and search. It is reversible — you can restore it with Unhide.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -1055,7 +1055,11 @@ export default function ProfileScreen() {
                       <TouchableOpacity activeOpacity={0.8} onPress={() => toggleClaimExpanded(claim.claim_id)}>
                         <Text style={styles.queueTitle}>{claim.title || "Untitled claim"}</Text>
                         <Text style={styles.queueMeta}>@{claim.author_username || "unknown"}</Text>
-                        {claim.hidden_reason ? (
+                        {claim.is_deleted ? (
+                          <Text style={styles.queueReason}>
+                            Deleted{claim.deleted_reason ? `: ${claim.deleted_reason}` : ""}
+                          </Text>
+                        ) : claim.hidden_reason ? (
                           <Text style={styles.queueReason}>Hidden: {claim.hidden_reason}</Text>
                         ) : null}
                         {expanded && claim.description ? (
@@ -1071,7 +1075,7 @@ export default function ProfileScreen() {
                           disabled={busy}
                           onPress={() => void handleUnhide(claim)}
                         >
-                          <Text style={styles.queueActionText}>Unhide</Text>
+                          <Text style={styles.queueActionText}>{claim.is_deleted ? "Restore" : "Unhide"}</Text>
                         </TouchableOpacity>
                         {/* Delete temporarily hidden — non-functional; see ADMIN_DELETE_ENABLED. */}
                         {ADMIN_DELETE_ENABLED ? (

@@ -252,6 +252,8 @@ export interface ManagedClaim {
   // TASK 4c — author suspension state so each claim row can show Ban/Unban.
   author_is_suspended?: boolean;
   is_hidden: boolean;
+  is_deleted?: boolean;
+  deleted_reason?: string | null;
   hidden: boolean | null;
   hidden_reason: string | null;
   hidden_at: string | null;
@@ -267,6 +269,13 @@ export function hideClaimFromFeeds(claimId: string, reason: string) {
 
 export function unhideClaim(claimId: string) {
   return postAdminAction(`/admin/claims/${encodeURIComponent(claimId)}/unhide`, {});
+}
+
+// Explicit reversal of an admin soft-delete. Clears is_deleted + is_hidden and
+// notifies the author their claim was restored. (Unhide does the same thing;
+// this route exists so deleted rows can show a "Restore" action.)
+export function restoreDeletedClaim(claimId: string) {
+  return postAdminAction(`/admin/claims/${encodeURIComponent(claimId)}/restore`, {});
 }
 
 export function unsuspendUser(userId: string) {
@@ -339,6 +348,10 @@ export interface HiddenClaim {
   description: string | null;
   author_id: string | null;
   author_username: string | null;
+  // is_deleted distinguishes a soft-deleted claim (admin "Delete") from a plain
+  // moderation hide. Both land in this queue because delete also sets is_hidden.
+  is_deleted?: boolean;
+  deleted_reason?: string | null;
   hidden_reason: string | null;
   hidden_at: string | null;
   votes_true: number | null;

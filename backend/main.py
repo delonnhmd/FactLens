@@ -4132,7 +4132,11 @@ def public_claim_page(claim_id: str):
         print("[public claim] fetch failed:", normalized_claim_id, error, flush=True)
         return HTMLResponse(content=build_public_claim_error_page(), status_code=503)
 
-    if not claim or claim.get("hidden"):
+    # This public/SEO page reads via service role (bypasses RLS), so guard the
+    # moderation flags explicitly: legacy `hidden`, the feed-gate `is_hidden`,
+    # and soft-deleted `is_deleted` all must 404 so removed claims are never
+    # served or indexed.
+    if not claim or claim.get("hidden") or claim.get("is_hidden") or claim.get("is_deleted"):
         return HTMLResponse(content=build_public_claim_404_page(), status_code=404)
 
     return HTMLResponse(content=build_public_claim_page(claim), status_code=200)
@@ -5431,7 +5435,7 @@ def admin_restore_content(payload: AdminContentVisibilityRequest, request: Reque
 
 @app.post("/admin/claims/delete")
 def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
-    require_admin_user(request)
+    admin_user_id = require_admin_user(request)
     claim_id = payload.claim_id.strip()
 
     if not claim_id:
@@ -5441,21 +5445,33 @@ def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
     reason = payload.reason.strip() or "Violation of Verifact Terms of Use"
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # TASK 4a — SOFT DELETE (fix for the intermittent "admin action could not be
-    # completed"). A hard DELETE failed whenever the claim was referenced by a
-    # row with a NO-ACTION foreign key — saved_claims.claim_id,
-    # moderation_appeals.claim_id, user_blocks.source_claim_id, or another
-    # claim's canonical_claim_id — which is why it worked on some claims and not
-    # others. Soft delete removes the claim from every feed, search, and topic
-    # via the SAME is_hidden RLS gate that Hide uses, so it is 100% reliable
-    # regardless of what references the claim, and it is REVERSIBLE (Unhide
-    # restores it). status='DELETED' marks it as a removal, distinct from a
-    # plain moderation hide. A single UPDATE, returning author_id + title so we
-    # can still notify the author.
+    # SOFT DELETE (fix for the intermittent "admin action could not be
+    # completed"). The old hard DELETE raised a ForeignKeyViolation whenever the
+    # claim was referenced by a row with a NO-ACTION foreign key —
+    # saved_claims.claim_id, moderation_appeals.claim_id,
+    # user_blocks.source_claim_id, or another claim's canonical_claim_id — which
+    # is exactly why it worked on some claims and failed on others. An UPDATE can
+    # never hit a foreign key, so this is 100% reliable regardless of what
+    # references the claim.
+    #
+    # - is_deleted (+ deleted_at/by/reason): the semantic "removed by moderation"
+    #   marker and the anchor for a non-destructive Restore. We deliberately do
+    #   NOT touch `status`, so the claim's real verdict/state is preserved and a
+    #   Restore is lossless.
+    # - is_hidden/hidden: reuse the ALREADY-LIVE restrictive RLS policy
+    #   ("Hide hidden claims from public", migration 040) that removes the row
+    #   from every feed, search and topic for non-admin, non-author readers.
+    #   Migration 049 adds a second restrictive policy ("Hide deleted claims")
+    #   that also hides is_deleted rows from the AUTHOR's own views (my-claims,
+    #   saved, single claim); admins still see everything.
+    # Single UPDATE, returning author_id + title so we can still notify the author.
     result = (
         supabase.table("claims")
         .update({
-            "status": "DELETED",
+            "is_deleted": True,
+            "deleted_at": now_iso,
+            "deleted_by": admin_user_id,
+            "deleted_reason": reason,
             "is_hidden": True,
             "hidden": True,
             "hidden_reason": reason,
@@ -5705,6 +5721,11 @@ def admin_unhide_claim(claim_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Claim not found.")
 
     was_hidden = bool(claim_row.get("is_hidden")) or bool(claim_row.get("hidden"))
+    # Unhide also lifts a soft delete: a claim can be hidden AND soft-deleted, so
+    # making it visible again must clear is_deleted too, otherwise it would be
+    # publicly visible yet still flagged "deleted" (invariant: visible ⟹ not
+    # deleted). This makes Unhide double as Restore, which is what the moderation
+    # UI already assumes ("reversible via Unhide").
     result = (
         supabase.table("claims")
         .update({
@@ -5713,6 +5734,10 @@ def admin_unhide_claim(claim_id: str, request: Request):
             "hidden_reason": None,
             "hidden_at": None,
             "hidden_by": None,
+            "is_deleted": False,
+            "deleted_at": None,
+            "deleted_by": None,
+            "deleted_reason": None,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         })
         .eq("id", target_claim_id)
@@ -5740,6 +5765,75 @@ def admin_unhide_claim(claim_id: str, request: Request):
             print(f"[admin unhide] notification failed: {error}", flush=True)
 
     return {"ok": True, "claim_id": target_claim_id, "is_hidden": False, "updated": len(result.data or [])}
+
+
+@app.post("/admin/claims/{claim_id}/restore")
+def admin_restore_claim(claim_id: str, request: Request):
+    # Explicit reversal of a soft delete (POST /admin/claims/delete). Distinct
+    # from Unhide only in intent + the notification wording; both clear
+    # is_deleted + is_hidden. Kept as its own route so the moderation UI can
+    # label deleted rows "Restore" and so a granted claim_removed appeal can
+    # reuse it the way claim_hidden appeals reuse Unhide.
+    require_admin_user(request)
+    target_claim_id = claim_id.strip()
+
+    if not target_claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    supabase = get_supabase_client()
+
+    claim_result = (
+        supabase.table("claims")
+        .select("author_id,title,is_deleted")
+        .eq("id", target_claim_id)
+        .limit(1)
+        .execute()
+    )
+    claim_row = (claim_result.data or [None])[0]
+
+    if not claim_row:
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    was_deleted = bool(claim_row.get("is_deleted"))
+    result = (
+        supabase.table("claims")
+        .update({
+            "is_deleted": False,
+            "deleted_at": None,
+            "deleted_by": None,
+            "deleted_reason": None,
+            "is_hidden": False,
+            "hidden": False,
+            "hidden_reason": None,
+            "hidden_at": None,
+            "hidden_by": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", target_claim_id)
+        .execute()
+    )
+
+    author_id = claim_row.get("author_id")
+
+    # Notify only when the claim was actually deleted before this call.
+    if (result.data or []) and author_id and was_deleted:
+        title_snippet = str(claim_row.get("title") or "")[:80]
+
+        try:
+            supabase.table("notifications").insert({
+                "user_id": author_id,
+                "type": "claim_restored",
+                "title": "Your claim was restored",
+                "body": (
+                    f'Your claim "{title_snippet}..." was reviewed and restored. '
+                    "It is visible to other users again."
+                ),
+                "claim_id": target_claim_id,
+            }).execute()
+        except Exception as error:
+            print(f"[admin restore] notification failed: {error}", flush=True)
+
+    return {"ok": True, "claim_id": target_claim_id, "is_deleted": False, "updated": len(result.data or [])}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -5781,8 +5875,8 @@ def admin_list_hidden_claims(request: Request, limit: int = 50):
     result = (
         supabase.table("claims")
         .select(
-            "id,title,description,author_id,is_hidden,hidden_reason,hidden_at,"
-            "votes_true,votes_fake,votes_unsure,created_at"
+            "id,title,description,author_id,is_hidden,is_deleted,deleted_reason,"
+            "hidden_reason,hidden_at,votes_true,votes_fake,votes_unsure,created_at"
         )
         .eq("is_hidden", True)
         .order("hidden_at", desc=True)
@@ -5906,10 +6000,12 @@ def admin_list_reported_claims(request: Request, limit: int = 50):
 #   admin_unhide_claim() for claim_hidden and admin_suspend_user(
 #   suspended=False) for account_suspended — nothing reimplemented, and
 #   their claim_restored notifications keep firing as they do today.
-# - claim_removed CANNOT be auto-reversed: /admin/claims/delete hard-deletes
-#   the claims row (verified). There is no strike system in this codebase to
-#   clear, so a granted claim_removed appeal records the outcome and
-#   notifies the user only.
+# - claim_removed is now REVERSIBLE: /admin/claims/delete soft-deletes (sets
+#   is_deleted + is_hidden), so a granted claim_removed appeal COULD restore the
+#   claim via admin_restore_claim(). It is not wired to do so automatically yet;
+#   a granted claim_removed appeal still records the outcome and notifies the
+#   user only. (Follow-up: reuse admin_restore_claim here the way claim_hidden
+#   appeals reuse admin_unhide_claim.)
 # - appeal_resolved notifications follow the existing fail-soft pattern:
 #   failure never fails the resolution.
 # ═══════════════════════════════════════════════════════════════════════
@@ -6215,7 +6311,7 @@ def admin_manage_claims(request: Request, search: str = "", filter: str = "all")
     # claims are always visible to the dashboard.
     query = (
         supabase.table("claims")
-        .select("id,title,author_id,is_hidden,hidden,hidden_reason,hidden_at,votes_true,votes_fake,votes_unsure,created_at")
+        .select("id,title,author_id,is_hidden,is_deleted,deleted_reason,hidden,hidden_reason,hidden_at,votes_true,votes_fake,votes_unsure,created_at")
         .order("created_at", desc=True)
         .limit(50)
     )
