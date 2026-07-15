@@ -5461,7 +5461,7 @@ def admin_delete_claim(payload: AdminClaimActionRequest, request: Request):
     # - is_hidden/hidden: reuse the ALREADY-LIVE restrictive RLS policy
     #   ("Hide hidden claims from public", migration 040) that removes the row
     #   from every feed, search and topic for non-admin, non-author readers.
-    #   Migration 049 adds a second restrictive policy ("Hide deleted claims")
+    #   Migration 051 adds a second restrictive policy ("Hide deleted claims")
     #   that also hides is_deleted rows from the AUTHOR's own views (my-claims,
     #   saved, single claim); admins still see everything.
     # Single UPDATE, returning author_id + title so we can still notify the author.
