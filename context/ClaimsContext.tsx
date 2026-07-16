@@ -1096,14 +1096,25 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     ]);
     setClaimOffset((currentOffset) => currentOffset + 1);
 
-    // PHASE 4 STEP 2
-    void runAiPrecheckAndRefreshClaim(createdClaim).catch((precheckError) => {
-      console.log("[ai precheck warning]", precheckError instanceof Error ? precheckError.message : precheckError);
-      setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
-    });
+    // API-created claims already queued this work on the backend. Calling the
+    // legacy hook too would race the server task and run OpenAI twice.
+    if (result.serverPostProcessingStarted) {
+      setAiPrecheckNotice(AI_PRECHECK_RUNNING_MESSAGE);
+      setTimeout(() => {
+        void refreshClaimAfterAiPrecheck(createdClaim).catch((refreshError) => {
+          console.log("[ai precheck refresh warning]", refreshError instanceof Error ? refreshError.message : refreshError);
+          setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
+        });
+      }, 8_000);
+    } else {
+      void runAiPrecheckAndRefreshClaim(createdClaim).catch((precheckError) => {
+        console.log("[ai precheck warning]", precheckError instanceof Error ? precheckError.message : precheckError);
+        setAiPrecheckNotice(AI_PRECHECK_FALLBACK_MESSAGE);
+      });
+    }
 
     return createdClaim;
-  }, [currentUser, ensureProfile, isVerified, profile, runAiPrecheckAndRefreshClaim]);
+  }, [currentUser, ensureProfile, isVerified, profile, refreshClaimAfterAiPrecheck, runAiPrecheckAndRefreshClaim]);
 
   // PHASE 3 STEP 20E
   const getUserVoteForClaim = useCallback(

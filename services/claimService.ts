@@ -247,6 +247,9 @@ export interface ClaimUpdates {
 interface ClaimResult {
   claim: Claim | null;
   error?: string;
+  // API-created claims already have AI/SEO/embedding work queued by the
+  // backend, so ClaimsContext must not call the legacy post-insert hook again.
+  serverPostProcessingStarted?: boolean;
   // TASK 1 (claim images) — set when a claim posted successfully but its
   // attached image could not be uploaded after a retry. The claim is still
   // created (fail-soft), but this lets the caller tell the user instead of the
@@ -266,6 +269,9 @@ export interface ClaimsResult {
 }
 
 const DEFAULT_CLAIM_LIMIT = 50;
+// Phase 2 rollback switch. false restores the original direct Supabase insert
+// without deleting or rewriting that path.
+const USE_API_CREATE = true;
 export const CLAIMS_LOAD_ERROR_MESSAGE =
   "Unable to load claims right now. Please pull to refresh or try again shortly.";
 // PHASE 3 STEP 11
@@ -1774,7 +1780,192 @@ function requestClaimEmbedding(claimId: string): void {
   })();
 }
 
-export async function createClaim(input: CreateClaimInput): Promise<ClaimResult> {
+export async function createClaimViaApi(input: CreateClaimInput): Promise<ClaimResult> {
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return {
+      claim: null,
+      error: "Verifact is temporarily unavailable. Please try again.",
+    };
+  }
+
+  const [{ data: userData, error: userError }, { data: sessionData, error: sessionError }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.auth.getSession(),
+  ]);
+  const user = userData?.user;
+  const accessToken = sessionData.session?.access_token;
+
+  if (userError || sessionError || !user || !accessToken) {
+    console.log("[create claim api] auth error:", userError ?? sessionError);
+    return {
+      claim: null,
+      error: "Please log in to post.",
+    };
+  }
+
+  let authorProfile = input.profile ?? null;
+  if (!authorProfile) {
+    const profileResult = await ensureProfileForUser(user);
+    authorProfile = profileResult.profile;
+
+    if (profileResult.error || !authorProfile) {
+      return {
+        claim: null,
+        error: profileResult.error ?? "Profile required to post.",
+      };
+    }
+  }
+
+  const normalizedSourceUrl = normalizeUrl(input.sourceUrl);
+  const normalizedVideoUrl = input.videoUrl ? normalizeUrl(input.videoUrl) : "";
+  const requestBody = removeUndefinedValues({
+    title: input.title.trim(),
+    description: input.description.trim(),
+    source_url: normalizedSourceUrl,
+    video_url: normalizedVideoUrl || null,
+    image_url: input.imageUrl || null,
+    image_path: input.imagePath || null,
+    thumbnail_url: input.thumbnailUrl || null,
+    category: input.category?.trim() || "Other",
+    sub_category: input.subCategory?.trim() || null,
+    politician_tag: input.politicianTag?.trim() || null,
+  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  let response: Response;
+  let responseData: Record<string, unknown> = {};
+
+  try {
+    response = await fetch(`${backendUrl}/api/claims`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal,
+    });
+
+    try {
+      responseData = (await response.json()) as Record<string, unknown>;
+    } catch {
+      responseData = {};
+    }
+  } catch (error) {
+    console.log("[create claim api] network error:", error);
+    return {
+      claim: null,
+      error: "Unable to reach Verifact. Check your connection and try again.",
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) {
+    const blocked = responseData.blocked === true;
+    const detail = typeof responseData.detail === "string" ? responseData.detail : "";
+    const reason = typeof responseData.reason === "string" ? responseData.reason : "";
+
+    if (blocked) {
+      return {
+        claim: null,
+        error: reason || "This content violates our community guidelines and cannot be posted.",
+      };
+    }
+
+    if (response.status === 401) {
+      return { claim: null, error: "Please log in to post." };
+    }
+
+    if (response.status === 403) {
+      return { claim: null, error: detail || "This account cannot post right now." };
+    }
+
+    if (response.status === 422) {
+      return { claim: null, error: detail || "Please check the claim details and try again." };
+    }
+
+    if (response.status === 429) {
+      return { claim: null, error: detail || "Too many claims today. Please try again later." };
+    }
+
+    return {
+      claim: null,
+      error: detail || "Could not create claim right now. Please try again.",
+    };
+  }
+
+  const insertedRow = responseData as unknown as ClaimRow;
+  const insertedClaimId = insertedRow.id;
+
+  if (!insertedClaimId) {
+    return {
+      claim: null,
+      error: "Claim was saved, but the server did not return a claim id.",
+    };
+  }
+
+  const mediaUpdatePayload: Record<string, unknown> = {};
+  let imageUploadFailed = false;
+
+  if (input.imageAsset) {
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const uploadedImage = await uploadClaimImage(user.id, insertedClaimId, input.imageAsset);
+        mediaUpdatePayload.image_url = uploadedImage.imageUrl;
+        mediaUpdatePayload.image_path = uploadedImage.imagePath;
+        mediaUpdatePayload.thumbnail_url = uploadedImage.thumbnailUrl;
+        imageUploadFailed = false;
+        break;
+      } catch (uploadError) {
+        imageUploadFailed = true;
+        console.log(`[create claim api] image upload attempt ${attempt} failed:`, uploadError);
+      }
+    }
+  }
+
+  let rowAfterMedia = insertedRow;
+  if (Object.keys(mediaUpdatePayload).length > 0) {
+    const { data: mediaData, error: mediaError } = await supabase
+      .from("claims")
+      .update(mediaUpdatePayload)
+      .eq("id", insertedClaimId)
+      .select("*")
+      .single();
+
+    if (mediaError) {
+      imageUploadFailed = Boolean(input.imageAsset);
+      console.log("[create claim api] media update warning:", mediaError);
+    } else if (mediaData) {
+      rowAfterMedia = mediaData as ClaimRow;
+    }
+  }
+
+  await saveClaimMentions(insertedClaimId, input.description);
+
+  const refreshedClaim = await fetchClaimById(insertedClaimId);
+  if (refreshedClaim.claim) {
+    return {
+      ...refreshedClaim,
+      imageUploadFailed,
+      serverPostProcessingStarted: true,
+    };
+  }
+
+  if (refreshedClaim.error) {
+    console.log("[create claim api] refetch warning:", refreshedClaim.error);
+  }
+
+  return {
+    claim: mapClaimRowToClaim(attachAuthorProfile(rowAfterMedia, authorProfile)),
+    imageUploadFailed,
+    serverPostProcessingStarted: true,
+  };
+}
+
+async function createClaimDirect(input: CreateClaimInput): Promise<ClaimResult> {
   // PHASE 3 STEP 29
   // PHASE 4 STEP 13
   // PHASE 4 STEP 13B
@@ -1943,6 +2134,10 @@ export async function createClaim(input: CreateClaimInput): Promise<ClaimResult>
     ),
     imageUploadFailed,
   };
+}
+
+export async function createClaim(input: CreateClaimInput): Promise<ClaimResult> {
+  return USE_API_CREATE ? createClaimViaApi(input) : createClaimDirect(input);
 }
 
 export async function updateClaim(id: string, updates: ClaimUpdates): Promise<ClaimResult> {
