@@ -31,7 +31,7 @@ from urllib.request import Request as UrlRequest, urlopen
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -1991,6 +1991,14 @@ DUPLICATE_MATCH_LIMIT = 3
 # Duplicate check fires on every submission; allow a generous per-IP budget.
 DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS = 120
 
+# SINGLE WRITE PATH — server-owned claim creation limits. The per-IP limit is
+# an inexpensive first layer; the per-user rolling 24-hour count below is the
+# durable limit shared by every Render worker.
+CLAIMS_CREATE_RATE_LIMIT_MAX_REQUESTS = 30
+CLAIMS_PER_DAY_LIMIT = max(1, int(os.environ.get("CLAIMS_PER_DAY_LIMIT", "20")))
+CLAIM_TITLE_MAX_LENGTH = 160
+CLAIM_DESCRIPTION_MAX_LENGTH = 1000
+
 RESERVED_USERNAME_MESSAGE = (
     "This username is reserved. If you represent this person or organization, "
     "please apply for verification."
@@ -2072,6 +2080,25 @@ class DuplicateCheckRequest(BaseModel):
 class ContentSafetyRequest(BaseModel):
     title: str = ""
     description: str = ""
+
+
+# SINGLE WRITE PATH — author_id is deliberately absent. It always comes from
+# the verified Supabase JWT, never from caller-controlled JSON.
+class ClaimCreateRequest(BaseModel):
+    title: str
+    description: str
+    category: str
+    source_url: str
+    video_url: str | None = None
+    image_url: str | None = None
+    image_path: str | None = None
+    thumbnail_url: str | None = None
+    sub_category: str | None = None
+    politician_tag: str | None = None
+
+
+class ClaimVoteRequest(BaseModel):
+    vote_type: str
 
 
 # PHASE 6 STEP 1 — Fire-and-forget embedding storage for a just-created claim.
@@ -6634,6 +6661,201 @@ def get_authenticated_user_id(request: Request) -> str:
     return str(user_id)
 
 
+def normalize_claim_write_url(value: str | None) -> str:
+    """Match the mobile normalizeUrl() behavior for claim write payloads."""
+    normalized = str(value or "").strip()
+
+    if not normalized:
+        return ""
+
+    if normalized.startswith("//"):
+        normalized = f"https:{normalized}"
+    elif not re.match(r"^https?://", normalized, flags=re.IGNORECASE):
+        normalized = f"https://{normalized}"
+
+    parsed = urlparse(normalized)
+    hostname = str(parsed.hostname or "").lower()
+    valid_hostname = hostname == "localhost" or bool(
+        re.fullmatch(r"(?:[a-z0-9-]+\.)+[a-z]{2,}", hostname, flags=re.IGNORECASE)
+    )
+
+    if parsed.scheme.lower() not in {"http", "https"} or not valid_hostname:
+        return ""
+
+    return normalized
+
+
+def normalize_optional_claim_write_url(value: str | None, field_label: str) -> str | None:
+    if value is None or not str(value).strip():
+        return None
+
+    normalized = normalize_claim_write_url(value)
+    if not normalized:
+        raise HTTPException(status_code=422, detail=f"Enter a valid {field_label} URL.")
+
+    return normalized
+
+
+def validate_claim_create_payload(payload: ClaimCreateRequest) -> dict:
+    title = payload.title.strip()
+    description = payload.description.strip()
+    category = payload.category.strip()
+    source_url = normalize_claim_write_url(payload.source_url)
+
+    if not title:
+        raise HTTPException(status_code=422, detail="Title is required.")
+    if len(title) > CLAIM_TITLE_MAX_LENGTH:
+        raise HTTPException(status_code=422, detail="Title must be 160 characters or fewer.")
+    if not description:
+        raise HTTPException(status_code=422, detail="Description is required.")
+    if len(description) > CLAIM_DESCRIPTION_MAX_LENGTH:
+        raise HTTPException(status_code=422, detail="Description must be 1000 characters or fewer.")
+    if not category:
+        raise HTTPException(status_code=422, detail="Category is required.")
+    if not str(payload.source_url or "").strip():
+        raise HTTPException(status_code=422, detail="Source URL is required.")
+    if not source_url:
+        raise HTTPException(status_code=422, detail="Enter a valid source URL.")
+
+    return {
+        "title": title,
+        "description": description,
+        "category": category,
+        "source_url": source_url,
+        "video_url": normalize_optional_claim_write_url(payload.video_url, "video"),
+        "image_url": normalize_optional_claim_write_url(payload.image_url, "image"),
+        "image_path": str(payload.image_path or "").strip() or None,
+        "thumbnail_url": normalize_optional_claim_write_url(payload.thumbnail_url, "thumbnail"),
+        "sub_category": str(payload.sub_category or "").strip() or None,
+        "politician_tag": str(payload.politician_tag or "").strip() or None,
+    }
+
+
+def get_active_write_profile(supabase: Any, user_id: str, action: str) -> dict:
+    result = (
+        supabase.table("profiles")
+        .select("id,is_suspended,is_deleted,suspension_reason")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    profile = get_first_row(result)
+
+    if not profile or profile.get("is_deleted"):
+        raise HTTPException(status_code=403, detail="An active profile is required.")
+
+    if profile.get("is_suspended"):
+        fallback = f"This account is suspended from {action}."
+        raise HTTPException(status_code=403, detail=str(profile.get("suspension_reason") or fallback))
+
+    return profile
+
+
+def enforce_claims_per_day_limit(supabase: Any, user_id: str) -> None:
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+
+    try:
+        response = (
+            supabase.table("claims")
+            .select("id", count="exact")
+            .eq("author_id", user_id)
+            .gte("created_at", since)
+            .execute()
+        )
+    except Exception as error:
+        print("[claims/create] daily limit query failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not verify the posting limit. Please retry.")
+
+    count = getattr(response, "count", None)
+    if count is None:
+        rows = getattr(response, "data", None) or []
+        count = len(rows) if isinstance(rows, list) else 0
+
+    if int(count or 0) >= CLAIMS_PER_DAY_LIMIT:
+        raise HTTPException(status_code=429, detail="You reached today's claim limit. Please try again later.")
+
+
+def generate_claim_write_slug(title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.strip().lower()).strip("-")[:72].rstrip("-")
+    return slug or "claim"
+
+
+def build_claim_insert_payload(author_id: str, fields: dict, embedding: Any = None, topic_cluster_id: str | None = None) -> dict:
+    created_at = datetime.now(timezone.utc)
+    vote_window_end = created_at + timedelta(hours=20)
+    score_lock_at = created_at + timedelta(hours=24)
+    created_at_iso = created_at.isoformat()
+    score_lock_at_iso = score_lock_at.isoformat()
+
+    insert_payload = {
+        "author_id": author_id,
+        "created_at": created_at_iso,
+        "title": fields["title"],
+        "description": fields["description"],
+        "source_url": fields["source_url"],
+        "video_url": fields["video_url"],
+        "category": fields["category"],
+        "sub_category": fields["sub_category"] if fields["category"] == "Politics" else None,
+        "politician_tag": (
+            fields["politician_tag"]
+            if fields["category"] == "Politics" and fields["sub_category"] == "Politician"
+            else None
+        ),
+        "slug": generate_claim_write_slug(fields["title"]),
+        "votes_true": 0,
+        "votes_fake": 0,
+        "votes_unsure": 0,
+        "total_votes": 0,
+        "verdict_reason": None,
+        "verdict_calculated_at": None,
+        "status": "ACTIVE",
+        "ai_status": "PENDING",
+        "claim_type": "UNCLEAR",
+        "ai_confidence": None,
+        "ai_reason": None,
+        "report_count": 0,
+        "evidence_count": 0,
+        "evidence_used_count": 0,
+        "is_flagged": False,
+        "mode": "production",
+        "current_phase": 1,
+        "vote_window_minutes": 1200,
+        "vote_window_end": vote_window_end.isoformat(),
+        "vote_accept_until": vote_window_end.isoformat(),
+        "score_lock_at": score_lock_at_iso,
+        "published_at": None,
+        "phase4_locked": False,
+        "early_verdict_fired": False,
+        "suspicious_activity": False,
+        "weighted_community_score": 0,
+        "final_score": 0,
+        "min_votes_required": 15,
+        "expected_participation": 30,
+        "source_count": 0,
+        "source_quality": "unknown",
+        "source_domain": None,
+        "source_score": None,
+        "source_reason": None,
+        "red_flags": [],
+        "ai_summary": None,
+        "expires_at": score_lock_at_iso,
+        "safety_status": "APPROVED",
+        "safety_category": None,
+        "safety_checked_at": created_at_iso,
+    }
+
+    for key in ("image_url", "image_path", "thumbnail_url"):
+        if fields.get(key):
+            insert_payload[key] = fields[key]
+
+    if embedding is not None:
+        insert_payload["embedding"] = embedding
+    if topic_cluster_id:
+        insert_payload["topic_cluster_id"] = topic_cluster_id
+
+    return insert_payload
+
+
 # PHASE 5 STEP 1B
 def require_admin_user(request: Request) -> str:
     authenticated_user_id = get_authenticated_user_id(request)
@@ -7032,6 +7254,10 @@ def store_claim_embedding(claim_id: str) -> bool:
         print("[claims/embed] claim not found:", claim_id, flush=True)
         return False
 
+    if claim.get("embedding"):
+        print("[claims/embed] existing embedding reused for claim:", claim_id, flush=True)
+        return True
+
     embedding = generate_claim_embedding(
         title=str(claim.get("title") or ""),
         description=str(claim.get("description") or ""),
@@ -7098,8 +7324,7 @@ def api_claims_embed(payload: ClaimEmbedRequest, request: Request):
     return {"ok": stored}
 
 
-@app.post("/api/claims/check-duplicate")
-def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request):
+def find_duplicate_claims(title: str, description: str, embedding: Any = None) -> dict:
     """Suggest existing claims that semantically match the one being submitted.
 
     Runs BEFORE the claim is saved so the frontend can offer "vote on this
@@ -7112,24 +7337,13 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
         NO / OPPOSITE (this is what stops "voted for" matching "voted against").
       * sim >= 0.95        -> trust the embedding, skip the stance check.
     """
-    enforce_rate_limit(
-        request,
-        "check_duplicate",
-        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
-        AI_RATE_LIMIT_WINDOW_SECONDS,
-    )
-    get_authenticated_user_id(request)
-
-    title = payload.title.strip()
-    description = payload.description.strip()
-
-    embedding = generate_claim_embedding(title=title, description=description)
+    embedding = embedding or generate_claim_embedding(title=title, description=description)
 
     if embedding is None:
         # Fail open: no embedding -> no suggestions, but posting is never blocked.
         # PHASE 6 STEP 4: topic_cluster is an additive key (always present, may
         # be null) so clients can rely on its shape.
-        return {"duplicates": [], "topic_cluster": None}
+        return {"duplicates": [], "topic_cluster": None, "embedding": None}
 
     try:
         supabase = get_supabase_client()
@@ -7145,7 +7359,7 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
         candidates = response.data or []
     except Exception as error:
         print(f"[check-duplicate] vector search failed: {error}", flush=True)
-        return {"duplicates": [], "topic_cluster": None}
+        return {"duplicates": [], "topic_cluster": None, "embedding": embedding}
 
     duplicates = []
 
@@ -7203,7 +7417,23 @@ def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request)
     except Exception as cluster_error:
         print(f"[check-duplicate] topic cluster lookup failed: {cluster_error}", flush=True)
 
-    return {"duplicates": duplicates, "topic_cluster": topic_cluster}
+    return {"duplicates": duplicates, "topic_cluster": topic_cluster, "embedding": embedding}
+
+
+@app.post("/api/claims/check-duplicate")
+def api_claims_check_duplicate(payload: DuplicateCheckRequest, request: Request):
+    enforce_rate_limit(
+        request,
+        "check_duplicate",
+        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    get_authenticated_user_id(request)
+    result = find_duplicate_claims(payload.title.strip(), payload.description.strip())
+    return {
+        "duplicates": result["duplicates"],
+        "topic_cluster": result["topic_cluster"],
+    }
 
 
 # CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
@@ -7293,6 +7523,210 @@ def api_claims_safety_check(payload: ContentSafetyRequest, request: Request):
             "matched_layer": matched_layer,
         },
     )
+
+
+@app.post("/api/claims", status_code=201)
+def api_create_claim(payload: ClaimCreateRequest, request: Request, background_tasks: BackgroundTasks):
+    """Authoritative claim write path; legacy RLS inserts remain during rollout."""
+    author_id = get_authenticated_user_id(request)
+    enforce_rate_limit(
+        request,
+        "claims_create",
+        CLAIMS_CREATE_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    fields = validate_claim_create_payload(payload)
+    supabase = get_supabase_client()
+    get_active_write_profile(supabase, author_id, "posting")
+    enforce_claims_per_day_limit(supabase, author_id)
+
+    verdict = check_content_safety(fields["title"], fields["description"])
+    if not verdict.get("safe", True):
+        category = str(verdict.get("category") or "objectionable")
+        reason = str(verdict.get("reason") or BLOCKED_CONTENT_MESSAGE)
+        log_content_safety_block(author_id, fields["title"], category, reason)
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "code": "UNSAFE_CLAIM_TEXT",
+                "blocked": True,
+                "reason": BLOCKED_CONTENT_MESSAGE,
+                "category": category,
+            },
+        )
+
+    duplicate_result = find_duplicate_claims(fields["title"], fields["description"])
+    embedding = duplicate_result.get("embedding")
+    topic_cluster = duplicate_result.get("topic_cluster") or {}
+    topic_cluster_id = str(topic_cluster.get("topic_cluster_id") or "") or None
+    insert_payload = build_claim_insert_payload(
+        author_id,
+        fields,
+        embedding=embedding,
+        topic_cluster_id=topic_cluster_id,
+    )
+
+    try:
+        insert_result = supabase.table("claims").insert(insert_payload).execute()
+    except Exception as error:
+        print("[claims/create] insert failed:", str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not create claim right now.")
+
+    created_claim = get_first_row(insert_result)
+    claim_id = str((created_claim or {}).get("id") or "")
+    if not created_claim or not claim_id:
+        print("[claims/create] insert returned no row", flush=True)
+        raise HTTPException(status_code=500, detail="Could not create claim right now.")
+
+    share_url = f"{PUBLIC_SITE_URL}/claim/{claim_id}"
+    try:
+        update_result = (
+            supabase.table("claims")
+            .update({"share_url": share_url})
+            .eq("id", claim_id)
+            .execute()
+        )
+        created_claim = get_first_row(update_result) or {**created_claim, "share_url": share_url}
+    except Exception as error:
+        print("[claims/create] share URL update failed:", str(error), flush=True)
+        created_claim = {**created_claim, "share_url": share_url}
+
+    background_tasks.add_task(run_claim_post_insert_tasks, claim_id, author_id)
+    print(
+        "[claims/create] created",
+        {
+            "claim_id": claim_id,
+            "author_id": author_id,
+            "duplicate_candidates": len(duplicate_result.get("duplicates") or []),
+            "topic_cluster_id": topic_cluster_id,
+        },
+        flush=True,
+    )
+    return created_claim
+
+
+def parse_claim_timestamp(value: Any) -> datetime | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+@app.post("/api/claims/{claim_id}/vote", status_code=201)
+def api_vote_on_claim(claim_id: str, payload: ClaimVoteRequest, request: Request):
+    user_id = get_authenticated_user_id(request)
+    enforce_rate_limit(
+        request,
+        "claims_vote",
+        DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+    normalized_claim_id = claim_id.strip()
+    if not is_uuid(normalized_claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    vote_type = payload.vote_type.strip().upper().replace("NOT_SURE", "UNSURE")
+    if vote_type not in {"TRUE", "FAKE", "UNSURE"}:
+        raise HTTPException(status_code=422, detail="vote_type must be TRUE, FAKE, or UNSURE.")
+
+    supabase = get_supabase_client()
+    get_active_write_profile(supabase, user_id, "voting")
+    claim_result = (
+        supabase.table("claims")
+        .select("*")
+        .eq("id", normalized_claim_id)
+        .limit(1)
+        .execute()
+    )
+    claim = get_first_row(claim_result)
+    if not claim or claim.get("is_deleted"):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    read_only_statuses = {
+        "FINALIZED_TRUE",
+        "FINALIZED_FAKE",
+        "INSUFFICIENT_DATA",
+        "COMMUNITY_TRUE",
+        "COMMUNITY_FAKE",
+        "NEEDS_MORE_EVIDENCE",
+        "VOTING_CLOSED",
+        "LOCKED",
+    }
+    vote_deadline = parse_claim_timestamp(claim.get("vote_accept_until") or claim.get("vote_window_end"))
+    if (
+        claim.get("published_at")
+        or claim.get("phase4_locked")
+        or str(claim.get("status") or "").upper() in read_only_statuses
+        or (vote_deadline is not None and vote_deadline <= datetime.now(timezone.utc))
+    ):
+        raise HTTPException(status_code=409, detail="Voting is closed.")
+
+    existing_result = (
+        supabase.table("votes")
+        .select("*")
+        .eq("claim_id", normalized_claim_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    existing_vote = get_first_row(existing_result)
+    if existing_vote:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False,
+                "already_voted": True,
+                "message": "You already voted on this claim.",
+                "vote": existing_vote,
+            },
+        )
+
+    vote_value = 1.0 if vote_type == "TRUE" else 0.0 if vote_type == "FAKE" else 0.5
+    vote_payload = {
+        "claim_id": normalized_claim_id,
+        "user_id": user_id,
+        "vote_type": vote_type,
+        "vote_value": vote_value,
+        "accepted": True,
+        "suspicious": False,
+        "rejected_reason": None,
+    }
+
+    try:
+        insert_result = supabase.table("votes").insert(vote_payload).execute()
+    except Exception as error:
+        message = str(error).lower()
+        if "23505" in message or "duplicate" in message or "unique" in message:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "ok": False,
+                    "already_voted": True,
+                    "message": "You already voted on this claim.",
+                },
+            )
+        print("[claims/vote] insert failed:", str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not save vote right now.")
+
+    inserted_vote = get_first_row(insert_result) or vote_payload
+    try:
+        supabase.rpc("recalculate_claim_vote_scores", {"target_claim_id": normalized_claim_id}).execute()
+    except Exception as error:
+        print("[claims/vote] score refresh warning:", str(error), flush=True)
+
+    topic_cluster_id = str(claim.get("topic_cluster_id") or "")
+    if topic_cluster_id:
+        update_cluster_stats(topic_cluster_id)
+
+    refreshed_claim = fetch_claim_row(normalized_claim_id) or claim
+    return {"ok": True, "vote": inserted_vote, "claim": refreshed_claim}
 
 
 # MODERATION CHECK (NEW) — dedicated endpoint with a single, stable response
@@ -7751,17 +8185,7 @@ def ai_source_score(request: Request, url: str = ""):
     return source_metadata
 
 
-@app.post("/ai/precheck", response_model=AiPrecheckResponse, response_model_exclude_none=True)
-def ai_precheck(payload: AiPrecheckRequest, request: Request):
-    claim_id = payload.claim_id.strip()
-
-    if not claim_id:
-        raise HTTPException(status_code=400, detail="claim_id is required")
-
-    # PHASE 4 STEP 27
-    enforce_rate_limit(request, "ai_precheck", AI_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
-    authenticated_user_id = get_authenticated_user_id(request)
-    enforce_claim_ai_cooldown(claim_id)
+def run_claim_ai_precheck_pipeline(claim_id: str, authenticated_user_id: str) -> dict:
     claim = fetch_claim_row(claim_id)
 
     if not claim:
@@ -7820,6 +8244,57 @@ def ai_precheck(payload: AiPrecheckRequest, request: Request):
         print("[ai/precheck] SEO generation failed (non-fatal):", str(seo_error), flush=True)
 
     return build_ai_precheck_response(payload.claim_id, update_result)
+
+
+@app.post("/ai/precheck", response_model=AiPrecheckResponse, response_model_exclude_none=True)
+def ai_precheck(payload: AiPrecheckRequest, request: Request):
+    claim_id = payload.claim_id.strip()
+
+    if not claim_id:
+        raise HTTPException(status_code=400, detail="claim_id is required")
+
+    enforce_rate_limit(request, "ai_precheck", AI_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS)
+    authenticated_user_id = get_authenticated_user_id(request)
+    enforce_claim_ai_cooldown(claim_id)
+    return run_claim_ai_precheck_pipeline(claim_id, authenticated_user_id)
+
+
+def run_claim_post_insert_tasks(claim_id: str, author_id: str) -> None:
+    """Non-blocking enrichment shared by every endpoint-created claim."""
+    try:
+        store_claim_embedding(claim_id)
+        claim = fetch_claim_row(claim_id)
+        if claim:
+            cluster_id = str(claim.get("topic_cluster_id") or "")
+            if cluster_id:
+                update_cluster_stats(cluster_id)
+            else:
+                find_or_create_topic_cluster(
+                    claim_id=claim_id,
+                    title=str(claim.get("title") or ""),
+                    description=str(claim.get("description") or ""),
+                    category=str(claim.get("category") or ""),
+                )
+    except Exception as error:
+        print(f"[claims/create] embedding/topic background warning: {error}", flush=True)
+
+    try:
+        run_claim_ai_precheck_pipeline(claim_id, author_id)
+    except Exception as error:
+        print(f"[claims/create] AI/SEO background warning: {error}", flush=True)
+        try:
+            claim = fetch_claim_row(claim_id)
+            if claim:
+                generate_claim_seo(
+                    claim_id=claim_id,
+                    title=str(claim.get("title") or ""),
+                    description=str(claim.get("description") or ""),
+                    category=str(claim.get("category") or ""),
+                    verdict=None,
+                    version="creation",
+                )
+        except Exception as seo_error:
+            print(f"[claims/create] SEO background warning: {seo_error}", flush=True)
 
 
 # PHASE 4 STEP 3
