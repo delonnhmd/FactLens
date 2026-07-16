@@ -1,0 +1,23 @@
+-- SINGLE WRITE PATH — PHASE 4 HOLD
+-- DO NOT RUN until Phase 3 has been clean for 48-72 hours and the product
+-- owner explicitly approves locking out legacy app bundles.
+--
+-- RUN NOW: NONE. Phase 1 and Phase 2 require no database migration.
+--
+-- Consequence of the lock: app bundles older than the Phase 2 production OTA
+-- can no longer create claims. Service-role inserts from POST /api/claims keep
+-- working because service_role bypasses RLS.
+
+-- PHASE 4 FORWARD (HELD — intentionally commented out):
+-- drop policy if exists "Users can insert their own claims" on public.claims;
+
+-- PHASE 4 REVERSAL (HELD — recreates the exact current policy from 024):
+-- drop policy if exists "Users can insert their own claims" on public.claims;
+-- create policy "Users can insert their own claims"
+-- on public.claims
+-- for insert
+-- to authenticated
+-- with check (
+--   auth.uid() = author_id
+--   and public.current_user_can_submit()
+-- );
