@@ -31,6 +31,9 @@ import { VerdictBanner } from "../../../components/VerdictBanner";
 import { VoteBreakdownBars } from "../../../components/VoteBreakdownBars";
 import { MentionText } from "../../../components/MentionText";
 import { MentionTextInput } from "../../../components/MentionTextInput";
+// Shared media block (image / YouTube thumb / link) — identical logic to the feed card.
+import { ClaimMedia } from "../../../components/ClaimMedia";
+import { resolveClaimMedia } from "../../../utils/claimMedia";
 import { useAuth } from "../../../context/AuthContext";
 import { useClaims } from "../../../context/ClaimsContext";
 // Admin moderation: hide/unhide a claim from the detail screen (admins only).
@@ -1289,25 +1292,28 @@ export default function ClaimDetailScreen() {
               <StatusBadge status={claim.status} />
             </View>
             <MentionText text={claim.description} style={styles.description} />
-            {/* PHASE 5 PRE-LAUNCH: show the claim image inline, right under the description. */}
-            {claim.media.imageUrl ? (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => {
-                  Linking.openURL(claim.media.imageUrl || "").catch(() => {
-                    Alert.alert("Could not open image.");
-                  });
-                }}
-                accessibilityRole="imagebutton"
-                accessibilityLabel="Open claim image"
-              >
-                <Image
-                  source={{ uri: claim.media.imageUrl }}
-                  style={styles.claimHeroImage}
-                  resizeMode="cover"
-                  onError={(event) => console.log("Image load error:", event.nativeEvent.error)}
+            {/* Shared media block (image / YouTube thumb / link) at the top of
+                the claim body — same helper + rendering as the feed card. Opens
+                the underlying media in the browser on tap. Nothing renders (and
+                no margin is reserved) when the claim has no media. */}
+            {resolveClaimMedia(claim.media).kind !== "none" ? (
+              <View style={styles.heroMediaBlock}>
+                <ClaimMedia
+                  media={claim.media}
+                  fullResolution
+                  borderRadius={appTheme.radius.sm}
+                  onPress={() => {
+                    const target =
+                      claim.media.imageUrl || claim.media.youtubeUrl || claim.media.videoUrl;
+
+                    if (target) {
+                      Linking.openURL(target).catch(() => {
+                        Alert.alert("Could not open this media.");
+                      });
+                    }
+                  }}
                 />
-              </TouchableOpacity>
+              </View>
             ) : null}
             <View style={styles.metaWrap}>
               {claim.category ? <Text style={styles.category}>{claim.category}</Text> : null}
@@ -1503,18 +1509,9 @@ export default function ClaimDetailScreen() {
               {mediaUrl && mediaPlatform ? (
                 <View style={styles.videoDetailPanel}>
                   <Text style={styles.videoPlatformBadge}>{mediaPlatform}</Text>
-                  {claim.media.youtubeThumbnailUrl ? (
-                    <View style={styles.detailThumbnailWrap}>
-                      <Image
-                        source={{ uri: claim.media.youtubeThumbnailUrl }}
-                        style={styles.detailVideoThumbnail}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.detailPlayOverlay}>
-                        <Ionicons name="play" size={24} color={appTheme.colors.chipActiveText} />
-                      </View>
-                    </View>
-                  ) : null}
+                  {/* The video thumbnail now renders in the shared media block at
+                      the top of the claim body; this panel keeps just the
+                      platform badge + the raw link. */}
                   <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={() => {
@@ -2565,14 +2562,10 @@ function createStyles(theme: AppTheme) {
     height: 260,
     width: "100%",
   },
-  // PHASE 5 PRE-LAUNCH: inline claim image under the description.
-  claimHeroImage: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 8,
-    height: 220,
+  // Shared media block wrapper under the description (image / YouTube / link).
+  heroMediaBlock: {
     marginBottom: 10,
     marginTop: 10,
-    width: "100%",
   },
   videoDetailPanel: {
     backgroundColor: theme.colors.card,

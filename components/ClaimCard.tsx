@@ -8,7 +8,6 @@ import {
   Animated,
   Easing,
   Image,
-  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -20,6 +19,10 @@ import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality
 import { useAppTheme, useDisplaySettings } from "../hooks/useTheme";
 import type { AppTheme } from "../context/DisplaySettingsContext";
 import { MentionText } from "./MentionText";
+// Shared media block (image / YouTube thumb / link) — identical logic on the
+// feed card and the claim detail screen.
+import { ClaimMedia } from "./ClaimMedia";
+import { resolveClaimMedia } from "../utils/claimMedia";
 // APPLE GUIDELINE 1.2 — user blocking (NEW)
 import { useAuth } from "../context/AuthContext";
 import { useClaims } from "../context/ClaimsContext";
@@ -278,9 +281,10 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
   const authorHandle = claim.authorUsername ? `@${claim.authorUsername}` : "Contributor";
   // TASK 2 (admin badge): show an Admin badge on the author row for admin accounts.
   const authorIsAdmin = !authorIsAnonymous && hasAdminBadge(claim.author?.badgeList);
-  // PHASE 5 STEP 6
-  const thumbnailUrl = claim.media.thumbnailUrl || claim.media.imageUrl || null;
   const showAvatarImage = Boolean(claim.authorAvatarUrl && !avatarLoadFailed && !authorIsAnonymous);
+  // Only reserve space for the media block when the claim actually has media —
+  // otherwise the body's `gap` would add an empty slot between author and title.
+  const hasMedia = resolveClaimMedia(claim.media).kind !== "none";
   // PHASE 5 election positioning UI
   const isLive = isLiveClaim(claim.createdAt);
 
@@ -628,6 +632,16 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
             </Text>
           </TouchableOpacity>
 
+          {/* MEDIA BLOCK (image / YouTube thumb / link) — full-bleed, directly
+              under the author row and above the title. Tapping it opens the
+              claim detail, same as tapping the card. Nothing renders (and no
+              gap is reserved) when the claim has no media. */}
+          {hasMedia ? (
+            <View style={styles.mediaBlock}>
+              <ClaimMedia media={claim.media} onPress={onPress} borderRadius={0} />
+            </View>
+          ) : null}
+
           <Text style={styles.title}>
             {claim.title}
           </Text>
@@ -642,22 +656,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
               accessibilityHint="Expands the full claim description"
             >
               <Text style={styles.readMore}>Read more</Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {thumbnailUrl ? (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                Linking.openURL(claim.media.imageUrl || thumbnailUrl).catch(() => {
-                  Alert.alert("Could not open image.");
-                });
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Open claim image"
-              accessibilityHint="Opens the claim image in a browser"
-            >
-              <Image source={{ uri: thumbnailUrl }} style={styles.claimThumbnail} resizeMode="cover" />
             </TouchableOpacity>
           ) : null}
 
@@ -833,12 +831,10 @@ function createStyles(theme: AppTheme) {
     fontWeight: "500",
     marginTop: 4,
   },
-  // PHASE 5 STEP 6
-  claimThumbnail: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 8,
-    height: 180,
-    width: "100%",
+  // MEDIA BLOCK: full-bleed to the card edges (cancels the body's horizontal
+  // padding) so the 16:9 media spans the full card width with no side gaps.
+  mediaBlock: {
+    marginHorizontal: -14,
   },
   badgeRow: {
     alignItems: "center",
