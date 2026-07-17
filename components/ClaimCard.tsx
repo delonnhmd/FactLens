@@ -8,6 +8,7 @@ import {
   Animated,
   Easing,
   Image,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -459,6 +460,21 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
     );
   }, [adminDeleteClaim, claim.id, onDeleted]);
 
+  // Native OS share sheet from the feed "..." menu. React Native's built-in
+  // Share API — no new dependency. `claim.shareUrl` is https://factfight.com/claim/{id}.
+  const handleShare = useCallback(async () => {
+    try {
+      const url = claim.shareUrl;
+      await Share.share({
+        message: `${claim.title}\n\nSee the evidence and vote on FactFight:\n${url}`,
+        url,
+        title: claim.title,
+      });
+    } catch {
+      // user cancelled — no alert needed
+    }
+  }, [claim.shareUrl, claim.title]);
+
   const handleOptions = useCallback(() => {
     // Author self-delete (NEW): compute at tap time so the 3-hour window is
     // evaluated against the current clock. Hidden entirely once finalized or
@@ -523,7 +539,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
         : []),
       {
         text: "Share",
-        onPress: () => Alert.alert("Share", claim.shareUrl),
+        onPress: () => {
+          void handleShare();
+        },
       },
       {
         text: "Cancel",
@@ -539,6 +557,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
     handleAdminDelete,
     handleBlock,
     handleDeleteOwnClaim,
+    handleShare,
     handleToggleHidden,
     handleToggleSave,
     isAdmin,

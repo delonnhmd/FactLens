@@ -18,7 +18,7 @@
 // PHASE 5 STEP 5 PRE-LAUNCH
 // PHASE 5 STEP 6
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, TextInput } from "react-native";
+import { Alert, Image, Linking, View, Text, ScrollView, StyleSheet, SafeAreaView, Share, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { EmptyState } from "../../../components/EmptyState";
@@ -1208,8 +1208,20 @@ export default function ClaimDetailScreen() {
   const showAuthorAvatarImage = Boolean(
     claim.authorAvatarUrl && !authorAvatarLoadFailed && claim.authorUsername !== "deleted_user",
   );
-  const shareClaim = () => {
-    Alert.alert("Share link copied.", claim.shareUrl);
+  // Native OS share sheet (Messages, Mail, X, WhatsApp, Copy, …) via React
+  // Native's built-in Share API — no new dependency. `claim.shareUrl` is already
+  // built from SHARE_BASE_URL, i.e. https://factfight.com/claim/{id}.
+  const shareClaim = async () => {
+    try {
+      const url = claim.shareUrl;
+      await Share.share({
+        message: `${claim.title}\n\nSee the evidence and vote on FactFight:\n${url}`,
+        url, // iOS rich preview
+        title: claim.title, // Android dialog title
+      });
+    } catch {
+      // user cancelled — no alert needed
+    }
   };
 
   // PHASE 5 STEP 3
@@ -1487,16 +1499,20 @@ export default function ClaimDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Share Link</Text>
+          <Text style={styles.label}>Share</Text>
           <Text style={styles.sourceUrl} selectable>
             {claim.shareUrl}
           </Text>
           <TouchableOpacity
-            style={styles.copyButton}
+            style={styles.shareButton}
             activeOpacity={0.8}
-            onPress={() => Alert.alert("Share link copied.")}
+            onPress={shareClaim}
+            accessibilityRole="button"
+            accessibilityLabel="Share this claim"
+            accessibilityHint="Opens the system share sheet"
           >
-            <Text style={styles.copyButtonText}>Copy Share Link</Text>
+            <Ionicons name="share-outline" size={16} color={appTheme.colors.chipActiveText} />
+            <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
         </View>
 
@@ -2536,14 +2552,17 @@ function createStyles(theme: AppTheme) {
     fontSize: 11,
     lineHeight: 15,
   },
-  copyButton: {
+  shareButton: {
     alignItems: "center",
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.sm,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    justifyContent: "center",
     marginTop: theme.spacing.md,
     paddingVertical: theme.spacing.md,
   },
-  copyButtonText: {
+  shareButtonText: {
     color: theme.colors.chipActiveText,
     fontSize: theme.typography.body.fontSize,
     fontWeight: "500",
