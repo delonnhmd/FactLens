@@ -19,6 +19,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 1,
     },
+    {
+      url: new URL("/privacy", publicEnvironment.siteUrl).toString(),
+      changeFrequency: "monthly",
+      priority: 0.3,
+    },
+    {
+      url: new URL("/terms", publicEnvironment.siteUrl).toString(),
+      changeFrequency: "monthly",
+      priority: 0.3,
+    },
     ...claims.map((claim) => ({
       url: new URL(`/claim/${claim.slug ?? claim.id}`, publicEnvironment.siteUrl).toString(),
       lastModified: claim.updatedAt ? new Date(claim.updatedAt) : undefined,

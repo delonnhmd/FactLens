@@ -1,5 +1,6 @@
 import { Bot, FileCheck2, UsersRound } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { ClaimCard } from "@/components/claims/claim-card";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
@@ -134,8 +135,8 @@ export default async function Home() {
         <section className="border-t border-[var(--ff-border)] bg-[var(--ff-surface)] px-4 py-12 text-center sm:px-7">
           <div className="mx-auto max-w-2xl">
             <h2 className="text-2xl font-medium tracking-[-0.02em] text-[var(--ff-navy)]">Ready to weigh the evidence?</h2>
-            <p className="mt-3 leading-7 text-[var(--ff-text-secondary)]">Download the app to vote, contribute evidence, and follow community verdicts.</p>
-            <div className="mt-6"><AppStoreLink label="Get the app" /></div>
+            <p className="mt-3 leading-7 text-[var(--ff-text-secondary)]">Use FactFight in your browser to vote, contribute evidence, and follow community verdicts.</p>
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row"><Link className="inline-flex items-center justify-center rounded-[var(--ff-radius-card)] bg-[var(--ff-navy)] px-5 py-3 text-sm font-medium text-white" href="/feed">Open FactFight on web</Link><AppStoreLink label="Get the mobile app" /></div>
           </div>
         </section>
       </main>

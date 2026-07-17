@@ -1,16 +1,9 @@
-import { Home, LogOut, PlusSquare, Search, Trophy, UserRound } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { logoutAction } from "@/app/(auth)/actions";
-
-const navigation = [
-  { label: "Feed", icon: Home, href: "/feed", enabled: true },
-  { label: "Create", icon: PlusSquare, enabled: false },
-  { label: "Search", icon: Search, enabled: false },
-  { label: "Leaderboard", icon: Trophy, enabled: false },
-  { label: "Profile", icon: UserRound, enabled: false },
-] as const;
+import { DesktopMainNavigation, MobileMainNavigation } from "@/components/navigation/main-navigation";
 
 export default function MainLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
@@ -38,37 +31,7 @@ export default function MainLayout({ children }: Readonly<{ children: ReactNode 
             </Link>
             <p className="mt-2 text-sm leading-5 text-[var(--ff-text-muted)]">Fight misinformation, not each other.</p>
 
-            <nav aria-label="Main navigation" className="mt-8 space-y-1.5">
-              {navigation.map((item) => {
-                const Icon = item.icon;
-                const content = (
-                  <>
-                    <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
-                    <span>{item.label}</span>
-                    {!item.enabled ? <span className="ml-auto text-[10px] text-[var(--ff-text-muted)]">Soon</span> : null}
-                  </>
-                );
-
-                return item.enabled ? (
-                  <Link
-                    aria-current="page"
-                    className="flex items-center gap-3 rounded-[var(--ff-radius-card)] bg-[color-mix(in_srgb,var(--ff-navy)_8%,white)] px-3 py-3 text-sm font-medium text-[var(--ff-navy)]"
-                    href={item.href}
-                    key={item.label}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    className="flex cursor-not-allowed items-center gap-3 rounded-[var(--ff-radius-card)] px-3 py-3 text-sm text-[var(--ff-text-muted)]"
-                    key={item.label}
-                  >
-                    {content}
-                  </span>
-                );
-              })}
-            </nav>
+            <DesktopMainNavigation />
 
             <form action={logoutAction} className="mt-auto">
               <button
@@ -96,33 +59,7 @@ export default function MainLayout({ children }: Readonly<{ children: ReactNode 
         </aside>
       </div>
 
-      <nav
-        aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[var(--ff-border)] bg-white px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] lg:hidden"
-      >
-        {navigation.map((item) => {
-          const Icon = item.icon;
-          const className = item.enabled
-            ? "flex flex-col items-center gap-1 rounded-[10px] px-1 py-1.5 text-[var(--ff-navy)]"
-            : "flex cursor-not-allowed flex-col items-center gap-1 rounded-[10px] px-1 py-1.5 text-[var(--ff-text-muted)] opacity-65";
-          const content = (
-            <>
-              <Icon aria-hidden="true" size={19} strokeWidth={item.enabled ? 2 : 1.7} />
-              <span className="text-[10px] font-medium">{item.label}</span>
-            </>
-          );
-
-          return item.enabled ? (
-            <Link aria-current="page" className={className} href={item.href} key={item.label}>
-              {content}
-            </Link>
-          ) : (
-            <span aria-disabled="true" className={className} key={item.label}>
-              {content}
-            </span>
-          );
-        })}
-      </nav>
+      <MobileMainNavigation />
     </div>
   );
 }

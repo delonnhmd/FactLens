@@ -14,6 +14,8 @@ export interface PublicEvidence {
   readonly type: EvidenceType;
   readonly url: string | null;
   readonly note: string;
+  readonly imageUrl: string | null;
+  readonly thumbnailUrl: string | null;
   readonly sourceQualityLabel: string | null;
   readonly sourceQualityScore: number | null;
   readonly sourceQualityReason: string | null;

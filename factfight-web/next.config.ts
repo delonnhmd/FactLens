@@ -25,6 +25,11 @@ const supabaseStoragePattern = getSupabaseStoragePattern();
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "6mb",
+    },
+  },
   turbopack: {
     root: process.cwd(),
   },

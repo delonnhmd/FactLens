@@ -13,6 +13,8 @@ export function PublicSiteHeader() {
           <Link className="hidden rounded-sm text-sm text-slate-200 hover:text-white sm:inline" href="/#recent-claims">
             Recent claims
           </Link>
+          <Link className="rounded-sm text-sm text-slate-200 hover:text-white" href="/feed">Web app</Link>
+          <Link className="hidden rounded-[10px] border border-white/35 px-3 py-2 text-sm font-medium text-white sm:inline" href="/login">Log in</Link>
           <AppStoreLink compact />
         </nav>
       </div>

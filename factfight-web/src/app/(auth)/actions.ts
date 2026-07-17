@@ -8,6 +8,7 @@ import {
   ensureProfile,
 } from "@/lib/api/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getSafeInternalDestination } from "@/lib/utils/redirects";
 import { publicEnvironment } from "@/lib/validation/env";
 import { loginSchema, signupSchema } from "@/lib/validation/auth";
 
@@ -55,6 +56,9 @@ export async function loginAction(
     email: formData.get("email"),
     password: formData.get("password"),
   });
+  const destination = getSafeInternalDestination(
+    typeof formData.get("next") === "string" ? String(formData.get("next")) : null,
+  );
 
   if (!parsed.success) {
     return validationState(parsed.error);
@@ -84,7 +88,7 @@ export async function loginAction(
     return { message: profileResult.message };
   }
 
-  redirect("/feed");
+  redirect(destination);
 }
 
 export async function signupAction(

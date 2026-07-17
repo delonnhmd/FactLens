@@ -9,9 +9,19 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/feed/:path*",
+    "/create/:path*",
+    "/claim/:path*",
+    "/search/:path*",
+    "/leaderboard/:path*",
+    "/profile/:path*",
+    "/settings/:path*",
+    "/notifications/:path*",
+    "/moderation/:path*",
     "/login",
     "/signup",
     "/confirmed",
+    "/forgot-password",
+    "/reset-password",
     "/auth/:path*",
   ],
 };

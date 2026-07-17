@@ -6,20 +6,24 @@ import { notFound } from "next/navigation";
 import { AiRiskSignal } from "@/components/claims/ai-risk-signal";
 import { ClaimMedia } from "@/components/claims/claim-media";
 import { ClaimStatusBadge } from "@/components/claims/claim-status-badge";
+import { ClaimTools } from "@/components/claims/claim-tools";
 import { SourceQualityBadge } from "@/components/claims/source-quality-badge";
+import { AddEvidenceForm } from "@/components/evidence/add-evidence-form";
 import { EvidenceList } from "@/components/evidence/evidence-list";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
 import { PublicSiteHeader } from "@/components/navigation/public-site-header";
-import { AppStoreLink } from "@/components/ui/app-store-link";
 import { Avatar } from "@/components/ui/avatar";
+import { VoteActionPanel } from "@/components/voting/vote-action-panel";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getClaimPageData } from "@/lib/api/claims";
+import { createClient } from "@/lib/supabase/server";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import type { ClaimStatus, PublicClaim } from "@/lib/types/claim";
 import { getClaimStatusLabel, getClaimTypeLabel } from "@/lib/utils/claim-display";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
 import { getApprovedImageUrl } from "@/lib/utils/images";
 import { getSourceDomain } from "@/lib/utils/urls";
+import { getRequestTimestamp } from "@/lib/utils/server-time";
 import { publicEnvironment } from "@/lib/validation/env";
 
 export const revalidate = 60;
@@ -35,6 +39,32 @@ function truncateDescription(value: string): string {
 
 function isFinalStatus(status: ClaimStatus | null): boolean {
   return status === "FINALIZED_TRUE" || status === "FINALIZED_FAKE" || status === "COMMUNITY_TRUE" || status === "COMMUNITY_FAKE" || status === "INSUFFICIENT_DATA";
+}
+
+function isVotingOpen(claim: PublicClaim): boolean {
+  const closedStatuses = new Set<ClaimStatus>([
+    "FINALIZED_TRUE",
+    "FINALIZED_FAKE",
+    "INSUFFICIENT_DATA",
+    "LOCKED",
+    "VOTING_CLOSED",
+    "COMMUNITY_TRUE",
+    "COMMUNITY_FAKE",
+    "NEEDS_MORE_EVIDENCE",
+  ]);
+
+  if (claim.status && closedStatuses.has(claim.status)) {
+    return false;
+  }
+
+  if (claim.voteAcceptUntil) {
+    const deadline = new Date(claim.voteAcceptUntil).getTime();
+    if (!Number.isNaN(deadline) && deadline <= Date.now()) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function formatPublishedScore(value: number): string {
@@ -112,6 +142,15 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
   }
 
   const { claim, evidence, seo } = data;
+  const supabase = await createClient();
+  const { data: viewerData } = await supabase.auth.getClaims();
+  const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
+  const createdAt = claim.createdAt ? new Date(claim.createdAt).getTime() : Number.NaN;
+  const canDelete =
+    viewerId === claim.authorId &&
+    !Number.isNaN(createdAt) &&
+    getRequestTimestamp() - createdAt <= 3 * 60 * 60 * 1_000 &&
+    !isFinalStatus(claim.status);
   const sourceDomain = claim.sourceDomain ?? getSourceDomain(claim.sourceUrl);
   const canonical = getCanonicalUrl(claim, seo?.slug ?? null);
   const claimReview = {
@@ -202,6 +241,7 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
                 </div>
               </div>
               <EvidenceList evidence={evidence} />
+              <AddEvidenceForm claimId={claim.id} pathIdentifier={id} />
             </section>
 
             {claim.topicClusterId ? (
@@ -210,11 +250,8 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
               </p>
             ) : null}
 
-            <aside className="mt-8 rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] p-5 sm:p-6">
-              <h2 className="text-lg font-medium text-[var(--ff-navy)]">Want to add your vote?</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">Voting and evidence submission stay in the Verifact app. This public page is read-only.</p>
-              <div className="mt-4"><AppStoreLink label="Download the app to vote" /></div>
-            </aside>
+            <VoteActionPanel claimId={claim.id} pathIdentifier={id} votingOpen={isVotingOpen(claim)} />
+            <ClaimTools canDelete={canDelete} claimId={claim.id} pathIdentifier={id} />
           </div>
         </article>
       </main>

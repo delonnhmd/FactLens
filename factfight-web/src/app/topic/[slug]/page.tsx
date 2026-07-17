@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ClaimCard } from "@/components/claims/claim-card";
@@ -102,8 +103,8 @@ export default async function TopicPage({ params }: TopicPageProps) {
 
         <aside className="mt-10 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-5 text-center sm:p-7">
           <h2 className="text-xl font-medium text-[var(--ff-navy)]">Join the verification</h2>
-          <p className="mx-auto mt-2 max-w-xl leading-7 text-[var(--ff-text-secondary)]">Download Verifact to vote on member claims and contribute evidence.</p>
-          <div className="mt-5"><AppStoreLink label="Download the app to vote" /></div>
+          <p className="mx-auto mt-2 max-w-xl leading-7 text-[var(--ff-text-secondary)]">Log in to FactFight on the web to vote on claims and contribute evidence.</p>
+          <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row"><Link className="inline-flex items-center justify-center rounded-[var(--ff-radius-card)] bg-[var(--ff-navy)] px-5 py-3 text-sm font-medium text-white" href="/feed">Open web app</Link><AppStoreLink label="Get the mobile app" /></div>
         </aside>
       </main>
       <PublicSiteFooter />

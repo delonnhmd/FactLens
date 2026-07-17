@@ -33,7 +33,7 @@ export function SignupForm() {
         Create account
       </h1>
       <p className="mt-3 leading-7 text-[var(--ff-text-secondary)]">
-        Set up your identity for the authentication preview.
+        Set up your identity to participate in the FactFight community.
       </p>
 
       {state.message ? (

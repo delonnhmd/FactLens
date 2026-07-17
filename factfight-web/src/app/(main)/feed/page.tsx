@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { ClaimCard } from "@/components/claims/claim-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getBlockedUserIds } from "@/lib/api/blocks";
 import { getFeedClaims } from "@/lib/api/claims";
 import { createClient } from "@/lib/supabase/server";
 import { parseFeedPage } from "@/lib/utils/pagination";
@@ -26,10 +27,13 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   if (error || !data?.claims?.sub) {
     redirect("/login");
   }
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session?.access_token) redirect("/login");
+  const blockedAuthorIds = await getBlockedUserIds(sessionData.session.access_token);
 
   const parameters = await searchParams;
   const requestedPage = parseFeedPage(parameters.page);
-  const feed = await getFeedClaims(requestedPage);
+  const feed = await getFeedClaims(requestedPage, blockedAuthorIds);
 
   return (
     <div className="mx-auto w-full max-w-[680px]">

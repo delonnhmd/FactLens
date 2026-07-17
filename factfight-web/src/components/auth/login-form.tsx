@@ -11,7 +11,7 @@ function fieldMessage(messages: string[] | undefined) {
   return messages?.[0];
 }
 
-export function LoginForm({ callbackMessage }: { callbackMessage?: string }) {
+export function LoginForm({ callbackMessage, nextPath = "/feed" }: { callbackMessage?: string; nextPath?: string }) {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const emailError = fieldMessage(state.fieldErrors?.email);
   const passwordError = fieldMessage(state.fieldErrors?.password);
@@ -30,7 +30,7 @@ export function LoginForm({ callbackMessage }: { callbackMessage?: string }) {
         Log in
       </h1>
       <p className="mt-3 leading-7 text-[var(--ff-text-secondary)]">
-        Continue to the authentication preview. The community feed is not migrated yet.
+        Continue to the FactFight community feed, create claims, and participate in verification.
       </p>
 
       {message ? (
@@ -44,6 +44,7 @@ export function LoginForm({ callbackMessage }: { callbackMessage?: string }) {
       ) : null}
 
       <form action={formAction} className="mt-6 space-y-5" noValidate>
+        <input name="next" type="hidden" value={nextPath} />
         <div>
           <label className="block text-sm font-medium text-[var(--ff-text)]" htmlFor="email">
             Email
@@ -68,9 +69,7 @@ export function LoginForm({ callbackMessage }: { callbackMessage?: string }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--ff-text)]" htmlFor="password">
-            Password
-          </label>
+          <div className="flex items-center justify-between gap-3"><label className="block text-sm font-medium text-[var(--ff-text)]" htmlFor="password">Password</label><Link className="text-xs font-medium text-[var(--ff-ai)] hover:underline" href="/forgot-password">Forgot password?</Link></div>
           <input
             aria-describedby={passwordError ? "password-error" : undefined}
             aria-invalid={Boolean(passwordError)}

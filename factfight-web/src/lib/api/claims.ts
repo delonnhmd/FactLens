@@ -75,6 +75,8 @@ const evidenceSelect = [
   "evidence_type",
   "url",
   "note",
+  "image_url",
+  "thumbnail_url",
   "source_quality_label",
   "source_quality_score",
   "source_quality_reason",
@@ -139,6 +141,8 @@ const rawEvidenceSchema = z.looseObject({
     z.string().nullable(),
   ),
   note: z.preprocess((value) => (typeof value === "string" ? value.trim() : ""), z.string().max(2_000)),
+  image_url: nullableText,
+  thumbnail_url: nullableText,
   source_quality_label: nullableText,
   source_quality_score: nullableNumber,
   source_quality_reason: nullableText,
@@ -251,7 +255,7 @@ export async function getPublicHomeClaims(): Promise<PublicHomeClaims> {
   return Object.freeze({ recent, trending });
 }
 
-export async function getFeedClaims(requestedPage: number): Promise<FeedClaimsPage> {
+export async function getFeedClaims(requestedPage: number, blockedAuthorIds: readonly string[] = []): Promise<FeedClaimsPage> {
   const pageResult = pageSchema.safeParse(requestedPage);
   const page = pageResult.success ? pageResult.data : 1;
   const offset = (page - 1) * FEED_PAGE_SIZE;
@@ -259,6 +263,10 @@ export async function getFeedClaims(requestedPage: number): Promise<FeedClaimsPa
 
   let query = supabase.from("claims").select(claimSelect, { count: "exact" });
   query = applyClaimVisibilityFilters(query);
+  const validBlockedIds = [...new Set(blockedAuthorIds)].filter(isValidClaimId).slice(0, 1_000);
+  if (validBlockedIds.length > 0) {
+    query = query.not("author_id", "in", `(${validBlockedIds.join(",")})`);
+  }
 
   const { data, error, count } = await query
     .order("created_at", { ascending: false })
@@ -408,6 +416,8 @@ async function getEvidenceByClaimId(claimId: string): Promise<readonly PublicEvi
         type: row.evidence_type,
         url: row.url,
         note: row.note,
+        imageUrl: row.image_url,
+        thumbnailUrl: row.thumbnail_url,
         sourceQualityLabel: row.source_quality_label,
         sourceQualityScore: row.source_quality_score,
         sourceQualityReason: row.source_quality_reason,
@@ -450,6 +460,83 @@ export async function getClaimsByTopicId(topicId: string, limit = 100): Promise<
   }
 
   return mapClaimRows((data ?? []) as unknown as Record<string, unknown>[]);
+}
+
+export async function getClaimsByAuthorId(authorId: string, limit = 100): Promise<readonly PublicClaim[]> {
+  if (!isValidClaimId(authorId)) {
+    return Object.freeze([]);
+  }
+
+  const supabase = createPublicClient();
+  let query = supabase.from("claims").select(claimSelect).eq("author_id", authorId);
+  query = applyClaimVisibilityFilters(query);
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(Math.max(1, Math.min(100, limit)));
+
+  if (error) {
+    throw new ClaimReadError();
+  }
+
+  return mapClaimRows((data ?? []) as unknown as Record<string, unknown>[]);
+}
+
+export async function getClaimsByIds(claimIds: readonly string[]): Promise<readonly PublicClaim[]> {
+  const validIds = [...new Set(claimIds)].filter(isValidClaimId).slice(0, 100);
+  if (validIds.length === 0) return Object.freeze([]);
+
+  const supabase = createPublicClient();
+  let query = supabase.from("claims").select(claimSelect).in("id", validIds);
+  query = applyClaimVisibilityFilters(query);
+  const { data, error } = await query.limit(validIds.length);
+
+  if (error) throw new ClaimReadError();
+
+  const claims = await mapClaimRows((data ?? []) as unknown as Record<string, unknown>[]);
+  const claimById = new Map(claims.map((claim) => [claim.id, claim]));
+  return Object.freeze(validIds.map((id) => claimById.get(id)).filter((claim): claim is PublicClaim => Boolean(claim)));
+}
+
+export interface ClaimSearchOptions {
+  readonly category?: string;
+  readonly status?: "OPEN_VOTING" | "FINALIZED_TRUE" | "FINALIZED_FAKE" | "NEEDS_MORE_EVIDENCE";
+}
+
+export async function searchPublicClaims(
+  searchText: string,
+  options: ClaimSearchOptions = {},
+): Promise<readonly PublicClaim[]> {
+  const normalizedSearch = searchText.trim().replace(/\s+/g, " ").toLowerCase().slice(0, 100);
+  const supabase = createPublicClient();
+  let query = supabase.from("claims").select(claimSelect);
+  query = applyClaimVisibilityFilters(query);
+
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(250);
+
+  if (error) {
+    throw new ClaimReadError();
+  }
+
+  const rows = ((data ?? []) as unknown as Record<string, unknown>[]).filter((row) => {
+    if (normalizedSearch) {
+      const matches = [row.title, row.description, row.source_url, row.category, row.politician_tag]
+        .filter((value): value is string => typeof value === "string")
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+      if (!matches) return false;
+    }
+
+    if (options.category && row.category !== options.category) return false;
+
+    if (options.status === "OPEN_VOTING") {
+      return ["OPEN", "ACTIVE", "EARLY_VERDICT", "PENDING"].includes(String(row.status ?? ""));
+    }
+
+    if (options.status && row.status !== options.status) return false;
+    return true;
+  });
+
+  return mapClaimRows(rows.slice(0, 50));
 }
 
 export async function getSitemapClaimEntries(): Promise<readonly SitemapClaimEntry[]> {

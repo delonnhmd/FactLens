@@ -2,15 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { acceptTerms, ensureProfile } from "@/lib/api/auth";
 import { createClient } from "@/lib/supabase/server";
+import { getSafeInternalDestination } from "@/lib/utils/redirects";
 import { publicEnvironment } from "@/lib/validation/env";
-
-function safeDestination(value: string | null) {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
-    return "/feed";
-  }
-
-  return value;
-}
 
 function loginFailure(code: string) {
   const url = new URL("/login", publicEnvironment.siteUrl);
@@ -58,6 +51,6 @@ export async function GET(request: NextRequest) {
     return loginFailure("terms_unavailable");
   }
 
-  const destination = safeDestination(request.nextUrl.searchParams.get("next"));
+  const destination = getSafeInternalDestination(request.nextUrl.searchParams.get("next"));
   return NextResponse.redirect(new URL(destination, publicEnvironment.siteUrl));
 }

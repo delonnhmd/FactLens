@@ -66,5 +66,17 @@ export const signupSchema = z
     path: ["confirmPassword"],
   });
 
+export const passwordResetRequestSchema = z.object({ email: emailSchema });
+
+export const recoveryPasswordSchema = z
+  .object({
+    password: z.string().min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`),
+    confirmPassword: z.string().min(1, "Confirm your new password."),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: "Passwords must match.",
+    path: ["confirmPassword"],
+  });
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;

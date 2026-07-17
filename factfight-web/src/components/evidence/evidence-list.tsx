@@ -1,8 +1,10 @@
 import { ExternalLink, FileText } from "lucide-react";
 
 import { SourceQualityBadge } from "@/components/claims/source-quality-badge";
+import { SafeImage } from "@/components/ui/safe-image";
 import type { EvidenceType, PublicEvidence } from "@/lib/types/evidence";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
+import { getApprovedImageUrl } from "@/lib/utils/images";
 import { getSourceDomain } from "@/lib/utils/urls";
 
 interface EvidenceListProps {
@@ -22,7 +24,7 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
       <div className="rounded-[var(--ff-radius-card)] border border-dashed border-[var(--ff-border)] bg-[var(--ff-surface)] px-5 py-8 text-center">
         <FileText aria-hidden="true" className="mx-auto text-[var(--ff-text-muted)]" size={28} strokeWidth={1.6} />
         <p className="mt-3 font-medium text-[var(--ff-text)]">No public evidence has been added yet</p>
-        <p className="mt-1 text-sm text-[var(--ff-text-muted)]">Open the app to follow this claim as the community adds sources.</p>
+        <p className="mt-1 text-sm text-[var(--ff-text-muted)]">Be the first to add a source and explain how it relates to the claim.</p>
       </div>
     );
   }
@@ -31,6 +33,7 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
     <ol className="space-y-3">
       {evidence.map((item) => {
         const sourceDomain = getSourceDomain(item.url);
+        const imageUrl = getApprovedImageUrl(item.thumbnailUrl) ?? getApprovedImageUrl(item.imageUrl);
 
         return (
           <li className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] p-4 sm:p-5" key={item.id}>
@@ -41,6 +44,11 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
               <SourceQualityBadge quality={item.sourceQualityLabel} score={item.sourceQualityScore} />
             </div>
             {item.note ? <p className="mt-3 whitespace-pre-line text-sm leading-6 text-[var(--ff-text-secondary)]">{item.note}</p> : null}
+            {imageUrl ? (
+              <div className="relative mt-3 aspect-video overflow-hidden rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)]">
+                <SafeImage alt="Evidence attachment" className="object-cover" fill sizes="(max-width: 768px) 90vw, 640px" src={imageUrl} />
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--ff-text-muted)]">
               <span>Added by {item.contributorName}</span>
               {item.createdAt ? <span>{formatAbsoluteDate(item.createdAt)}</span> : null}
