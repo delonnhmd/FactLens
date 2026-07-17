@@ -176,6 +176,11 @@ export default function SettingsScreen() {
             styles={styles}
           />
           <SettingsLink
+            label="Change password"
+            onPress={() => router.push("/settings/change-password")}
+            styles={styles}
+          />
+          <SettingsLink
             label={logoutLoading ? "Logging out..." : "Logout"}
             onPress={handleLogout}
             styles={styles}
