@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light;
+
+  --ff-navy: #0D1B3E;
+  --ff-true: #1D9E75;
+  --ff-fake: #E24B4A;
+  --ff-unsure: #EF9F27;
+  --ff-ai: #534AB7;
+  --ff-background: #FFFFFF;
+  --ff-surface: #F4F6F8;
+  --ff-text: #172033;
+  --ff-text-secondary: #475569;
+  --ff-text-muted: #6B7280;
+  --ff-border: #D1D5DB;
+  --ff-control-border: #9CA3AF;
+  --ff-radius-card: 12px;
+
+  --ff-space-xs: 4px;
+  --ff-space-sm: 8px;
+  --ff-space-md: 16px;
+  --ff-space-lg: 24px;
+  --ff-space-xl: 32px;
+  --ff-space-2xl: 40px;
+}
