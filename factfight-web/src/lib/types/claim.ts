@@ -82,4 +82,6 @@ export interface PublicClaim {
   readonly sourceCount: number;
   readonly sourceSupportsClaim: boolean | null;
   readonly sourceSupportSummary: string | null;
+  readonly evidenceCount: number;
+  readonly topicClusterId: string | null;
 }

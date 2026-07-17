@@ -99,6 +99,11 @@ const rawClaimSchema = z.looseObject({
     z.boolean().nullable(),
   ),
   source_support_summary: nullableText,
+  evidence_count: nullableInteger,
+  topic_cluster_id: z.preprocess(
+    (value) => (typeof value === "string" && z.uuid().safeParse(value).success ? value : null),
+    z.string().nullable(),
+  ),
 });
 
 const fallbackAuthor: PublicClaimAuthor = Object.freeze({
@@ -178,5 +183,7 @@ export function mapClaimRow(row: unknown, author?: PublicClaimAuthor | null): Pu
     sourceCount: data.source_count ?? 0,
     sourceSupportsClaim: data.source_supports_claim,
     sourceSupportSummary: data.source_support_summary,
+    evidenceCount: data.evidence_count ?? 0,
+    topicClusterId: data.topic_cluster_id,
   });
 }

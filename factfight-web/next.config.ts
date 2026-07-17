@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
-function getSupabaseStoragePattern(): NonNullable<NextConfig["images"]>["remotePatterns"][number] | null {
+type RemotePattern = NonNullable<NonNullable<NextConfig["images"]>["remotePatterns"]>[number];
+
+function getSupabaseStoragePattern(): RemotePattern | null {
   try {
     const url = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
 
@@ -22,6 +24,7 @@ function getSupabaseStoragePattern(): NonNullable<NextConfig["images"]>["remoteP
 const supabaseStoragePattern = getSupabaseStoragePattern();
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   turbopack: {
     root: process.cwd(),
   },
@@ -31,6 +34,19 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "img.youtube.com", pathname: "/vi/**" },
       { protocol: "https", hostname: "i.ytimg.com", pathname: "/vi/**" },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
   },
 };
 

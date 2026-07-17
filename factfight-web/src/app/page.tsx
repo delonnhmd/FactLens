@@ -1,127 +1,145 @@
-import { Bot, MessagesSquare, Scale } from "lucide-react";
-import Link from "next/link";
+import { Bot, FileCheck2, UsersRound } from "lucide-react";
+import type { Metadata } from "next";
 
-const previewFeatures = [
+import { ClaimCard } from "@/components/claims/claim-card";
+import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
+import { PublicSiteHeader } from "@/components/navigation/public-site-header";
+import { AppStoreLink } from "@/components/ui/app-store-link";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SITE_TAGLINE } from "@/lib/constants/public-site";
+import { getPublicHomeClaims, type PublicHomeClaims } from "@/lib/api/claims";
+
+export const revalidate = 60;
+
+export const metadata: Metadata = {
+  title: { absolute: "FactFight | Community-powered claim verification" },
+  description:
+    "Explore public claims, evidence, AI risk signals, and community verdicts on FactFight.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    title: "FactFight | Community-powered claim verification",
+    description: "Fight misinformation with evidence, transparency, and responsible participation.",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "FactFight | Community-powered claim verification",
+    description: "Fight misinformation with evidence, transparency, and responsible participation.",
+  },
+};
+
+const principles = [
   {
     title: "Community verification",
-    description: "Claims are examined through responsible participation.",
-    icon: Scale,
-    color: "var(--ff-true)",
-    background: "color-mix(in srgb, var(--ff-true) 12%, white)",
+    description: "Public votes and evidence help people assess claims together.",
+    icon: UsersRound,
   },
   {
-    title: "Evidence-based discussion",
-    description: "Sources and context keep conversations grounded.",
-    icon: MessagesSquare,
-    color: "var(--ff-navy)",
-    background: "color-mix(in srgb, var(--ff-navy) 9%, white)",
+    title: "Evidence first",
+    description: "Sources and context stay visible so readers can examine the record.",
+    icon: FileCheck2,
   },
   {
-    title: "AI as a risk signal, not the final judge",
-    description: "People and evidence remain central to every verdict.",
+    title: "AI is a signal",
+    description: "AI can flag risk, but it never acts as the final judge.",
     icon: Bot,
-    color: "var(--ff-ai)",
-    background: "color-mix(in srgb, var(--ff-ai) 10%, white)",
   },
 ] as const;
 
-export default function Home() {
+async function loadClaims(): Promise<PublicHomeClaims | null> {
+  try {
+    return await getPublicHomeClaims();
+  } catch {
+    return null;
+  }
+}
+
+export default async function Home() {
+  const data = await loadClaims();
+
   return (
-    <main className="min-h-screen bg-[var(--ff-background)] px-4 py-6 text-[var(--ff-text)] sm:px-8 sm:py-8 lg:px-12 lg:py-10">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col sm:min-h-[calc(100vh-4rem)] lg:min-h-[calc(100vh-5rem)]">
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--ff-border)] pb-5">
-          <Link
-            className="rounded-sm text-xl font-medium tracking-[-0.02em] text-[var(--ff-navy)]"
-            href="/"
-          >
-            FactFight
-          </Link>
-          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-            <p className="rounded-full border border-[color-mix(in_srgb,var(--ff-ai)_35%,var(--ff-border))] bg-[color-mix(in_srgb,var(--ff-ai)_8%,white)] px-3 py-1.5 text-sm font-medium text-[var(--ff-ai)]">
-              Development preview
-            </p>
-            <nav aria-label="Account" className="flex items-center gap-2">
-              <Link
-                className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] px-3.5 py-2 text-sm font-medium text-[var(--ff-navy)]"
-                href="/login"
-              >
-                Log in
-              </Link>
-              <Link
-                className="rounded-[var(--ff-radius-card)] border border-[var(--ff-navy)] bg-[var(--ff-navy)] px-3.5 py-2 text-sm font-medium text-white"
-                href="/signup"
-              >
-                Create account
-              </Link>
-            </nav>
-          </div>
-        </header>
+    <div className="min-h-screen bg-[var(--ff-surface)] text-[var(--ff-text)]">
+      <PublicSiteHeader />
+      <main>
+        <section className="bg-[var(--ff-navy)] px-4 pt-12 pb-16 text-white sm:px-7 sm:pt-16 sm:pb-20">
+          <div className="mx-auto grid w-full max-w-6xl items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+            <div>
+              <p className="text-sm font-medium tracking-[0.04em] text-slate-300">Community-powered verification</p>
+              <h1 className="mt-4 max-w-3xl text-4xl leading-[1.08] font-medium tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+                {SITE_TAGLINE}
+              </h1>
+              <p className="mt-6 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">
+                Read claims, inspect sources, and see how the community is weighing the evidence. Participation stays in the Verifact app during this public-web phase.
+              </p>
+              <div className="mt-8">
+                <AppStoreLink label="Get Verifact on the App Store" />
+              </div>
+            </div>
 
-        <section
-          aria-labelledby="preview-title"
-          className="grid flex-1 items-center gap-10 py-12 sm:py-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:gap-16 lg:py-20"
-          id="preview"
-        >
-          <div className="max-w-2xl">
-            <p className="mb-4 text-sm font-medium tracking-[0.04em] text-[var(--ff-ai)]">
-              Community-powered verification
-            </p>
-            <h1
-              className="max-w-xl text-4xl leading-[1.08] font-medium tracking-[-0.035em] text-[var(--ff-navy)] sm:text-5xl lg:text-6xl"
-              id="preview-title"
-            >
-              FactFight
-            </h1>
-            <p className="mt-5 max-w-xl text-xl leading-8 font-medium text-[var(--ff-text)] sm:text-2xl">
-              Fight misinformation, not each other.
-            </p>
-            <p className="mt-5 max-w-xl text-base leading-7 text-[var(--ff-text-secondary)] sm:text-lg sm:leading-8">
-              The FactFight web platform is being prepared. This temporary page validates the new application foundation while the real product experience remains under development.
-            </p>
-            <button
-              className="mt-8 cursor-not-allowed rounded-[var(--ff-radius-card)] border border-[var(--ff-control-border)] bg-[var(--ff-surface)] px-5 py-3 text-base font-medium text-[var(--ff-text-muted)] opacity-75"
-              disabled
-              type="button"
-            >
-              Open FactFight
-            </button>
-          </div>
-
-          <article className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-5 sm:p-7">
-            <h2 className="text-lg font-medium text-[var(--ff-navy)]">What FactFight is built around</h2>
-            <ul className="mt-5 space-y-3" role="list">
-              {previewFeatures.map((feature) => {
-                const Icon = feature.icon;
-
-                return (
-                  <li
-                    className="flex gap-4 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-4"
-                    key={feature.title}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="flex size-10 shrink-0 items-center justify-center rounded-[10px]"
-                      style={{ background: feature.background, color: feature.color }}
-                    >
-                      <Icon size={20} strokeWidth={1.8} />
-                    </span>
-                    <span>
-                      <span className="block font-medium text-[var(--ff-text)]">{feature.title}</span>
-                      <span className="mt-1 block text-sm leading-6 text-[var(--ff-text-secondary)]">
-                        {feature.description}
+            <aside className="rounded-[var(--ff-radius-card)] border border-white/15 bg-white/5 p-5 sm:p-6">
+              <h2 className="text-lg font-medium">How FactFight approaches verification</h2>
+              <ul className="mt-5 space-y-4">
+                {principles.map((principle) => {
+                  const Icon = principle.icon;
+                  return (
+                    <li className="flex gap-3" key={principle.title}>
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-white/10 text-slate-100">
+                        <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
                       </span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </article>
+                      <span>
+                        <span className="block text-sm font-medium">{principle.title}</span>
+                        <span className="mt-1 block text-sm leading-6 text-slate-300">{principle.description}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </aside>
+          </div>
         </section>
 
-        <footer className="border-t border-[var(--ff-border)] py-5 text-sm text-[var(--ff-text-muted)]">
-          Development preview. Read-only claim views are enabled.
-        </footer>
-      </div>
-    </main>
+        <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-7 sm:py-14" id="recent-claims">
+          <header className="mb-6 max-w-2xl">
+            <p className="text-sm font-medium text-[var(--ff-ai)]">Latest activity</p>
+            <h2 className="mt-1 text-3xl font-medium tracking-[-0.03em] text-[var(--ff-navy)]">Recent claims</h2>
+            <p className="mt-2 leading-7 text-[var(--ff-text-secondary)]">Approved public claims, ordered by publication date.</p>
+          </header>
+          {!data ? (
+            <EmptyState description="Public claims could not be loaded right now. Please try again shortly." title="Claims temporarily unavailable" />
+          ) : data.recent.length === 0 ? (
+            <EmptyState description="There are no approved public claims to display yet." title="No recent claims" />
+          ) : (
+            <div className="grid items-start gap-5 lg:grid-cols-2">
+              {data.recent.map((claim) => <ClaimCard claim={claim} key={claim.id} />)}
+            </div>
+          )}
+        </section>
+
+        {data && data.trending.length > 0 ? (
+          <section className="border-t border-[var(--ff-border)] bg-white">
+            <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-7 sm:py-14">
+              <header className="mb-6 max-w-2xl">
+                <p className="text-sm font-medium text-[var(--ff-ai)]">Community attention</p>
+                <h2 className="mt-1 text-3xl font-medium tracking-[-0.03em] text-[var(--ff-navy)]">Trending claims</h2>
+                <p className="mt-2 leading-7 text-[var(--ff-text-secondary)]">Approved claims ordered by public vote count.</p>
+              </header>
+              <div className="grid items-start gap-5 lg:grid-cols-2">
+                {data.trending.map((claim) => <ClaimCard claim={claim} key={claim.id} />)}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="border-t border-[var(--ff-border)] bg-[var(--ff-surface)] px-4 py-12 text-center sm:px-7">
+          <div className="mx-auto max-w-2xl">
+            <h2 className="text-2xl font-medium tracking-[-0.02em] text-[var(--ff-navy)]">Ready to weigh the evidence?</h2>
+            <p className="mt-3 leading-7 text-[var(--ff-text-secondary)]">Download the app to vote, contribute evidence, and follow community verdicts.</p>
+            <div className="mt-6"><AppStoreLink label="Get the app" /></div>
+          </div>
+        </section>
+      </main>
+      <PublicSiteFooter />
+    </div>
   );
 }

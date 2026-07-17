@@ -7,9 +7,8 @@ export default function NotFound() {
         <p className="text-sm font-medium text-[var(--ff-ai)]">FactFight</p>
         <h1 className="mt-3 text-3xl font-medium tracking-[-0.03em] text-[var(--ff-navy)]">Claim or page unavailable</h1>
         <p className="mt-4 leading-7 text-[var(--ff-text-secondary)]">It may have been removed, hidden, or never existed. We do not reveal moderation details for unavailable content.</p>
-        <div className="mt-7 flex flex-wrap justify-center gap-3">
+        <div className="mt-7 flex justify-center">
           <Link className="rounded-[var(--ff-radius-card)] bg-[var(--ff-navy)] px-4 py-2.5 text-sm font-medium text-white" href="/">Go to homepage</Link>
-          <Link className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] px-4 py-2.5 text-sm font-medium text-[var(--ff-navy)]" href="/login">Log in</Link>
         </div>
       </section>
     </main>

@@ -1,4 +1,4 @@
-import { ExternalLink, LogIn } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,17 +7,22 @@ import { AiRiskSignal } from "@/components/claims/ai-risk-signal";
 import { ClaimMedia } from "@/components/claims/claim-media";
 import { ClaimStatusBadge } from "@/components/claims/claim-status-badge";
 import { SourceQualityBadge } from "@/components/claims/source-quality-badge";
+import { EvidenceList } from "@/components/evidence/evidence-list";
+import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
+import { PublicSiteHeader } from "@/components/navigation/public-site-header";
+import { AppStoreLink } from "@/components/ui/app-store-link";
 import { Avatar } from "@/components/ui/avatar";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
-import { getClaimById } from "@/lib/api/claims";
-import type { ClaimStatus } from "@/lib/types/claim";
-import { getClaimTypeLabel } from "@/lib/utils/claim-display";
+import { getClaimPageData } from "@/lib/api/claims";
+import { SITE_NAME } from "@/lib/constants/public-site";
+import type { ClaimStatus, PublicClaim } from "@/lib/types/claim";
+import { getClaimStatusLabel, getClaimTypeLabel } from "@/lib/utils/claim-display";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
 import { getApprovedImageUrl } from "@/lib/utils/images";
 import { getSourceDomain } from "@/lib/utils/urls";
 import { publicEnvironment } from "@/lib/validation/env";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 interface ClaimPageProps {
   readonly params: Promise<{ id: string }>;
@@ -37,59 +42,106 @@ function formatPublishedScore(value: number): string {
   return `${Math.round(Math.min(100, Math.max(0, normalized)))}%`;
 }
 
+function getCanonicalUrl(claim: PublicClaim, slug: string | null): string {
+  return new URL(`/claim/${slug ?? claim.id}`, publicEnvironment.siteUrl).toString();
+}
+
+function getReviewRating(status: ClaimStatus | null) {
+  const isTrue = status === "FINALIZED_TRUE" || status === "COMMUNITY_TRUE";
+  const isFake = status === "FINALIZED_FAKE" || status === "COMMUNITY_FAKE";
+
+  return {
+    "@type": "Rating",
+    ratingValue: isTrue ? 5 : isFake ? 1 : 3,
+    bestRating: 5,
+    worstRating: 1,
+    alternateName: getClaimStatusLabel(status),
+  };
+}
+
 export async function generateMetadata({ params }: ClaimPageProps): Promise<Metadata> {
   const { id } = await params;
-  const claim = await getClaimById(id);
+  const data = await getClaimPageData(id);
 
-  if (!claim) {
+  if (!data) {
     return {
-      title: "Claim unavailable | FactFight",
+      title: "Claim unavailable",
       description: "This FactFight claim is unavailable.",
+      robots: { index: false, follow: false },
     };
   }
 
-  const title = `${claim.title} | FactFight`;
-  const description = truncateDescription(claim.description || claim.title);
-  const canonical = new URL(`/claim/${claim.id}`, publicEnvironment.siteUrl).toString();
+  const { claim, seo } = data;
+  const title = seo?.metaTitle ?? claim.title;
+  const description = seo?.metaDescription ?? truncateDescription(claim.description || claim.title);
+  const openGraphTitle = seo?.openGraphTitle ?? title;
+  const openGraphDescription = seo?.openGraphDescription ?? description;
+  const canonical = getCanonicalUrl(claim, seo?.slug ?? null);
   const imageUrl = getApprovedImageUrl(claim.imageUrl) ?? getApprovedImageUrl(claim.thumbnailUrl);
+  const socialImage = imageUrl ?? new URL("/opengraph-image", publicEnvironment.siteUrl).toString();
 
   return {
     title,
     description,
+    keywords: seo ? [...seo.keywords] : undefined,
     alternates: { canonical },
     openGraph: {
       type: "article",
-      title,
-      description,
+      siteName: SITE_NAME,
+      title: openGraphTitle,
+      description: openGraphDescription,
       url: canonical,
-      ...(imageUrl ? { images: [{ url: imageUrl, alt: `Image for ${claim.title}` }] } : {}),
+      publishedTime: claim.createdAt ?? undefined,
+      images: [{ url: socialImage, alt: imageUrl ? `Image for ${claim.title}` : "FactFight community verification" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: openGraphTitle,
+      description: openGraphDescription,
+      images: [socialImage],
     },
   };
 }
 
 export default async function PublicClaimPage({ params }: ClaimPageProps) {
   const { id } = await params;
-  const claim = await getClaimById(id);
+  const data = await getClaimPageData(id);
 
-  if (!claim) {
+  if (!data) {
     notFound();
   }
 
+  const { claim, evidence, seo } = data;
   const sourceDomain = claim.sourceDomain ?? getSourceDomain(claim.sourceUrl);
+  const canonical = getCanonicalUrl(claim, seo?.slug ?? null);
+  const claimReview = {
+    "@context": "https://schema.org",
+    "@type": "ClaimReview",
+    url: canonical,
+    datePublished: claim.createdAt ?? undefined,
+    claimReviewed: claim.title,
+    author: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: publicEnvironment.siteUrl,
+    },
+    itemReviewed: {
+      "@type": "CreativeWork",
+      author: {
+        "@type": "Person",
+        name: claim.author.displayName,
+      },
+    },
+    reviewRating: getReviewRating(claim.status),
+  };
+  // The object is built only from validated values. Escaping '<' prevents a
+  // user-authored string from terminating the JSON-LD script element.
+  const serializedClaimReview = JSON.stringify(claimReview).replace(/</g, "\\u003c");
 
   return (
     <div className="min-h-screen bg-[var(--ff-surface)] text-[var(--ff-text)]">
-      <header className="border-b border-[var(--ff-border)] bg-white px-4 py-4 sm:px-7">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <Link className="rounded-sm text-xl font-medium text-[var(--ff-navy)]" href="/">
-            FactFight
-          </Link>
-          <Link className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] px-3.5 py-2 text-sm font-medium text-[var(--ff-navy)]" href={`/login?next=/claim/${claim.id}`}>
-            Log in
-          </Link>
-        </div>
-      </header>
-
+      <script dangerouslySetInnerHTML={{ __html: serializedClaimReview }} type="application/ld+json" />
+      <PublicSiteHeader />
       <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-7 sm:py-10">
         <article className="overflow-hidden rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white">
           <div className="p-5 sm:p-8">
@@ -111,29 +163,29 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
             <h1 className="mt-6 text-3xl leading-[1.18] font-medium tracking-[-0.03em] text-[var(--ff-navy)] sm:text-4xl">{claim.title}</h1>
             {claim.description ? <p className="mt-5 whitespace-pre-line text-lg leading-8 text-[var(--ff-text-secondary)]">{claim.description}</p> : null}
 
-            <div className="mt-7">
-              <ClaimMedia claim={claim} priority />
-            </div>
+            <div className="mt-7"><ClaimMedia claim={claim} priority /></div>
 
             {claim.sourceUrl ? (
               <section aria-labelledby="claim-source-heading" className="mt-7 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] p-4 sm:p-5">
                 <h2 className="text-sm font-medium text-[var(--ff-navy)]" id="claim-source-heading">Claim source</h2>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <a className="inline-flex items-center gap-2 text-sm font-medium text-[var(--ff-navy)] hover:underline" href={claim.sourceUrl} rel="noopener noreferrer" target="_blank">
+                  <a className="inline-flex items-center gap-2 rounded-sm text-sm font-medium text-[var(--ff-navy)] hover:underline" href={claim.sourceUrl} rel="noopener noreferrer" target="_blank">
                     <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
                     {sourceDomain ?? "Open source"}
                   </a>
                   <SourceQualityBadge quality={claim.sourceQuality} score={claim.sourceScore} />
                 </div>
+                {claim.sourceSupportSummary ? <p className="mt-3 text-sm leading-6 text-[var(--ff-text-secondary)]">{claim.sourceSupportSummary}</p> : null}
               </section>
             ) : null}
 
-            <div className="mt-7">
-              <AiRiskSignal confidence={claim.aiConfidence} expanded status={claim.aiStatus} summary={claim.aiSummary} />
-            </div>
+            <div className="mt-7"><AiRiskSignal confidence={claim.aiConfidence} expanded status={claim.aiStatus} summary={claim.aiSummary} /></div>
 
             <section aria-labelledby="community-data-heading" className="mt-7 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] p-4 sm:p-5">
-              <h2 className="text-base font-medium text-[var(--ff-navy)]" id="community-data-heading">Community response</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-base font-medium text-[var(--ff-navy)]" id="community-data-heading">Community verdict</h2>
+                <ClaimStatusBadge status={claim.status} />
+              </div>
               <div className="mt-4"><VoteBreakdown votes={claim.votes} /></div>
               {claim.finalScore !== null && isFinalStatus(claim.status) ? (
                 <p className="mt-4 border-t border-[var(--ff-border)] pt-4 text-sm text-[var(--ff-text-secondary)]">
@@ -142,27 +194,31 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
               ) : null}
             </section>
 
-            {(claim.currentPhase !== null || claim.voteAcceptUntil) ? (
-              <section aria-labelledby="claim-timing-heading" className="mt-7 border-t border-[var(--ff-border)] pt-6">
-                <h2 className="text-sm font-medium text-[var(--ff-navy)]" id="claim-timing-heading">Verification timing</h2>
-                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-                  {claim.currentPhase !== null ? <div><dt className="text-[var(--ff-text-muted)]">Current phase</dt><dd className="mt-1 text-[var(--ff-text)]">Phase {claim.currentPhase}</dd></div> : null}
-                  {claim.voteAcceptUntil ? <div><dt className="text-[var(--ff-text-muted)]">Voting window closes</dt><dd className="mt-1 text-[var(--ff-text)]">{formatAbsoluteDate(claim.voteAcceptUntil)}</dd></div> : null}
-                </dl>
-              </section>
+            <section aria-labelledby="evidence-heading" className="mt-8 border-t border-[var(--ff-border)] pt-7">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-xl font-medium text-[var(--ff-navy)]" id="evidence-heading">Evidence</h2>
+                  <p className="mt-1 text-sm text-[var(--ff-text-muted)]">{evidence.length} public {evidence.length === 1 ? "source" : "sources"}</p>
+                </div>
+              </div>
+              <EvidenceList evidence={evidence} />
+            </section>
+
+            {claim.topicClusterId ? (
+              <p className="mt-7 text-sm text-[var(--ff-text-secondary)]">
+                This claim belongs to a related topic cluster. <Link className="font-medium text-[var(--ff-navy)] hover:underline" href={`/topic/${claim.topicClusterId}`}>View topic</Link>
+              </p>
             ) : null}
 
-            <aside className="mt-8 rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] p-5">
-              <h2 className="font-medium text-[var(--ff-navy)]">Want to participate?</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">Log in to prepare for future community voting features. Voting is not enabled on the web yet.</p>
-              <Link className="mt-4 inline-flex items-center gap-2 rounded-[var(--ff-radius-card)] bg-[var(--ff-navy)] px-4 py-2.5 text-sm font-medium text-white" href={`/login?next=/claim/${claim.id}`}>
-                <LogIn aria-hidden="true" size={16} strokeWidth={1.8} />
-                Log in
-              </Link>
+            <aside className="mt-8 rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] p-5 sm:p-6">
+              <h2 className="text-lg font-medium text-[var(--ff-navy)]">Want to add your vote?</h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">Voting and evidence submission stay in the Verifact app. This public page is read-only.</p>
+              <div className="mt-4"><AppStoreLink label="Download the app to vote" /></div>
             </aside>
           </div>
         </article>
       </main>
+      <PublicSiteFooter />
     </div>
   );
 }
