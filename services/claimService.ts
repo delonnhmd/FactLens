@@ -881,7 +881,11 @@ function mapClaimRowToClaimStrict(row: ClaimRow): Claim {
   return {
     id: claimId,
     slug: row.slug ?? generateClaimSlug(title),
-    shareUrl: row.share_url ?? generateClaimShareUrl(claimId),
+    // Always rebuild the share link from SHARE_BASE_URL (factfight.com) instead
+    // of the stored share_url, which still holds the old verifact.pennyfloat.com
+    // domain for existing claims (and for backend-created claims until Render's
+    // VERIFACT_PUBLIC_SITE_URL is switched). Both domains serve /claim/{id}.
+    shareUrl: generateClaimShareUrl(claimId),
     title,
     description,
     sourceUrl,
@@ -1012,7 +1016,11 @@ function createFallbackClaim(row: ClaimRow, error: unknown): Claim {
   return {
     id: claimId,
     slug: row.slug ?? generateClaimSlug(row.title ?? "Claim unavailable"),
-    shareUrl: row.share_url ?? generateClaimShareUrl(claimId),
+    // Always rebuild the share link from SHARE_BASE_URL (factfight.com) instead
+    // of the stored share_url, which still holds the old verifact.pennyfloat.com
+    // domain for existing claims (and for backend-created claims until Render's
+    // VERIFACT_PUBLIC_SITE_URL is switched). Both domains serve /claim/{id}.
+    shareUrl: generateClaimShareUrl(claimId),
     title: row.title ?? "Claim unavailable",
     description: "This claim is temporarily unavailable.",
     sourceUrl: row.source_url ?? "",

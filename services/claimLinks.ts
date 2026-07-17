@@ -1,5 +1,5 @@
 // PHASE 2 STEP 8
-import { PUBLIC_SITE_URL } from "../constants/launchConfig";
+import { SHARE_BASE_URL } from "../constants/launchConfig";
 
 export function generateClaimSlug(title: string): string {
   const slug = title
@@ -13,7 +13,7 @@ export function generateClaimSlug(title: string): string {
 }
 
 export function generateClaimShareUrl(claimId: string): string {
-  return `${PUBLIC_SITE_URL}/claim/${claimId}`;
+  return `${SHARE_BASE_URL}/claim/${claimId}`;
 }
 
 export function isYouTubeUrl(url: string): boolean {
