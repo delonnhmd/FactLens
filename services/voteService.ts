@@ -5,6 +5,7 @@
 // PHASE 3 STEP 29
 // PHASE 3 STEP 32
 import { supabase } from "../lib/supabase";
+import { getBackendUrl } from "../constants/apiConfig";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
@@ -52,6 +53,13 @@ interface ClaimVoteResult {
 // PHASE 4 STEP 24
 const ALREADY_VOTED_MESSAGE = "You already voted on this claim.";
 const TRIGGER_REFETCH_DELAY_MS = 300;
+
+// SINGLE WRITE PATH (step 2): route votes through POST /api/claims/{id}/vote so
+// the server (JWT auth, one-vote, suspension, finalized/deadline gates) is the
+// single enforcement point — same pattern as USE_API_CREATE in claimService.
+// Flip to false for an instant rollback to the direct supabase-js insert below;
+// the direct-insert RLS policy is intentionally NOT locked yet (Phase-4 HOLD).
+const USE_API_VOTE = true;
 
 function waitForClaimTrigger() {
   return new Promise((resolve) => setTimeout(resolve, TRIGGER_REFETCH_DELAY_MS));
@@ -259,6 +267,129 @@ export async function recalculateVoteCounts(claimId: string): Promise<ClaimVoteR
   };
 }
 
+// SINGLE WRITE PATH (step 2): cast the vote through the server endpoint. The
+// endpoint is the authoritative gate; on success we refetch the full (author-
+// joined) claim via fetchClaimById so the returned shape is byte-identical to
+// the direct path and the optimistic-update UX is unchanged. Network failures
+// surface a retry error — we NEVER fall back to a direct insert (that would
+// bypass server enforcement).
+export async function voteOnClaimViaApi(
+  claimId: string,
+  userId: string,
+  voteType: VoteTypeInput,
+): Promise<ClaimVoteResult> {
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return { claim: null, error: "Verifact is temporarily unavailable. Please try again." };
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+
+  if (!accessToken) {
+    return { claim: null, error: "Please log in to vote." };
+  }
+
+  const normalizedVoteType = normalizeVoteType(voteType);
+  const appVoteOption = toAppVoteOption(normalizedVoteType);
+
+  let response: Response;
+  let data: Record<string, unknown> = {};
+
+  try {
+    response = await fetch(`${backendUrl}/api/claims/${encodeURIComponent(claimId)}/vote`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ vote_type: normalizedVoteType }),
+    });
+
+    try {
+      data = (await response.json()) as Record<string, unknown>;
+    } catch {
+      data = {};
+    }
+  } catch (error) {
+    console.log("[vote api] network error:", error);
+    return { claim: null, error: "Unable to reach Verifact. Check your connection and try again." };
+  }
+
+  if (!response.ok) {
+    const detail = typeof data.detail === "string" ? data.detail : "";
+    const alreadyVoted = data.already_voted === true;
+
+    if (response.status === 409 && alreadyVoted) {
+      // The app usually catches "already voted" before this call, so this is a
+      // race. Reconcile the UI with the server's truth (fresh counts + vote).
+      const voteRow = (data.vote as VoteRow | undefined) ?? null;
+      const existingOption =
+        toAppVoteOption(voteRow?.vote_type) ??
+        (await fetchUserVoteForClaim(claimId, userId)).vote ??
+        appVoteOption;
+      const updated = await fetchClaimById(claimId);
+
+      return {
+        ok: false,
+        alreadyVoted: true,
+        vote: voteRow,
+        claim: updated.claim ? { ...updated.claim, userVote: existingOption } : null,
+        updatedClaim: updated.claim ? { ...updated.claim, userVote: existingOption } : null,
+        error: ALREADY_VOTED_MESSAGE,
+        message: ALREADY_VOTED_MESSAGE,
+      };
+    }
+
+    if (response.status === 401) {
+      return { claim: null, error: "Please log in to vote." };
+    }
+
+    if (response.status === 403) {
+      return { claim: null, error: detail || "This account cannot vote right now." };
+    }
+
+    if (response.status === 404) {
+      return { claim: null, error: detail || "This claim is no longer available." };
+    }
+
+    if (response.status === 409) {
+      return { claim: null, error: detail || "Voting is closed. Final score is being locked." };
+    }
+
+    if (response.status === 422) {
+      return { claim: null, error: detail || "Could not record your vote. Please try again." };
+    }
+
+    if (response.status === 429) {
+      return { claim: null, error: detail || "Too many votes right now. Please try again shortly." };
+    }
+
+    return { claim: null, error: detail || "Could not save vote right now." };
+  }
+
+  // Success — the endpoint already recalculated scores; refetch the joined claim.
+  const updated = await fetchClaimById(claimId);
+
+  if (!updated.claim) {
+    return {
+      ok: true,
+      claim: null,
+      updatedClaim: null,
+      message: "Vote saved, but count refresh failed.",
+      countRefreshFailed: true,
+    };
+  }
+
+  return {
+    ok: true,
+    claim: { ...updated.claim, userVote: appVoteOption },
+    updatedClaim: { ...updated.claim, userVote: appVoteOption },
+    message: "Vote saved.",
+  };
+}
+
 export async function voteOnClaim(
   claimId: string,
   userId: string,
@@ -270,6 +401,12 @@ export async function voteOnClaim(
       claim: null,
       error: profile.suspension_reason || "This account is suspended from voting.",
     };
+  }
+
+  // SINGLE WRITE PATH (step 2): flag on → server endpoint; flag off → the
+  // untouched direct-insert path below (instant rollback).
+  if (USE_API_VOTE) {
+    return voteOnClaimViaApi(claimId, userId, voteType);
   }
 
   const claimResult = await fetchClaimById(claimId);
