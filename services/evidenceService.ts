@@ -6,6 +6,7 @@
 // PHASE 5 STEP 4
 // PHASE 5 STEP 6
 import { supabase } from "../lib/supabase";
+import { getBackendUrl } from "../constants/apiConfig";
 import { getSourceQuality } from "./sourceQuality";
 import { ensureProfileForUser } from "./profileService";
 import type { Evidence, EvidenceType } from "../types/claim";
@@ -18,6 +19,13 @@ import { saveEvidenceMentions } from "./mentionService";
 
 const EVIDENCE_NOTE_MAX_LENGTH = 500;
 const EVIDENCE_DOMAIN_PATTERN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/i;
+
+// SINGLE WRITE PATH (step 3): route evidence writes through POST
+// /api/claims/{id}/evidence so the server (auth, URL validation, source scoring,
+// suspension, rate limit) is the single enforcement point. Images still upload
+// to Storage client-side, then the URL is persisted (same as claim images).
+// Flip to false for an instant rollback to the direct supabase-js insert below.
+const USE_API_EVIDENCE = true;
 
 export interface EvidenceInput {
   url: string;
@@ -332,6 +340,135 @@ export async function recalculateEvidenceCount(claimId: string): Promise<Evidenc
   };
 }
 
+// SINGLE WRITE PATH (step 3): submit evidence via the server endpoint. Client
+// validation runs first for fast UX; the server re-validates as the authoritative
+// gate (URL, note length, source scoring, suspension). The image still uploads to
+// Storage client-side (it needs the returned evidence id for the path), then the
+// URLs are persisted via the owner-scoped update. Network failures surface a
+// retry error — we never fall back to a direct insert.
+export async function addEvidenceViaApi(
+  claimId: string,
+  userId: string,
+  input: EvidenceInput,
+): Promise<EvidenceResult> {
+  void userId;
+
+  if (!claimId) {
+    return { evidence: null, error: "Missing claim id." };
+  }
+
+  const validationError = validateEvidenceInput(input);
+
+  if (validationError) {
+    return { evidence: null, error: validationError };
+  }
+
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return { evidence: null, error: "Verifact is temporarily unavailable. Please try again." };
+  }
+
+  const [{ data: userData }, { data: sessionData }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.auth.getSession(),
+  ]);
+  const user = userData?.user;
+  const accessToken = sessionData.session?.access_token;
+
+  if (!user || !accessToken) {
+    return { evidence: null, error: "Please log in to add evidence." };
+  }
+
+  let response: Response;
+  let data: Record<string, unknown> = {};
+
+  try {
+    response = await fetch(`${backendUrl}/api/claims/${encodeURIComponent(claimId)}/evidence`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: input.url,
+        note: input.note,
+        evidence_type: normalizeEvidenceType(input.type),
+      }),
+    });
+
+    try {
+      data = (await response.json()) as Record<string, unknown>;
+    } catch {
+      data = {};
+    }
+  } catch (error) {
+    console.log("[evidence api] network error:", error);
+    return { evidence: null, error: "Unable to reach Verifact. Check your connection and try again." };
+  }
+
+  if (!response.ok) {
+    const detail = typeof data.detail === "string" ? data.detail : "";
+
+    if (response.status === 401) {
+      return { evidence: null, error: "Please log in to add evidence." };
+    }
+
+    if (response.status === 403) {
+      return { evidence: null, error: detail || "This account cannot add evidence right now." };
+    }
+
+    if (response.status === 404) {
+      return { evidence: null, error: detail || "This claim is no longer available." };
+    }
+
+    if (response.status === 422) {
+      return { evidence: null, error: detail || "Please check the source URL and note." };
+    }
+
+    if (response.status === 429) {
+      return { evidence: null, error: detail || "Too many submissions right now. Please try again shortly." };
+    }
+
+    return { evidence: null, error: detail || "Could not save evidence right now." };
+  }
+
+  let evidenceRow = (data.evidence as EvidenceRow | undefined) ?? null;
+
+  if (!evidenceRow?.id) {
+    return { evidence: null, error: "Could not save evidence right now." };
+  }
+
+  if (input.imageAsset) {
+    try {
+      const uploadedImage = await uploadEvidenceImage(user.id, evidenceRow.id, input.imageAsset);
+      const { data: updatedEvidence, error: imageUpdateError } = await supabase
+        .from("evidence")
+        .update({
+          image_url: uploadedImage.imageUrl,
+          image_path: uploadedImage.imagePath,
+          thumbnail_url: uploadedImage.thumbnailUrl,
+        })
+        .eq("id", evidenceRow.id)
+        .eq("user_id", user.id)
+        .select("*")
+        .single();
+
+      if (!imageUpdateError && updatedEvidence) {
+        evidenceRow = updatedEvidence as EvidenceRow;
+      } else if (imageUpdateError) {
+        console.log("[evidence api] image field update error:", imageUpdateError);
+      }
+    } catch (uploadError) {
+      console.log("[evidence api] image upload warning:", uploadError);
+    }
+  }
+
+  await saveEvidenceMentions(evidenceRow.id, sanitizeEvidenceNote(input.note));
+
+  return { evidence: mapEvidenceRowToEvidence(evidenceRow) };
+}
+
 export async function addEvidence(
   claimId: string,
   userId: string,
@@ -346,6 +483,12 @@ export async function addEvidence(
       evidence: null,
       error: "Missing claim id.",
     };
+  }
+
+  // SINGLE WRITE PATH (step 3): flag on → server endpoint; flag off → the
+  // untouched direct-insert path below (instant rollback).
+  if (USE_API_EVIDENCE) {
+    return addEvidenceViaApi(claimId, userId, input);
   }
 
   const validationError = validateEvidenceInput(input);

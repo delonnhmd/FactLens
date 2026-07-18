@@ -2101,6 +2101,17 @@ class ClaimVoteRequest(BaseModel):
     vote_type: str
 
 
+class ClaimReportRequest(BaseModel):
+    reason: str
+    note: str = ""
+
+
+class ClaimEvidenceRequest(BaseModel):
+    url: str
+    note: str
+    evidence_type: str = "ADDS_CONTEXT"
+
+
 # PHASE 6 STEP 1 — Fire-and-forget embedding storage for a just-created claim.
 class ClaimEmbedRequest(BaseModel):
     claim_id: str = ""
@@ -7727,6 +7738,216 @@ def api_vote_on_claim(claim_id: str, payload: ClaimVoteRequest, request: Request
 
     refreshed_claim = fetch_claim_row(normalized_claim_id) or claim
     return {"ok": True, "vote": inserted_vote, "claim": refreshed_claim}
+
+
+# SINGLE WRITE PATH (step 3) — server-side report + evidence writes. These were
+# the last client-only rulebooks; every rule the mobile client enforced now runs
+# here (JWT auth, enum/length validation, suspension, dedup, per-day limits) so
+# mobile and the future web share one implementation. Reuses existing services
+# (get_active_write_profile, score_source_url) — no duplicated logic.
+ALLOWED_REPORT_REASONS = {
+    "SPAM", "FAKE_SOURCE", "DUPLICATE_CLAIM", "HARMFUL_CONTENT", "MISLEADING_TITLE",
+    "HARASSMENT_OR_ABUSE", "MISINFORMATION_ABUSE", "EXPLICIT_CONTENT",
+    "MALICIOUS_EVIDENCE", "OTHER",
+}
+REPORT_NOTE_MAX_LENGTH = 1000
+REPORTS_PER_DAY_LIMIT = 20
+
+ALLOWED_EVIDENCE_TYPES = {"SUPPORTS_TRUE", "SUPPORTS_FAKE", "ADDS_CONTEXT", "UNCLEAR"}
+EVIDENCE_NOTE_MIN_LENGTH = 10
+EVIDENCE_NOTE_MAX_LENGTH = 500
+_EVIDENCE_DOMAIN_PATTERN = re.compile(r"^(?:[a-z0-9-]+\.)+[a-z]{2,}$", re.IGNORECASE)
+
+
+def _normalize_evidence_type(raw: str) -> str:
+    normalized = (raw or "").strip().upper().replace(" ", "_")
+    if normalized in ("SUPPORTS_TRUE", "TRUE"):
+        return "SUPPORTS_TRUE"
+    if normalized in ("SUPPORTS_FAKE", "FAKE"):
+        return "SUPPORTS_FAKE"
+    if normalized in ("ADDS_CONTEXT", "CONTEXT", "ADDS"):
+        return "ADDS_CONTEXT"
+    if normalized == "UNCLEAR":
+        return "UNCLEAR"
+    return "ADDS_CONTEXT"
+
+
+def _normalize_evidence_url(raw: str) -> str:
+    trimmed = (raw or "").strip()
+    if not trimmed:
+        return ""
+    if not re.match(r"^https?://", trimmed, re.IGNORECASE):
+        return f"https://{trimmed}"
+    return trimmed
+
+
+def _is_valid_evidence_url(raw: str) -> bool:
+    # Mirrors the client's isValidEvidenceUrl (evidenceService.ts / claim/[id].tsx):
+    # http/https only, real hostname, no credentials, dotted-domain pattern.
+    normalized = _normalize_evidence_url(raw)
+    if not re.match(r"^https?://", normalized, re.IGNORECASE):
+        return False
+    try:
+        parsed = urlparse(normalized)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https") or parsed.username or parsed.password:
+        return False
+    hostname = (parsed.hostname or "").lower()
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+    if not hostname:
+        return False
+    return bool(_EVIDENCE_DOMAIN_PATTERN.match(hostname))
+
+
+def _sanitize_evidence_note(raw: str) -> str:
+    return re.sub(r"\s+", " ", (raw or "").replace("<", "").replace(">", "")).strip()
+
+
+@app.post("/api/claims/{claim_id}/report", status_code=201)
+def api_report_claim(claim_id: str, payload: ClaimReportRequest, request: Request):
+    user_id = get_authenticated_user_id(request)
+    enforce_rate_limit(
+        request, "claims_report", DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS
+    )
+    normalized_claim_id = claim_id.strip()
+    if not is_uuid(normalized_claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    reason = (payload.reason or "").strip().upper()
+    if reason not in ALLOWED_REPORT_REASONS:
+        raise HTTPException(status_code=422, detail="Invalid report reason.")
+
+    note = (payload.note or "").replace("<", "").replace(">", "").strip()
+    if len(note) > REPORT_NOTE_MAX_LENGTH:
+        raise HTTPException(status_code=422, detail=f"Note must be {REPORT_NOTE_MAX_LENGTH} characters or fewer.")
+
+    supabase = get_supabase_client()
+    get_active_write_profile(supabase, user_id, "reporting")
+
+    claim = fetch_claim_row(normalized_claim_id)
+    if not claim or claim.get("is_deleted"):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    try:
+        recent = (
+            supabase.table("reports").select("id", count="exact")
+            .eq("user_id", user_id).gte("created_at", since).execute()
+        )
+        recent_count = getattr(recent, "count", None)
+        if recent_count is None:
+            recent_count = len(getattr(recent, "data", None) or [])
+    except Exception as error:
+        print("[claims/report] rate-limit query failed:", str(error), flush=True)
+        recent_count = 0
+    if int(recent_count or 0) >= REPORTS_PER_DAY_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many reports today. Please try again later.")
+
+    existing = (
+        supabase.table("reports").select("id")
+        .eq("target_type", "CLAIM").eq("claim_id", normalized_claim_id).eq("user_id", user_id)
+        .limit(1).execute()
+    )
+    if get_first_row(existing):
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "already_reported": True, "message": "You already reported this claim."},
+        )
+
+    insert_payload = {
+        "target_type": "CLAIM",
+        "claim_id": normalized_claim_id,
+        "evidence_id": None,
+        "profile_id": None,
+        "user_id": user_id,
+        "reason": reason,
+        "note": note or None,
+        "status": "OPEN",
+    }
+    try:
+        insert_result = supabase.table("reports").insert(insert_payload).execute()
+    except Exception as error:
+        message = str(error).lower()
+        if "23505" in message or "duplicate" in message or "unique" in message:
+            return JSONResponse(
+                status_code=409,
+                content={"ok": False, "already_reported": True, "message": "You already reported this claim."},
+            )
+        print("[claims/report] insert failed:", str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not submit report right now.")
+
+    created = get_first_row(insert_result) or insert_payload
+    try:
+        supabase.rpc("recalculate_claim_report_count", {"target_claim_id": normalized_claim_id}).execute()
+    except Exception as error:
+        print("[claims/report] count refresh warning:", str(error), flush=True)
+
+    refreshed_claim = fetch_claim_row(normalized_claim_id) or claim
+    return {"ok": True, "report": created, "claim": refreshed_claim}
+
+
+@app.post("/api/claims/{claim_id}/evidence", status_code=201)
+def api_add_evidence(claim_id: str, payload: ClaimEvidenceRequest, request: Request):
+    user_id = get_authenticated_user_id(request)
+    enforce_rate_limit(
+        request, "claims_evidence", DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS, AI_RATE_LIMIT_WINDOW_SECONDS
+    )
+    normalized_claim_id = claim_id.strip()
+    if not is_uuid(normalized_claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    if not (payload.url or "").strip():
+        raise HTTPException(status_code=422, detail="Evidence URL is required.")
+    if not _is_valid_evidence_url(payload.url):
+        raise HTTPException(status_code=422, detail="Please check the source URL.")
+
+    note = _sanitize_evidence_note(payload.note)
+    if not note:
+        raise HTTPException(status_code=422, detail="Evidence note is required.")
+    if len(note) < EVIDENCE_NOTE_MIN_LENGTH:
+        raise HTTPException(status_code=422, detail="Short note must be at least 10 characters.")
+    if len(note) > EVIDENCE_NOTE_MAX_LENGTH:
+        raise HTTPException(status_code=422, detail=f"Evidence note must be {EVIDENCE_NOTE_MAX_LENGTH} characters or fewer.")
+
+    evidence_type = _normalize_evidence_type(payload.evidence_type)
+    normalized_url = _normalize_evidence_url(payload.url)
+
+    supabase = get_supabase_client()
+    get_active_write_profile(supabase, user_id, "adding evidence")
+
+    claim = fetch_claim_row(normalized_claim_id)
+    if not claim or claim.get("is_deleted"):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    score = score_source_url(normalized_url) or {}
+    insert_payload = {
+        "claim_id": normalized_claim_id,
+        "user_id": user_id,
+        "evidence_type": evidence_type,
+        "url": normalized_url,
+        "note": note,
+        "source_quality_label": score.get("source_trust_label") or score.get("source_quality"),
+        "source_quality_score": score.get("source_score"),
+        "source_quality_reason": (score.get("source_message") or {}).get("text") or score.get("source_domain"),
+    }
+    try:
+        insert_result = supabase.table("evidence").insert(insert_payload).execute()
+    except Exception as error:
+        print("[claims/evidence] insert failed:", str(error), flush=True)
+        raise HTTPException(status_code=500, detail="Could not save evidence right now.")
+
+    created = get_first_row(insert_result)
+    if not created:
+        raise HTTPException(status_code=500, detail="Could not save evidence right now.")
+
+    try:
+        supabase.rpc("recalculate_claim_evidence_count", {"target_claim_id": normalized_claim_id}).execute()
+    except Exception as error:
+        print("[claims/evidence] count refresh warning:", str(error), flush=True)
+
+    return {"ok": True, "evidence": created}
 
 
 # MODERATION CHECK (NEW) — dedicated endpoint with a single, stable response

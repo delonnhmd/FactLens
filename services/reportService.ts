@@ -1,7 +1,14 @@
 // PHASE 3 STEP 6
 import { supabase } from "../lib/supabase";
+import { getBackendUrl } from "../constants/apiConfig";
 import { fetchClaimById } from "./claimService";
 import type { Claim, Report, ReportReason } from "../types/claim";
+
+// SINGLE WRITE PATH (step 3): route claim reports through POST
+// /api/claims/{id}/report so the server (auth, reason enum, note cap, suspension,
+// one-per-user dedup, per-day limit) is the single enforcement point. Flip to
+// false for an instant rollback to the direct supabase-js upsert below.
+const USE_API_REPORT = true;
 
 export type ReportDbReason =
   | "SPAM"
@@ -245,12 +252,106 @@ export async function recalculateReportCount(claimId: string): Promise<ClaimRepo
   };
 }
 
+// SINGLE WRITE PATH (step 3): submit the report via the server endpoint. The
+// endpoint is the authoritative gate; on success we refetch the claim so the
+// returned shape matches the direct path. Network failures surface a retry
+// error — we never fall back to a direct insert (that would bypass enforcement).
+export async function reportClaimViaApi(
+  claimId: string,
+  userId: string,
+  reason: ReportReason,
+  note = "",
+): Promise<ClaimReportResult> {
+  void userId;
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return { claim: null, report: null, error: "Verifact is temporarily unavailable. Please try again." };
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+
+  if (!accessToken) {
+    return { claim: null, report: null, error: "Please log in to report." };
+  }
+
+  let response: Response;
+  let data: Record<string, unknown> = {};
+
+  try {
+    response = await fetch(`${backendUrl}/api/claims/${encodeURIComponent(claimId)}/report`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ reason: appToDbReason[reason], note }),
+    });
+
+    try {
+      data = (await response.json()) as Record<string, unknown>;
+    } catch {
+      data = {};
+    }
+  } catch (error) {
+    console.log("[report api] network error:", error);
+    return { claim: null, report: null, error: "Unable to reach Verifact. Check your connection and try again." };
+  }
+
+  if (!response.ok) {
+    const detail = typeof data.detail === "string" ? data.detail : "";
+
+    if (response.status === 409 && data.already_reported === true) {
+      return {
+        claim: null,
+        report: null,
+        error: typeof data.message === "string" ? data.message : "You already reported this claim.",
+      };
+    }
+
+    if (response.status === 401) {
+      return { claim: null, report: null, error: "Please log in to report." };
+    }
+
+    if (response.status === 403) {
+      return { claim: null, report: null, error: detail || "This account cannot report right now." };
+    }
+
+    if (response.status === 404) {
+      return { claim: null, report: null, error: detail || "This claim is no longer available." };
+    }
+
+    if (response.status === 422) {
+      return { claim: null, report: null, error: detail || "Please check the report details and try again." };
+    }
+
+    if (response.status === 429) {
+      return { claim: null, report: null, error: detail || "Too many reports today. Please try again later." };
+    }
+
+    return { claim: null, report: null, error: detail || "Could not submit report right now." };
+  }
+
+  const reportRow = (data.report as ReportRow | undefined) ?? null;
+  const report = reportRow ? mapReportRowToReport(reportRow) : null;
+  const updatedClaim = await fetchClaimById(claimId);
+
+  return { claim: updatedClaim.claim ?? null, report };
+}
+
 export async function reportClaim(
   claimId: string,
   userId: string,
   reason: ReportReason,
   note = "",
 ): Promise<ClaimReportResult> {
+  // SINGLE WRITE PATH (step 3): flag on → server endpoint; flag off → the
+  // untouched direct-upsert path below (instant rollback).
+  if (USE_API_REPORT) {
+    return reportClaimViaApi(claimId, userId, reason, note);
+  }
+
   const existingReport = await fetchReportRowForClaim(claimId, userId);
 
   if (existingReport.error) {
