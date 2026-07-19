@@ -1081,66 +1081,93 @@ ABOUT_PAGE_HTML = f"""<!DOCTYPE html>
 
 
 PRIVACY_POLICY_HTML = build_legal_page(
-    "Verifact Privacy Policy",
-    "Privacy Policy for Verifact by PennyFloat.",
+    "FactFight Privacy Policy",
+    "Privacy Policy for FactFight, operated by MD Media LLC.",
     """
         <h1>Privacy Policy</h1>
-        <p class="updated">Effective June 10, 2026</p>
-        <p>Verifact is a community-powered claim verification app operated by PennyFloat. This policy explains how Verifact collects, uses, stores, and protects information for accounts, claims, evidence, voting, reports, moderation, and AI-assisted analysis.</p>
-        <p>Verifact does not sell personal data.</p>
+        <p class="updated">Last updated July 18, 2026 &middot; Operated by MD Media LLC (Houston, Texas)</p>
+        <p>FactFight is a community-powered claim verification service, available through our mobile application and website at factfight.com, operated by MD Media LLC ("FactFight," "we," "us"). This policy explains how we collect, use, store, share, and protect information for accounts, claims, evidence, voting, reports, moderation, and AI-assisted analysis.</p>
+        <p><strong>We do not sell your personal information.</strong></p>
 
-        <h2>Information We Collect</h2>
+        <h2>1. Information We Collect</h2>
         <ul>
-          <li>Account information such as email address, username, display name, authentication identifiers, profile details, and account status.</li>
-          <li>Uploaded images, image metadata, claim text, source URLs, evidence notes, votes, reports, and other user-generated submissions.</li>
-          <li>Moderation, safety, reputation, and trust signals such as report status, visibility status, vote history, badges, and account action records.</li>
-          <li>Technical information such as IP-derived network data, device or browser details, app version, diagnostics, cookies, local storage, and service logs.</li>
+          <li>Account information: email address, username, display name, avatar, authentication identifiers, and account status.</li>
+          <li>User-generated content: claim text, source URLs, uploaded images and their metadata, evidence notes, votes, reports, and comments.</li>
+          <li>Moderation, safety, reputation, and trust signals: report status, visibility status, vote history, badges, and account-action records.</li>
+          <li>Technical information: IP-derived network data, device or browser details, app version, diagnostics, cookies, local storage, and service logs.</li>
         </ul>
 
-        <h2>How We Use Information</h2>
+        <h2>2. How We Use Information</h2>
         <ul>
-          <li>To create accounts, authenticate users, provide support, and process account deletion requests.</li>
-          <li>To publish and operate claims, evidence, images, votes, reports, and public contributor surfaces.</li>
-          <li>To run moderation systems, investigate abuse, enforce policies, prevent spam, and protect service integrity.</li>
-          <li>To operate analytics, diagnostics, reliability monitoring, security checks, and product improvements.</li>
+          <li>To create and authenticate accounts, maintain profiles and reputation, provide support, and process account-deletion requests.</li>
+          <li>To publish and operate claims, evidence, images, votes, reports, and public contributor pages.</li>
+          <li>To run moderation and safety systems, investigate abuse, enforce policies, prevent spam and fraud, and protect service integrity.</li>
+          <li>To operate diagnostics, reliability monitoring, security checks, and product improvements.</li>
+        </ul>
+        <p>We do not use your personal information for third-party advertising, and we do not sell it.</p>
+
+        <h2>3. AI-Assisted Analysis</h2>
+        <p>We use AI-assisted systems (including OpenAI) to classify, summarize, moderate, and evaluate claims, source URLs, uploaded evidence, and related context, and to detect prohibited content. To do this, we may send claim text, source URLs, and related content to our AI provider for processing. AI outputs are preliminary risk signals that may be wrong, incomplete, outdated, or biased, and never make the final community verdict.</p>
+
+        <h2>4. Service Providers (Sub-Processors)</h2>
+        <p>We share information with a limited set of service providers that process it only to provide services to us, under confidentiality and security obligations, and not for their own marketing or resale:</p>
+        <ul>
+          <li>Supabase — authentication, database, and file storage.</li>
+          <li>Render — backend and API hosting.</li>
+          <li>Vercel — website hosting.</li>
+          <li>OpenAI — AI-assisted analysis and content moderation.</li>
+          <li>Resend — transactional and account email delivery.</li>
+          <li>Expo, Apple, and Google — mobile app delivery and distribution.</li>
         </ul>
 
-        <h2>AI-Assisted Analysis</h2>
-        <p>Verifact may use AI-assisted systems to classify, summarize, and evaluate claims, source URLs, uploaded evidence, and related context. AI outputs are preliminary and may be wrong, incomplete, outdated, or biased. They do not guarantee that a claim is true or false.</p>
+        <h2>5. Legal Requests and Disclosures</h2>
+        <p>We do not sell your personal information. However, we may disclose information when required to do so by valid legal process — including a lawful court order, subpoena, or government request — or where we believe in good faith that disclosure is necessary to comply with the law, protect the rights, property, or safety of FactFight, our users, or the public, or to prevent imminent harm. In responding to any such request, we disclose only the information legally required and no more. Where permitted by law, we will make reasonable efforts to notify the affected user before disclosing their information, unless we are legally prohibited from doing so or the request relates to an emergency.</p>
 
-        <h2>Third-Party Services</h2>
-        <p>Verifact may use Supabase for authentication, database, and storage services; Render for backend hosting; image storage for uploaded files; Expo, Apple, and Google for app delivery; and analytics, logging, email, security, and moderation tools as needed to operate the service.</p>
+        <h2>6. Your Privacy Rights</h2>
+        <p>Depending on where you live, you may have rights over your personal information, including the rights to access, correct, delete, or receive a copy of it, and to object to or restrict certain processing.</p>
+        <p><strong>California (CCPA/CPRA):</strong> You have the right to know what personal information we collect, to access and delete it, and to opt out of the sale or sharing of personal information. We do not sell or share your personal information as those terms are defined under California law. We will not discriminate against you for exercising your rights.</p>
+        <p><strong>EEA/UK (GDPR):</strong> You have the rights of access, rectification, erasure, restriction, portability, and objection, and the right to lodge a complaint with your data protection authority. We process personal information to provide the service, to comply with law, and for our legitimate interests in safety, security, and integrity.</p>
+        <p>To exercise any right, contact support@factfight.com from the email address associated with your account. We may need to verify your identity before acting on a request.</p>
 
-        <h2>Public Content and Retention</h2>
-        <p>Claims, evidence, votes, reports, public profile details, and reputation signals may be visible to other users depending on the feature and moderation state. We retain information as needed to operate Verifact, comply with law, resolve disputes, enforce rules, prevent abuse, and maintain security.</p>
+        <h2>7. Data Retention</h2>
+        <p>We retain personal information for as long as needed to operate the service, comply with law, resolve disputes, prevent abuse, and preserve verification history. Public contributions such as claims, evidence, and votes may be retained in anonymized form after account deletion to preserve the integrity of the verification record.</p>
 
-        <h2>Account Deletion</h2>
-        <p>You may request account deletion from the app or by contacting support@factfight.com from the email address associated with your account. Some records may be retained or anonymized when needed for safety, legal compliance, fraud prevention, dispute resolution, or verification history.</p>
+        <h2>8. Account Deletion</h2>
+        <p>You may request account deletion from within the app or by contacting support@factfight.com from the email address associated with your account. When you delete your account, your personal information is removed, but your public contributions may remain, attributed to an anonymous user, to preserve verification history. Some records may be retained or anonymized when needed for safety, legal compliance, fraud prevention, or dispute resolution.</p>
 
-        <h2>Contact</h2>
-        <p>For privacy questions, support, or account deletion requests, contact <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
+        <h2>9. Children's Privacy</h2>
+        <p>FactFight is not directed to children under 13, and you must be at least 13 years old to use it. We do not knowingly collect personal information from children under 13. If we learn that we have collected personal information from a child under 13, we will delete it. If you believe a child under 13 has provided us information, contact support@factfight.com.</p>
+
+        <h2>10. Public Content</h2>
+        <p>Claims, evidence, votes, usernames, public profile details, and reputation signals may be visible to other users when submitted to public or community-facing features. Do not submit private personal information in public claims or evidence.</p>
+
+        <h2>11. Changes to This Policy</h2>
+        <p>We may update this policy. Material changes will be communicated through the Service. Continued use after changes constitutes acceptance.</p>
+
+        <h2>12. Contact</h2>
+        <p>For privacy questions, requests, or to exercise your rights, contact <a href="mailto:support@factfight.com">support@factfight.com</a>. MD Media LLC, Houston, Texas.</p>
     """,
 )
 
 PERSONAL_PRIVACY_HTML = build_legal_page(
-    "Verifact Personal Privacy",
-    "Personal privacy promise for Verifact by PennyFloat.",
+    "FactFight Personal Privacy",
+    "Personal privacy promise for FactFight, operated by MD Media LLC.",
     """
         <h1>Personal Privacy</h1>
-        <p class="updated">Effective June 11, 2026</p>
-        <p>Verifact and PennyFloat take personal user privacy seriously. We do not sell, rent, trade, or voluntarily provide personal user information to unrelated third parties for marketing, advertising, data brokerage, or commercial resale.</p>
+        <p class="updated">Last updated July 18, 2026 &middot; Operated by MD Media LLC (Houston, Texas)</p>
+        <p>FactFight and MD Media LLC take personal user privacy seriously. We do not sell, rent, trade, or voluntarily provide personal user information to unrelated third parties for marketing, advertising, data brokerage, or commercial resale.</p>
 
         <h2>Our Privacy Promise</h2>
         <p>We will not provide personal user information to a third party unless a limited exception applies. Limited exceptions include a valid court order, subpoena, warrant, legally binding government request, regulatory requirement, user consent, or a situation where disclosure is necessary to protect users, investigate abuse, prevent fraud, secure the service, or comply with applicable law.</p>
 
         <h2>Service Providers</h2>
-        <p>Verifact may use trusted service providers such as hosting, authentication, storage, analytics, security, email, and app delivery providers to operate the service. These providers may process limited information only as needed to provide services to Verifact. They are not allowed to use personal user information for their own marketing or resale.</p>
+        <p>FactFight uses trusted service providers — including Supabase (authentication, database, storage), Render (backend hosting), Vercel (website hosting), OpenAI (AI-assisted analysis and moderation), Resend (email delivery), and Expo, Apple, and Google (app delivery) — to operate the service. These providers may process limited information only as needed to provide services to FactFight, and are not allowed to use personal user information for their own marketing or resale.</p>
 
-        <h2>Legal Requests</h2>
-        <p>If PennyFloat receives a legal demand for user information, we review the request before responding. Where allowed by law and practical under the circumstances, we may narrow, challenge, or reject requests that appear invalid, overbroad, or inconsistent with user privacy.</p>
+        <h2>Legal Requests and Disclosures</h2>
+        <p>We may disclose information when required to do so by valid legal process — including a lawful court order, subpoena, or government request — or where we believe in good faith that disclosure is necessary to comply with the law, protect the rights, property, or safety of FactFight, our users, or the public, or to prevent imminent harm. In responding to any such request, we disclose only the information legally required and no more. Where permitted by law, we will make reasonable efforts to notify the affected user before disclosing their information, unless we are legally prohibited from doing so or the request relates to an emergency.</p>
 
         <h2>Public Content</h2>
-        <p>Claims, evidence, votes, reports, usernames, profile details, and reputation signals may be visible inside Verifact when users submit them to public or community-facing features. This page does not make public submissions private.</p>
+        <p>Claims, evidence, votes, reports, usernames, profile details, and reputation signals may be visible inside FactFight when users submit them to public or community-facing features. This page does not make public submissions private.</p>
 
         <h2>Contact</h2>
         <p>Questions about personal privacy may be sent to <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>

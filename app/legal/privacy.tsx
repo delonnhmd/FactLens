@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
+import { PRIVACY_TEXT } from "../../constants/privacyText";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useAppTheme } from "../../hooks/useTheme";
 
@@ -12,25 +13,12 @@ export default function PrivacyScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Privacy Policy" subtitle="How Verifact handles account data" />
+      <Header title="Privacy Policy" subtitle="How FactFight handles your data" />
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} accessibilityRole="button">
           <Text style={styles.link}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.heading}>Account Data</Text>
-        <Text style={styles.body}>
-          Verifact uses account, profile, claim, vote, report, and evidence information to run community verification
-          features and protect launch safety.
-        </Text>
-        <Text style={styles.heading}>Public Contributions</Text>
-        <Text style={styles.body}>
-          Claims, votes, evidence, rankings, and public profile details may be visible to other users as part of the
-          verification experience.
-        </Text>
-        <Text style={styles.heading}>Safety and Support</Text>
-        <Text style={styles.body}>
-          Reports and moderation signals may be reviewed to prevent spam, harassment, unsafe content, and abuse.
-        </Text>
+        <Text style={styles.body}>{PRIVACY_TEXT}</Text>
       </ScrollView>
     </SafeAreaView>
   );
