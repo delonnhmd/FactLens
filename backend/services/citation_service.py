@@ -59,7 +59,7 @@ DOI_RESOLVER_URL = "https://doi.org/{doi}"
 # Same courteous UA the source page fetcher uses, so outbound calls are identifiable.
 CITATION_USER_AGENT = (
     "VerifactBot/1.0 (+https://verifact.pennyfloat.com; citation existence check; "
-    "contact: support@verifact.pennyfloat.com)"
+    "contact: support@factfight.com)"
 )
 
 

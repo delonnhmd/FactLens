@@ -136,7 +136,7 @@ export const USERNAME_NOT_AVAILABLE_MESSAGE = "Username is not available";
 // PHASE 5 PRE-LAUNCH
 export const USERNAME_SYSTEM_RESERVED_MESSAGE = "Unavailable";
 export const USERNAME_PROTECTED_MESSAGE =
-  "This username is reserved. If you represent this person or organization, please apply at support@verifact.pennyfloat.com";
+  "This username is reserved. If you represent this person or organization, please apply at support@factfight.com";
 export const USERNAME_TAKEN_SHORT_MESSAGE = "Username is taken";
 
 export type UsernameAvailabilityTone = "available" | "system" | "protected" | "taken" | "error";

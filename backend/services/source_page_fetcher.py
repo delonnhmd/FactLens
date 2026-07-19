@@ -14,7 +14,7 @@ MAX_SOURCE_EXCERPT_CHARS = 5500
 MAX_SOURCE_HTML_BYTES = 750_000
 SOURCE_FETCH_TIMEOUT_SECONDS = 9
 SOURCE_FETCH_USER_AGENT = (
-    "VerifactBot/1.0 (+https://verifact.pennyfloat.com; source support precheck; contact: support@verifact.pennyfloat.com)"
+    "VerifactBot/1.0 (+https://verifact.pennyfloat.com; source support precheck; contact: support@factfight.com)"
 )
 BLOCKED_HOSTNAMES = {"localhost", "localhost.localdomain"}
 SAFE_SOURCE_FETCH_ERROR = "We could not automatically read this source. Community review can still continue."

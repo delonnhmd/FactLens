@@ -771,7 +771,7 @@ def build_legal_page(title: str, description: str, content: str) -> str:
       </main>
       <footer>
         <span>&copy; 2026 PennyFloat</span>
-        <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>
+        <a href="mailto:support@factfight.com">support@factfight.com</a>
       </footer>
     </div>
   </body>
@@ -1068,7 +1068,7 @@ ABOUT_PAGE_HTML = f"""<!DOCTYPE html>
         <section class="card contact">
           <h2>Contact</h2>
           <p>Verifact is owned and operated by PennyFloat.</p>
-          <p>For support, app review questions, or public page requests, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+          <p>For support, app review questions, or public page requests, contact <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
         </section>
       </div>
     </main>
@@ -1115,10 +1115,10 @@ PRIVACY_POLICY_HTML = build_legal_page(
         <p>Claims, evidence, votes, reports, public profile details, and reputation signals may be visible to other users depending on the feature and moderation state. We retain information as needed to operate Verifact, comply with law, resolve disputes, enforce rules, prevent abuse, and maintain security.</p>
 
         <h2>Account Deletion</h2>
-        <p>You may request account deletion from the app or by contacting support@pennyfloat.com from the email address associated with your account. Some records may be retained or anonymized when needed for safety, legal compliance, fraud prevention, dispute resolution, or verification history.</p>
+        <p>You may request account deletion from the app or by contacting support@factfight.com from the email address associated with your account. Some records may be retained or anonymized when needed for safety, legal compliance, fraud prevention, dispute resolution, or verification history.</p>
 
         <h2>Contact</h2>
-        <p>For privacy questions, support, or account deletion requests, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+        <p>For privacy questions, support, or account deletion requests, contact <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
     """,
 )
 
@@ -1143,7 +1143,7 @@ PERSONAL_PRIVACY_HTML = build_legal_page(
         <p>Claims, evidence, votes, reports, usernames, profile details, and reputation signals may be visible inside Verifact when users submit them to public or community-facing features. This page does not make public submissions private.</p>
 
         <h2>Contact</h2>
-        <p>Questions about personal privacy may be sent to <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+        <p>Questions about personal privacy may be sent to <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
     """,
 )
 
@@ -1187,7 +1187,7 @@ TERMS_OF_SERVICE_HTML = build_legal_page(
         <p>To the fullest extent permitted by law, PennyFloat is not liable for indirect, incidental, special, consequential, exemplary, or punitive damages, lost profits, lost data, service interruption, reputational harm, or reliance on user-generated or AI-assisted content.</p>
 
         <h2>Contact</h2>
-        <p>Questions about these Terms may be sent to <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+        <p>Questions about these Terms may be sent to <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
     """,
 )
 
@@ -1209,7 +1209,7 @@ COPYRIGHT_NOTICE_HTML = build_legal_page(
         <p>You are responsible for ensuring that your submissions do not infringe copyrights, trademarks, privacy rights, publicity rights, confidentiality obligations, or other rights. Do not upload screenshots, articles, images, videos, documents, or other materials unless you have the right to share them.</p>
 
         <h2>DMCA and Copyright Contact Process</h2>
-        <p>If you believe content on Verifact infringes your copyright, contact <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a> with your name, contact email, a description of the copyrighted work, the location of the allegedly infringing content, and a statement that you believe the use is unauthorized.</p>
+        <p>If you believe content on Verifact infringes your copyright, contact <a href="mailto:support@factfight.com">support@factfight.com</a> with your name, contact email, a description of the copyrighted work, the location of the allegedly infringing content, and a statement that you believe the use is unauthorized.</p>
 
         <h2>Repeat Infringement and Abuse</h2>
         <p>PennyFloat may remove or restrict content and may suspend or terminate accounts that repeatedly infringe intellectual property rights or misuse the copyright reporting process.</p>
@@ -1246,7 +1246,7 @@ COMMUNITY_GUIDELINES_HTML = build_legal_page(
         <p>Content may be removed for policy violations. Verifact may also reduce visibility, add labels, limit features, preserve records, suspend accounts, or report serious issues when content violates these Guidelines, Terms, platform rules, or applicable law.</p>
 
         <h2>Contact</h2>
-        <p>Questions or reports may be sent to <a href="mailto:support@pennyfloat.com">support@pennyfloat.com</a>.</p>
+        <p>Questions or reports may be sent to <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
     """,
 )
 
@@ -5647,7 +5647,7 @@ def admin_suspend_user(payload: AdminUserActionRequest, request: Request):
                 "body": (
                     f"Your account has been suspended by moderation. Reason: {reason}. "
                     "If you believe this is a mistake, contact "
-                    "support@verifact.pennyfloat.com."
+                    "support@factfight.com."
                 ),
                 "claim_id": None,
             }).execute()

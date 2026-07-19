@@ -12,7 +12,7 @@ Short positioning:
 Verifact helps people review claims together using sources, evidence, community voting, and AI-assisted source checks.
 
 Support contact:
-support@verifact.pennyfloat.com
+support@factfight.com
 
 Website:
 https://verifact.pennyfloat.com
@@ -78,7 +78,7 @@ Prepare these screenshots for iPhone and Android:
 - Terms URL: https://verifact.pennyfloat.com/terms
 - Community Guidelines URL: https://verifact.pennyfloat.com/community-guidelines
 - AI Disclaimer URL: https://verifact.pennyfloat.com/ai-disclaimer
-- Support email: support@verifact.pennyfloat.com
+- Support email: support@factfight.com
 - Account deletion: available in Profile settings.
 - Reporting: available for claims, evidence, and profiles.
 - Moderation: hidden content controls and admin review queue exist.

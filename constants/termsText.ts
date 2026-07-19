@@ -25,4 +25,4 @@ Last updated: July 2026
 
 8. CHANGES. We may update these terms. Continued use after changes constitutes acceptance.
 
-Contact: support@verifact.pennyfloat.com`;
+Contact: support@factfight.com`;

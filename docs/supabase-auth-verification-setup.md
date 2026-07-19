@@ -128,7 +128,7 @@ Port: 465
 Username: resend
 Password: RESEND_API_KEY
 Sender name: Verifact
-Sender email: support@pennyfloat.com
+Sender email: support@factfight.com
 ```
 
 The Resend sending domain must be verified in DNS before Supabase sends from this address.
