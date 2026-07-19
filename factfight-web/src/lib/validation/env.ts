@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 const publicEnvironmentSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.url(),
+  NEXT_PUBLIC_SUPABASE_URL: z.url().refine(
+    (value) => new URL(value).hostname.toLowerCase().endsWith(".supabase.co"),
+    "Must be the Supabase project URL.",
+  ),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().trim().min(1),
   NEXT_PUBLIC_RENDER_BACKEND_URL: z.url(),
   NEXT_PUBLIC_SITE_URL: z.url(),

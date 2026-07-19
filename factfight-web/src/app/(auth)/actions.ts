@@ -32,20 +32,34 @@ function friendlySignInError(): AuthActionState {
   };
 }
 
-function friendlySignUpError(code?: string): AuthActionState {
-  if (code === "user_already_exists" || code === "email_exists") {
+function friendlySignUpError(error: {
+  code?: string;
+  message: string;
+}): AuthActionState {
+  if (error.code === "user_already_exists" || error.code === "email_exists") {
     return { message: "An account with this email may already exist. Try logging in." };
   }
 
-  if (code === "over_email_send_rate_limit" || code === "over_request_rate_limit") {
+  if (
+    error.code === "over_email_send_rate_limit" ||
+    error.code === "over_request_rate_limit"
+  ) {
     return { message: "Too many attempts. Please wait a moment and try again." };
   }
 
-  if (code === "weak_password") {
+  if (error.code === "weak_password") {
     return { message: "Choose a stronger password and try again." };
   }
 
-  return { message: "We could not create your account right now. Please try again." };
+  if (error.code === "email_address_invalid") {
+    return { message: "Enter a valid email address and try again." };
+  }
+
+  if (error.code === "signup_disabled") {
+    return { message: "Account creation is temporarily unavailable." };
+  }
+
+  return { message: error.message || "Account creation failed. Please try again." };
 }
 
 export async function loginAction(
@@ -137,7 +151,12 @@ export async function signupAction(
   });
 
   if (error) {
-    return friendlySignUpError(error.code);
+    console.error("Supabase signup failed", {
+      code: error.code ?? "unknown",
+      message: error.message,
+      status: error.status ?? null,
+    });
+    return friendlySignUpError(error);
   }
 
   if (!data.session?.access_token) {

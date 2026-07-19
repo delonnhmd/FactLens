@@ -6,6 +6,9 @@
 /out
 /build
 
+# Vercel project metadata
+/.vercel
+
 # Local environment files
 .env*
 !.env.example
@@ -19,4 +22,3 @@ pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
-

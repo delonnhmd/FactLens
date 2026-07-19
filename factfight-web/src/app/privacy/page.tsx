@@ -66,7 +66,7 @@ export default function PrivacyPage() {
         <p>{`You may request account deletion from within the app or by contacting `}<a href="mailto:support@factfight.com">support@factfight.com</a>{` from the email address associated with your account. When you delete your account, your personal information is removed, but your public contributions may remain, attributed to an anonymous user, to preserve verification history. Some records may be retained or anonymized when needed for safety, legal compliance, fraud prevention, or dispute resolution.`}</p>
       </section>
       <section>
-        <h2>9. Children's privacy</h2>
+        <h2>9. Children&apos;s privacy</h2>
         <p>{`FactFight is not directed to children under 13, and you must be at least 13 years old to use it. We do not knowingly collect personal information from children under 13. If we learn that we have collected personal information from a child under 13, we will delete it. If you believe a child under 13 has provided us information, contact `}<a href="mailto:support@factfight.com">support@factfight.com</a>{`.`}</p>
       </section>
       <section>
