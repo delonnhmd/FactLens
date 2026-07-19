@@ -20,7 +20,7 @@ export default function TermsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header title="Terms of Use" subtitle="Verifact Terms of Use (EULA)" />
+      <Header title="Terms of Use" subtitle="FactFight Terms of Use (EULA)" />
       <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} accessibilityRole="button">
           <Text style={styles.link}>Back</Text>

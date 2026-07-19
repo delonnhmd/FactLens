@@ -1148,46 +1148,80 @@ PERSONAL_PRIVACY_HTML = build_legal_page(
 )
 
 TERMS_OF_SERVICE_HTML = build_legal_page(
-    "Verifact Terms of Service",
-    "Terms of Service for Verifact by PennyFloat.",
+    "FactFight Terms of Use",
+    "Terms of Use for FactFight, operated by MD Media LLC.",
     """
-        <h1>Terms of Service</h1>
-        <p class="updated">Effective June 10, 2026</p>
-        <p>These Terms govern your access to and use of Verifact, a claim and evidence review product operated by PennyFloat. Verifact is built around a simple standard: The red. The blue. The truth.</p>
+        <h1>Terms of Use</h1>
+        <p class="updated">Last updated July 18, 2026 &middot; Operated by MD Media LLC (Houston, Texas)</p>
 
-        <h2>Acceptable Use</h2>
-        <p>You may use Verifact only for lawful, honest, and respectful participation in claim review. You are responsible for claims, evidence, images, reports, votes, comments, profile information, and other content you submit.</p>
+        <h2>1. Acceptance of These Terms</h2>
+        <p>By creating an account, logging in, or otherwise using FactFight (the "Service"), whether through our mobile application or website at factfight.com, you agree to these Terms of Use ("Terms"). If you do not agree, do not use the Service. If you are using the Service on behalf of an organization, you represent that you have authority to bind that organization.</p>
+        <p>You must be at least 13 years old to use FactFight.</p>
 
-        <h2>User-Generated Content</h2>
-        <p>You retain ownership of your content, subject to rights held by others. By submitting content, you grant PennyFloat a worldwide, non-exclusive, royalty-free license to host, store, reproduce, display, analyze, moderate, format, and distribute that content as needed to operate and protect Verifact.</p>
+        <h2>2. What FactFight Is — and Is Not</h2>
+        <p>FactFight is a platform that allows users to post claims, submit evidence, vote, and participate in community verification of statements, including statements about political and public matters. FactFight provides tools for users to evaluate claims collectively, assisted by automated analysis.</p>
+        <p>FactFight is not a publisher, journalist, or arbiter of truth. FactFight does not author claims. Claims, evidence, comments, and votes are created and submitted by users. Verdicts, scores, and labels displayed on the Service are the automated and aggregated output of community voting and AI-assisted analysis — they are informational only, may be incorrect, and do not represent statements of fact, opinion, or endorsement by FactFight or MD Media LLC.</p>
 
-        <h2>No Guarantee of Accuracy</h2>
-        <p>Verifact provides tools for reviewing claims and evidence, but it does not guarantee factual accuracy, completeness, neutrality, timeliness, or final truth. Content may be disputed, incomplete, outdated, misleading, or incorrect. Always verify important information independently.</p>
+        <h2>3. User-Generated Content and Section 230</h2>
+        <p>The Service hosts content provided by users. Under Section 230 of the Communications Decency Act (47 U.S.C. § 230), FactFight is a provider of an interactive computer service and is not the publisher or speaker of user-provided content. You — not FactFight — are solely responsible for the claims, evidence, and other content you submit.</p>
+        <p>FactFight does not endorse, guarantee, or assume responsibility for any user content. Any reliance you place on claims or verdicts is at your own risk.</p>
 
-        <h2>AI-Assisted Analysis</h2>
-        <p>AI-assisted analysis may help classify, summarize, or evaluate claims and evidence. AI outputs can be wrong, incomplete, biased, or misapplied, and they are not legal, medical, financial, election, safety, or other professional advice.</p>
-
-        <h2>Prohibited Behavior</h2>
+        <h2>4. Verdicts, Scores, and Accuracy — Disclaimer</h2>
+        <p>Verdicts (including labels such as "True," "Fake," "Disputed," or similar), source-quality scores, accuracy scores, and AI-generated analysis are produced by a combination of community voting and automated systems. These outputs:</p>
         <ul>
-          <li>Harassment, threats, bullying, doxxing, exploitation, or abuse.</li>
-          <li>Hate speech, explicit content, illegal content, or promotion of violence or self-harm.</li>
-          <li>Spam, scams, malicious links, coordinated manipulation, fake engagement, or deceptive behavior.</li>
-          <li>Impersonation of people, organizations, public officials, platforms, moderators, or PennyFloat staff.</li>
-          <li>Uploading content that violates privacy, confidentiality, or intellectual property rights.</li>
-          <li>Scraping, bulk downloading, reverse engineering, credential stuffing, API abuse, rate-limit evasion, or attempts to interfere with service operations.</li>
+          <li>May be inaccurate, incomplete, outdated, or wrong;</li>
+          <li>Are not professional, legal, financial, medical, or journalistic advice;</li>
+          <li>Are not statements of fact by FactFight;</li>
+          <li>Should never be relied upon as the sole basis for any decision.</li>
         </ul>
+        <p>Always consult original sources and qualified professionals. FactFight expressly disclaims liability for any action taken in reliance on any verdict, score, or content on the Service.</p>
 
-        <h2>Moderation and Account Actions</h2>
-        <p>PennyFloat may review, label, limit, hide, remove, preserve, or escalate content, and may suspend or terminate accounts, when needed to enforce these Terms, protect users, comply with law, investigate abuse, or maintain service integrity.</p>
+        <h2>5. Prohibited Content and Conduct — Zero Tolerance</h2>
+        <p>FactFight has zero tolerance for objectionable content and abusive users. You may not post, and you may not use the Service to distribute, content that:</p>
+        <ul>
+          <li>Constitutes harassment, threats, incitement to violence, or hate speech;</li>
+          <li>Is defamatory, libelous, or knowingly false about an identifiable person;</li>
+          <li>Is sexually explicit, or exploits or endangers minors;</li>
+          <li>Infringes intellectual property or privacy rights;</li>
+          <li>Constitutes spam, fraud, impersonation, or manipulation of votes or verdicts;</li>
+          <li>Violates any applicable law, including election, campaign-finance, and defamation law.</li>
+        </ul>
+        <p>FactFight reviews reported content and acts on violations within 24 hours, including removing content and terminating accounts. FactFight may remove any content or suspend or terminate any account at its sole discretion.</p>
 
-        <h2>Intellectual Property</h2>
-        <p>Verifact, PennyFloat, product names, logos, software, interfaces, workflows, analysis systems, and original content are owned by PennyFloat or its licensors. These Terms do not grant ownership of Verifact or PennyFloat intellectual property.</p>
+        <h2>6. Integrity of the Service</h2>
+        <p>You may not: operate multiple accounts to influence outcomes; use bots or automated means to vote or post; fabricate sources or evidence; manipulate reputation, scores, or verdicts; or interfere with the Service's operation. Violations are grounds for immediate termination.</p>
 
-        <h2>Liability Limitation</h2>
-        <p>To the fullest extent permitted by law, PennyFloat is not liable for indirect, incidental, special, consequential, exemplary, or punitive damages, lost profits, lost data, service interruption, reputational harm, or reliance on user-generated or AI-assisted content.</p>
+        <h2>7. Your Content — License and Responsibility</h2>
+        <p>You retain ownership of content you submit. You grant FactFight a worldwide, non-exclusive, royalty-free license to host, display, reproduce, and distribute your content in connection with operating and promoting the Service.</p>
+        <p>Claims become part of the public record. You may delete a claim within three (3) hours of posting. After three hours, or once a verdict is finalized, claims are permanent and may not be deleted. If you delete your account, your personal information is removed but your public contributions remain, attributed to an anonymous user.</p>
+        <p>You represent that you have all rights necessary to submit your content and that it does not violate these Terms or any law.</p>
 
-        <h2>Contact</h2>
-        <p>Questions about these Terms may be sent to <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
+        <h2>8. Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless FactFight, MD Media LLC, and their officers, members, employees, and agents from any claims, damages, liabilities, losses, and expenses (including reasonable attorneys' fees) arising from: (a) your content; (b) your use of the Service; (c) your violation of these Terms; or (d) your violation of any law or third-party right.</p>
+
+        <h2>9. Disclaimer of Warranties</h2>
+        <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AND NON-INFRINGEMENT. FACTFIGHT DOES NOT WARRANT THAT THE SERVICE OR ANY VERDICT WILL BE ACCURATE, UNINTERRUPTED, OR ERROR-FREE.</p>
+
+        <h2>10. Limitation of Liability</h2>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, FACTFIGHT AND MD MEDIA LLC WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR DATA, ARISING FROM YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY FOR ANY CLAIM WILL NOT EXCEED THE GREATER OF (A) THE AMOUNT YOU PAID US IN THE TWELVE MONTHS BEFORE THE CLAIM, OR (B) ONE HUNDRED U.S. DOLLARS ($100).</p>
+
+        <h2>11. Dispute Resolution and Arbitration</h2>
+        <p>Any dispute arising from these Terms or the Service will be resolved by binding individual arbitration administered by the American Arbitration Association (AAA) under its applicable Consumer Arbitration Rules, seated in Houston, Texas. You and FactFight waive any right to a jury trial or to participate in a class action, except where prohibited by law.</p>
+
+        <h2>12. Governing Law</h2>
+        <p>These Terms are governed by the laws of the State of Texas, without regard to conflict-of-laws principles.</p>
+
+        <h2>13. DMCA / Copyright</h2>
+        <p>FactFight responds to notices of alleged copyright infringement under the Digital Millennium Copyright Act. To submit a notice, contact our designated agent at <a href="mailto:support@factfight.com">support@factfight.com</a>.</p>
+
+        <h2>14. Changes to These Terms</h2>
+        <p>We may update these Terms. Material changes will be communicated through the Service. Continued use after changes constitutes acceptance.</p>
+
+        <h2>15. Termination</h2>
+        <p>We may suspend or terminate your access at any time, with or without notice, for any violation of these Terms or for any reason at our discretion.</p>
+
+        <h2>16. Contact</h2>
+        <p>Questions about these Terms may be sent to <a href="mailto:support@factfight.com">support@factfight.com</a>. MD Media LLC, Houston, Texas.</p>
     """,
 )
 
