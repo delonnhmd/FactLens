@@ -42,6 +42,7 @@ export default async function MyProfilePage() {
         <nav className="mt-3 divide-y divide-[var(--ff-border)]" aria-label="Profile pages">
           <Link className="block py-3 text-sm font-medium text-[var(--ff-navy)]" href="/notifications">Notifications</Link>
           <Link className="block py-3 text-sm font-medium text-[var(--ff-navy)]" href="/profile/claims">My claims</Link>
+          <Link className="block py-3 text-sm font-medium text-[var(--ff-navy)]" href="/my-activity/votes">Voting history</Link>
           <Link className="block py-3 text-sm font-medium text-[var(--ff-navy)]" href="/profile/saved">Saved claims</Link>
           <Link className="block py-3 text-sm font-medium text-[var(--ff-navy)]" href="/settings">Account settings</Link>
           <Link className="block py-3 text-sm font-medium text-[var(--ff-navy)]" href="/settings/blocked">Blocked users</Link>

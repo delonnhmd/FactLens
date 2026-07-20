@@ -32,8 +32,13 @@ export interface PublicProfileDetail {
   readonly reputationPoints: number;
   readonly monthlyReputationPoints: number;
   readonly badges: readonly string[];
+  readonly claimsCount: number;
+  readonly repliesCount: number;
   readonly evidenceCount: number;
   readonly correctVotes: number;
+  readonly totalVotes: number;
+  readonly finalizedVotes: number;
+  readonly accuracyPercentage: number | null;
   readonly createdAt: string | null;
   readonly isDeleted: boolean;
 }

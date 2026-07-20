@@ -21,6 +21,11 @@ export interface PublicProfileCard {
   badgeList: ReputationBadge[];
   evidenceCount: number;
   correctVotes: number;
+  claimsCount: number;
+  repliesCount: number;
+  totalVotes: number;
+  finalizedVotes: number;
+  accuracyPercentage: number | null;
   createdAt: string | null;
   isDeleted: boolean;
 }
@@ -41,6 +46,7 @@ interface PublicProfileRow {
   badge_list?: unknown;
   evidence_count?: number | null;
   correct_votes?: number | null;
+  incorrect_votes?: number | null;
   created_at?: string | null;
   is_deleted?: boolean | null;
   deleted_at?: string | null;
@@ -54,7 +60,7 @@ export interface PublicProfileResult {
 }
 
 const PUBLIC_PROFILE_SELECT =
-  "id,username,display_name,avatar_url,bio,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list,evidence_count,correct_votes,created_at,is_deleted,deleted_at";
+  "id,username,display_name,avatar_url,bio,public_profile_slug,profile_visibility,trust_score,rank_title,highest_rank_achieved,reputation_points,monthly_reputation_points,badge_list,evidence_count,correct_votes,incorrect_votes,created_at,is_deleted,deleted_at";
 const PUBLIC_PROFILE_MINIMAL_SELECT = "id,username,display_name,avatar_url,created_at";
 
 function isUuid(input: string): boolean {
@@ -98,6 +104,14 @@ function mapPublicProfileRow(row: PublicProfileRow): PublicProfileCard {
     badgeList: isDeleted ? [] : parseBadgeList(row.badge_list),
     evidenceCount: visibility === "private" || isDeleted ? 0 : row.evidence_count ?? 0,
     correctVotes: visibility === "private" || isDeleted ? 0 : row.correct_votes ?? 0,
+    claimsCount: 0,
+    repliesCount: 0,
+    totalVotes: (row.correct_votes ?? 0) + (row.incorrect_votes ?? 0),
+    finalizedVotes: (row.correct_votes ?? 0) + (row.incorrect_votes ?? 0),
+    accuracyPercentage:
+      (row.correct_votes ?? 0) + (row.incorrect_votes ?? 0) > 0
+        ? Math.round(((row.correct_votes ?? 0) / ((row.correct_votes ?? 0) + (row.incorrect_votes ?? 0))) * 1000) / 10
+        : null,
     createdAt: visibility === "private" || isDeleted ? null : row.created_at ?? null,
     isDeleted,
   };
@@ -211,17 +225,26 @@ async function fetchPublicProfileFromBackend(
     params.set("username", username.trim());
   }
 
-  const url = `${backendUrl}/public-profile/${encodeURIComponent(identifier.trim())}${
+  const url = `${backendUrl}/profiles/${encodeURIComponent(identifier.trim())}/summary${
     params.toString() ? `?${params.toString()}` : ""
   }`;
 
   try {
-    const response = await fetch(url);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token ?? null;
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
     const json = (await response.json().catch(() => ({}))) as {
       ok?: boolean;
       profile?: PublicProfileRow;
       reason?: string;
       message?: string;
+      counts?: { claims?: number; replies?: number; evidence?: number };
+      voting?: { total_votes?: number; finalized_votes?: number; accuracy_percentage?: number | null };
     };
 
     console.log("[public profile] backend response:", {
@@ -232,7 +255,16 @@ async function fetchPublicProfileFromBackend(
 
     if (response.ok && json.ok && json.profile) {
       return {
-        profile: mapPublicProfileRow(json.profile),
+        profile: {
+          ...mapPublicProfileRow(json.profile),
+          claimsCount: Number(json.counts?.claims ?? 0),
+          repliesCount: Number(json.counts?.replies ?? 0),
+          evidenceCount: Number(json.counts?.evidence ?? 0),
+          totalVotes: Number(json.voting?.total_votes ?? 0),
+          finalizedVotes: Number(json.voting?.finalized_votes ?? 0),
+          accuracyPercentage:
+            typeof json.voting?.accuracy_percentage === "number" ? json.voting.accuracy_percentage : null,
+        },
       };
     }
 
@@ -245,10 +277,29 @@ async function fetchPublicProfileFromBackend(
       };
     }
 
-    return null;
+    if (response.status === 404) {
+      return {
+        profile: null,
+        status: 404,
+        reason: "not_found",
+        error: "Contributor profile unavailable.",
+      };
+    }
+
+    return {
+      profile: null,
+      status: 500,
+      reason: "server_error",
+      error: "Could not load profile. Please try again.",
+    };
   } catch (error) {
     console.log("[public profile] backend fetch warning:", error);
-    return null;
+    return {
+      profile: null,
+      status: 500,
+      reason: "network",
+      error: "Could not connect. Check your internet and try again.",
+    };
   }
 }
 
@@ -281,7 +332,7 @@ export async function fetchPublicProfileBySlug(
 
   const backendResult = await fetchPublicProfileFromBackend(trimmedIdentifier, options.username);
 
-  if (backendResult?.profile || backendResult?.reason === "not_found") {
+  if (backendResult) {
     console.log("=== END DEBUG ===");
     return backendResult;
   }

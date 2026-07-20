@@ -1,7 +1,7 @@
 // PHASE 5 STEP 1E
 // PHASE 5 STEP 4
 import { useEffect, useState } from "react";
-import { Alert, Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../components/Header";
@@ -11,6 +11,22 @@ import { fetchPublicProfileBySlug, type PublicProfileCard } from "../../services
 import { reportProfile } from "../../services/reportService";
 import { formatPoints, getTopBadges } from "../../utils/reputation";
 import { cleanUserError } from "../../utils/debugError";
+import {
+  fetchPublicProfileActivity,
+  type PublicProfileActivityType,
+  type PublicProfileEvidenceActivity,
+  type PublicProfilePostActivity,
+  type PublicProfileReplyActivity,
+} from "../../services/profileActivityService";
+
+type PublicProfileTab = PublicProfileActivityType | "about";
+
+const profileTabs: Array<{ label: string; value: PublicProfileTab }> = [
+  { label: "Posts", value: "posts" },
+  { label: "Replies", value: "replies" },
+  { label: "Evidence", value: "evidence" },
+  { label: "About", value: "about" },
+];
 
 export default function PublicProfileScreen() {
   const router = useRouter();
@@ -28,6 +44,12 @@ export default function PublicProfileScreen() {
   const [fetchReason, setFetchReason] = useState<"not_found" | "network" | "server_error" | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const [activeTab, setActiveTab] = useState<PublicProfileTab>("posts");
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState("");
+  const [posts, setPosts] = useState<PublicProfilePostActivity[]>([]);
+  const [replies, setReplies] = useState<PublicProfileReplyActivity[]>([]);
+  const [evidence, setEvidence] = useState<PublicProfileEvidenceActivity[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -75,6 +97,44 @@ export default function PublicProfileScreen() {
   useEffect(() => {
     setAvatarLoadFailed(false);
   }, [profile?.avatarUrl]);
+
+  useEffect(() => {
+    if (!profile || activeTab === "about" || profile.isDeleted) {
+      return;
+    }
+
+    let mounted = true;
+    setActivityLoading(true);
+    setActivityError("");
+    const identifier = profile.publicProfileSlug || profile.username || profile.id;
+
+    fetchPublicProfileActivity(identifier, activeTab).then((result) => {
+      if (!mounted) return;
+      setPosts(result.posts);
+      setReplies(result.replies);
+      setEvidence(result.evidence);
+      setActivityError(result.error ?? "");
+      setActivityLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [activeTab, profile]);
+
+  const formatVerdict = (verdict: PublicProfilePostActivity["finalVerdict"]) => {
+    if (verdict === "TRUE") return "Community says True";
+    if (verdict === "FAKE") return "Community says Fake";
+    if (verdict === "NEEDS_MORE_EVIDENCE") return "Needs more evidence";
+    return "Verdict pending";
+  };
+
+  const formatEvidenceType = (value: string) => {
+    if (value === "SUPPORTS_TRUE") return "Supports true";
+    if (value === "SUPPORTS_FAKE") return "Supports fake";
+    if (value === "ADDS_CONTEXT") return "Adds context";
+    return "Unclear";
+  };
 
   // PHASE 5 STEP 2
   const handleReportProfile = async () => {
@@ -174,64 +234,129 @@ export default function PublicProfileScreen() {
               </View>
             </View>
 
-            {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
-
-            {isDeleted ? (
-              <Text style={styles.privateNote}>This account was deleted. Public profile details are no longer shown.</Text>
-            ) : isPrivate ? (
-              <Text style={styles.privateNote}>This contributor keeps detailed profile stats private.</Text>
-            ) : (
-              <>
-                <View style={styles.statsGrid}>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Reputation</Text>
-                    <Text style={styles.statValue}>{formatPoints(profile.reputationPoints)}</Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>This month</Text>
-                    <Text style={styles.statValue}>{formatPoints(profile.monthlyReputationPoints)}</Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Evidence</Text>
-                    <Text style={styles.statValue}>{profile.evidenceCount}</Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Correct votes</Text>
-                    <Text style={styles.statValue}>{profile.correctVotes}</Text>
-                  </View>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Highest rank achieved</Text>
-                  <Text style={styles.detailValue}>{profile.highestRankAchieved}</Text>
-                </View>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Joined</Text>
-                  <Text style={styles.detailValue}>
-                    {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "Unknown"}
-                  </Text>
-                </View>
-              </>
-            )}
-
-            <View style={styles.badgeSection}>
-              <Text style={styles.detailLabel}>Badges</Text>
-              {topBadges.length > 0 ? (
-                <View style={styles.badgeWrap}>
-                  {topBadges.map((badge) => {
-                    // TASK 2 (admin badge): distinct red styling for the Admin badge.
-                    const isAdminBadge = badge.id === "admin" || badge.name.toLowerCase() === "admin";
-
-                    return (
-                      <Text key={badge.id} style={[styles.badge, isAdminBadge && styles.badgeAdmin]}>
-                        {badge.name}
-                      </Text>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={styles.detailValue}>No badges yet.</Text>
-              )}
+            <View style={styles.tabRow} accessibilityRole="tablist">
+              {profileTabs.map((tab) => {
+                const selected = activeTab === tab.value;
+                return (
+                  <TouchableOpacity
+                    key={tab.value}
+                    style={[styles.tabButton, selected && styles.tabButtonSelected]}
+                    activeOpacity={0.8}
+                    onPress={() => setActiveTab(tab.value)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={[styles.tabText, selected && styles.tabTextSelected]}>{tab.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+
+            {activeTab === "about" ? (
+              <View style={styles.tabContent}>
+                {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+
+                {isDeleted ? (
+                  <Text style={styles.privateNote}>This account was deleted. Public profile details are no longer shown.</Text>
+                ) : isPrivate ? (
+                  <Text style={styles.privateNote}>This contributor keeps detailed profile stats private.</Text>
+                ) : (
+                  <>
+                    <View style={styles.statsGrid}>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Reputation</Text>
+                        <Text style={styles.statValue}>{formatPoints(profile.reputationPoints)}</Text>
+                      </View>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Posts</Text>
+                        <Text style={styles.statValue}>{profile.claimsCount}</Text>
+                      </View>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Replies</Text>
+                        <Text style={styles.statValue}>{profile.repliesCount}</Text>
+                      </View>
+                      <View style={styles.statBox}>
+                        <Text style={styles.statLabel}>Evidence</Text>
+                        <Text style={styles.statValue}>{profile.evidenceCount}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Voting activity</Text>
+                      <Text style={styles.detailValue}>
+                        {profile.totalVotes} total · {profile.finalizedVotes} finalized · {profile.accuracyPercentage === null ? "Accuracy unavailable" : `${profile.accuracyPercentage}% accuracy`}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Highest rank achieved</Text>
+                      <Text style={styles.detailValue}>{profile.highestRankAchieved}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Joined</Text>
+                      <Text style={styles.detailValue}>
+                        {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "Unknown"}
+                      </Text>
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.badgeSection}>
+                  <Text style={styles.detailLabel}>Badges</Text>
+                  {topBadges.length > 0 ? (
+                    <View style={styles.badgeWrap}>
+                      {topBadges.map((badge) => {
+                        const isAdminBadge = badge.id === "admin" || badge.name.toLowerCase() === "admin";
+                        return (
+                          <Text key={badge.id} style={[styles.badge, isAdminBadge && styles.badgeAdmin]}>
+                            {badge.name}
+                          </Text>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.detailValue}>No badges yet.</Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
+
+            {activeTab !== "about" ? (
+              <View style={styles.tabContent}>
+                {activityLoading ? <Text style={styles.activityMessage}>Loading {activeTab}...</Text> : null}
+                {!activityLoading && activityError ? <Text style={styles.errorText}>{activityError}</Text> : null}
+
+                {!activityLoading && !activityError && activeTab === "posts" && posts.length === 0 ? <Text style={styles.activityMessage}>No public posts yet.</Text> : null}
+                {!activityLoading && !activityError && activeTab === "posts" ? posts.map((post) => (
+                  <TouchableOpacity key={post.id} style={styles.activityCard} activeOpacity={0.85} onPress={() => router.push(`/claim/${post.id}`)}>
+                    {post.thumbnailUrl || post.imageUrl ? <Image source={{ uri: post.thumbnailUrl || post.imageUrl || "" }} style={styles.activityImage} /> : null}
+                    <Text style={styles.activityTitle}>{post.title}</Text>
+                    {post.descriptionPreview ? <Text style={styles.activityBody} numberOfLines={3}>{post.descriptionPreview}</Text> : null}
+                    <Text style={styles.activityMeta}>{post.category || "Claim"} · {post.status ? post.status.replace(/_/g, " ").toLowerCase() : "Status unavailable"} · {formatVerdict(post.finalVerdict)}</Text>
+                    <Text style={styles.activityMeta}>{post.totalVotes} votes · {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : "Date unavailable"}</Text>
+                  </TouchableOpacity>
+                )) : null}
+
+                {!activityLoading && !activityError && activeTab === "replies" && replies.length === 0 ? <Text style={styles.activityMessage}>No public replies yet.</Text> : null}
+                {!activityLoading && !activityError && activeTab === "replies" ? replies.map((reply) => (
+                  <TouchableOpacity key={reply.id} style={styles.activityCard} activeOpacity={0.85} onPress={() => router.push(`/claim/${reply.claimId}`)}>
+                    <Text style={styles.activityBody}>{reply.text}</Text>
+                    <Text style={styles.activityLink}>On: {reply.claimTitle}</Text>
+                    <Text style={styles.activityMeta}>{reply.createdAt ? new Date(reply.createdAt).toLocaleDateString() : "Date unavailable"}{reply.replyCount > 0 ? ` · ${reply.replyCount} replies` : ""}{reply.helpfulCount > 0 ? ` · ${reply.helpfulCount} helpful` : ""}</Text>
+                  </TouchableOpacity>
+                )) : null}
+
+                {!activityLoading && !activityError && activeTab === "evidence" && evidence.length === 0 ? <Text style={styles.activityMessage}>No public approved evidence yet.</Text> : null}
+                {!activityLoading && !activityError && activeTab === "evidence" ? evidence.map((item) => (
+                  <View key={item.id} style={styles.activityCard}>
+                    <Text style={styles.evidenceType}>{formatEvidenceType(item.evidenceType)}</Text>
+                    {item.thumbnailUrl || item.imageUrl ? <Image source={{ uri: item.thumbnailUrl || item.imageUrl || "" }} style={styles.activityImage} /> : null}
+                    {item.note ? <Text style={styles.activityBody}>{item.note}</Text> : null}
+                    <TouchableOpacity activeOpacity={0.8} onPress={() => router.push(`/claim/${item.claimId}`)}><Text style={styles.activityLink}>For: {item.claimTitle}</Text></TouchableOpacity>
+                    <Text style={styles.activityMeta}>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Date unavailable"}{item.helpfulCount > 0 ? ` · ${item.helpfulCount} helpful` : ""}</Text>
+                    {item.sourceUrl ? <TouchableOpacity activeOpacity={0.8} onPress={() => Linking.openURL(item.sourceUrl || "")}><Text style={styles.activityLink}>{item.sourceDomain || "Open source"}</Text></TouchableOpacity> : null}
+                  </View>
+                )) : null}
+              </View>
+            ) : null}
 
             {canReportProfile ? (
               <TouchableOpacity style={styles.reportButton} activeOpacity={0.8} onPress={handleReportProfile}>
@@ -321,6 +446,89 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 9,
     paddingVertical: 4,
+  },
+  tabRow: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    flexDirection: "row",
+    marginBottom: theme.spacing.md,
+    padding: 3,
+  },
+  tabButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    flex: 1,
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  tabButtonSelected: {
+    backgroundColor: theme.colors.primary,
+  },
+  tabText: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  tabTextSelected: {
+    color: "#FFFFFF",
+  },
+  tabContent: {
+    gap: theme.spacing.sm,
+  },
+  activityMessage: {
+    color: theme.colors.subtext,
+    fontSize: 14,
+    lineHeight: 20,
+    paddingVertical: theme.spacing.lg,
+    textAlign: "center",
+  },
+  activityCard: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.lightBorder,
+    borderRadius: theme.radius.sm,
+    borderWidth: 0.5,
+    gap: 8,
+    padding: theme.spacing.md,
+  },
+  activityImage: {
+    borderRadius: theme.radius.sm,
+    height: 160,
+    width: "100%",
+  },
+  activityTitle: {
+    color: theme.colors.text,
+    fontSize: 17,
+    fontWeight: "500",
+    lineHeight: 23,
+  },
+  activityBody: {
+    color: theme.colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  activityMeta: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  activityLink: {
+    color: theme.colors.link,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  evidenceType: {
+    alignSelf: "flex-start",
+    backgroundColor: theme.colors.primary,
+    borderRadius: 999,
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   bio: {
     color: theme.colors.text,

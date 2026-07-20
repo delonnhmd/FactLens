@@ -14,6 +14,7 @@ export const config = {
     "/search/:path*",
     "/leaderboard/:path*",
     "/profile/:path*",
+    "/my-activity/:path*",
     "/settings/:path*",
     "/notifications/:path*",
     "/moderation/:path*",

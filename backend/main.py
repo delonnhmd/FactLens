@@ -3096,6 +3096,386 @@ def build_public_profile_api_row(row: dict) -> dict:
     }
 
 
+PROFILE_ACTIVITY_LIMIT = 100
+PUBLIC_CLAIM_STATUSES = {
+    "PENDING",
+    "ACTIVE",
+    "EARLY_VERDICT",
+    "FINALIZED_TRUE",
+    "FINALIZED_FAKE",
+    "INSUFFICIENT_DATA",
+    "LOCKED",
+    "OPEN",
+    "VOTING_CLOSED",
+    "COMMUNITY_TRUE",
+    "COMMUNITY_FAKE",
+    "NEEDS_MORE_EVIDENCE",
+}
+
+
+def is_missing_relation_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(marker in message for marker in ("42p01", "pgrst205", "relation", "table")) and any(
+        marker in message for marker in ("does not exist", "schema cache", "could not find")
+    )
+
+
+def is_public_profile_claim(row: dict | None) -> bool:
+    if not row:
+        return False
+
+    return not any((row.get("is_deleted"), row.get("is_hidden"), row.get("hidden"))) and str(
+        row.get("safety_status") or ""
+    ).upper() == "APPROVED"
+
+
+def get_public_claim_verdict(status: Any) -> str | None:
+    normalized = str(status or "").upper()
+    if normalized in {"FINALIZED_TRUE", "COMMUNITY_TRUE"}:
+        return "TRUE"
+    if normalized in {"FINALIZED_FAKE", "COMMUNITY_FAKE"}:
+        return "FAKE"
+    if normalized in {"INSUFFICIENT_DATA", "NEEDS_MORE_EVIDENCE"}:
+        return "NEEDS_MORE_EVIDENCE"
+    return None
+
+
+def safe_public_count(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def profile_activity_is_blocked(supabase: Any, viewer_id: str | None, profile_id: str) -> bool:
+    if not viewer_id or viewer_id == profile_id:
+        return False
+
+    for blocker_id, blocked_id in ((viewer_id, profile_id), (profile_id, viewer_id)):
+        try:
+            result = (
+                supabase.table("user_blocks")
+                .select("id")
+                .eq("blocker_id", blocker_id)
+                .eq("blocked_id", blocked_id)
+                .limit(1)
+                .execute()
+            )
+        except Exception as error:
+            print("[profile activity] block lookup failed:", str(error), flush=True)
+            raise HTTPException(status_code=503, detail="Could not load this profile right now.")
+
+        if get_first_row(result):
+            return True
+
+    return False
+
+
+def get_public_profile_activity_context(request: Request, identifier: str) -> tuple[Any, dict]:
+    supabase = get_supabase_client()
+    profile = lookup_public_profile_row(supabase, identifier)
+
+    if not profile or profile.get("is_deleted"):
+        raise HTTPException(status_code=404, detail="Contributor profile unavailable.")
+
+    viewer_id = get_optional_authenticated_user_id(request)
+    profile_id = str(profile.get("id") or "")
+
+    if not profile_id or profile_activity_is_blocked(supabase, viewer_id, profile_id):
+        raise HTTPException(status_code=404, detail="Contributor profile unavailable.")
+
+    return supabase, profile
+
+
+def fetch_public_profile_posts(supabase: Any, profile_id: str) -> list[dict]:
+    try:
+        result = (
+            supabase.table("claims")
+            .select(
+                "id,title,description,image_url,thumbnail_url,category,status,votes_true,votes_fake,"
+                "votes_unsure,total_votes,created_at,is_deleted,is_hidden,hidden,safety_status"
+            )
+            .eq("author_id", profile_id)
+            .order("created_at", desc=True)
+            .limit(PROFILE_ACTIVITY_LIMIT)
+            .execute()
+        )
+    except Exception as error:
+        print("[profile activity] posts failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not load profile posts right now.")
+
+    posts: list[dict] = []
+    for row in result.data or []:
+        if not is_public_profile_claim(row):
+            continue
+
+        description = re.sub(r"\s+", " ", str(row.get("description") or "")).strip()
+        posts.append(
+            {
+                "id": str(row.get("id") or ""),
+                "title": str(row.get("title") or "Untitled claim")[:200],
+                "description_preview": description[:280],
+                "image_url": row.get("image_url"),
+                "thumbnail_url": row.get("thumbnail_url"),
+                "category": row.get("category"),
+                "status": str(row.get("status") or "") if row.get("status") else None,
+                "final_verdict": get_public_claim_verdict(row.get("status")),
+                "vote_totals": {
+                    "true": safe_public_count(row.get("votes_true")),
+                    "fake": safe_public_count(row.get("votes_fake")),
+                    "unsure": safe_public_count(row.get("votes_unsure")),
+                    "total": safe_public_count(row.get("total_votes")),
+                },
+                "created_at": row.get("created_at"),
+            }
+        )
+
+    return posts
+
+
+def fetch_claims_for_public_activity(supabase: Any, claim_ids: list[str]) -> dict[str, dict]:
+    valid_ids = sorted({claim_id for claim_id in claim_ids if is_uuid(claim_id)})
+    if not valid_ids:
+        return {}
+
+    try:
+        result = (
+            supabase.table("claims")
+            .select("id,title,is_deleted,is_hidden,hidden,safety_status")
+            .in_("id", valid_ids)
+            .execute()
+        )
+    except Exception as error:
+        print("[profile activity] related claims failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not load profile activity right now.")
+
+    return {
+        str(row.get("id")): row
+        for row in (result.data or [])
+        if is_public_profile_claim(row)
+    }
+
+
+def is_removed_public_reply(row: dict) -> bool:
+    status = str(row.get("status") or "").upper()
+    return bool(
+        row.get("is_deleted")
+        or row.get("deleted_at")
+        or row.get("removed")
+        or row.get("is_removed")
+        or row.get("hidden")
+        or row.get("is_hidden")
+        or status in {"DELETED", "REMOVED", "HIDDEN", "REJECTED"}
+    )
+
+
+def fetch_public_profile_replies(supabase: Any, profile_id: str) -> list[dict]:
+    rows: list[dict] = []
+
+    # The current repository has no comments migration yet. Supporting both
+    # conventional relation names keeps this endpoint stable without exposing
+    # raw rows or inventing a public votes fallback.
+    for table_name in ("comments", "replies"):
+        try:
+            result = (
+                supabase.table(table_name)
+                .select("*")
+                .eq("user_id", profile_id)
+                .order("created_at", desc=True)
+                .limit(PROFILE_ACTIVITY_LIMIT)
+                .execute()
+            )
+            rows = list(result.data or [])
+            break
+        except Exception as error:
+            if is_missing_relation_error(error):
+                continue
+            print(f"[profile activity] {table_name} failed:", str(error), flush=True)
+            raise HTTPException(status_code=503, detail="Could not load profile replies right now.")
+
+    visible_rows = [row for row in rows if not is_removed_public_reply(row)]
+    claim_ids = [str(row.get("claim_id") or "") for row in visible_rows]
+    claims = fetch_claims_for_public_activity(supabase, claim_ids)
+    replies: list[dict] = []
+
+    for row in visible_rows:
+        claim_id = str(row.get("claim_id") or "")
+        claim = claims.get(claim_id)
+        text = next(
+            (
+                str(value).strip()
+                for value in (row.get("text"), row.get("content"), row.get("body"), row.get("comment_text"))
+                if value is not None and str(value).strip()
+            ),
+            "",
+        )
+        reply_id = str(row.get("id") or "")
+
+        if not claim or not reply_id or not text:
+            continue
+
+        replies.append(
+            {
+                "id": reply_id,
+                "text": text[:2000],
+                "claim_id": claim_id,
+                "claim_title": str(claim.get("title") or "Untitled claim")[:200],
+                "created_at": row.get("created_at"),
+                "reply_count": safe_public_count(row.get("reply_count") or row.get("replies_count")),
+                "helpful_count": safe_public_count(row.get("helpful_count")),
+                "anchor": f"reply-{reply_id}",
+            }
+        )
+
+    return replies
+
+
+def is_public_evidence_row(row: dict) -> bool:
+    if row.get("hidden") or row.get("is_hidden"):
+        return False
+
+    status = str(row.get("status") or row.get("moderation_status") or "").upper()
+    return status not in {"REJECTED", "REMOVED", "HIDDEN", "DELETED", "BLOCKED"}
+
+
+def fetch_public_profile_evidence(supabase: Any, profile_id: str) -> list[dict]:
+    try:
+        result = (
+            supabase.table("evidence")
+            .select("*")
+            .eq("user_id", profile_id)
+            .order("created_at", desc=True)
+            .limit(PROFILE_ACTIVITY_LIMIT)
+            .execute()
+        )
+    except Exception as error:
+        print("[profile activity] evidence failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not load profile evidence right now.")
+
+    visible_rows = [row for row in (result.data or []) if is_public_evidence_row(row)]
+    claim_ids = [str(row.get("claim_id") or "") for row in visible_rows]
+    claims = fetch_claims_for_public_activity(supabase, claim_ids)
+    evidence_items: list[dict] = []
+
+    for row in visible_rows:
+        claim_id = str(row.get("claim_id") or "")
+        claim = claims.get(claim_id)
+        evidence_id = str(row.get("id") or "")
+
+        if not claim or not evidence_id:
+            continue
+
+        source_url = str(row.get("url") or "").strip()
+        source_domain = urlparse(source_url).hostname if source_url else None
+        evidence_items.append(
+            {
+                "id": evidence_id,
+                "evidence_type": str(row.get("evidence_type") or "UNCLEAR"),
+                "note": str(row.get("note") or "")[:2000],
+                "source_url": source_url or None,
+                "source_domain": source_domain,
+                "image_url": row.get("image_url"),
+                "thumbnail_url": row.get("thumbnail_url"),
+                "claim_id": claim_id,
+                "claim_title": str(claim.get("title") or "Untitled claim")[:200],
+                "helpful_count": safe_public_count(row.get("helpful_count")),
+                "created_at": row.get("created_at"),
+            }
+        )
+
+    return evidence_items
+
+
+def build_public_profile_summary(supabase: Any, profile: dict) -> dict:
+    profile_id = str(profile.get("id") or "")
+    private_profile = normalize_backend_profile_visibility(profile.get("profile_visibility")) == "private"
+    posts = fetch_public_profile_posts(supabase, profile_id)
+    replies = fetch_public_profile_replies(supabase, profile_id)
+    evidence_items = fetch_public_profile_evidence(supabase, profile_id)
+    correct_votes = safe_public_count(profile.get("correct_votes"))
+    incorrect_votes = safe_public_count(profile.get("incorrect_votes"))
+    finalized_votes = correct_votes + incorrect_votes
+
+    try:
+        vote_result = (
+            supabase.table("votes")
+            .select("id", count="exact")
+            .eq("user_id", profile_id)
+            .limit(1)
+            .execute()
+        )
+        total_votes = safe_public_count(getattr(vote_result, "count", None))
+    except Exception as error:
+        print("[profile activity] aggregate vote count warning:", str(error), flush=True)
+        total_votes = finalized_votes
+
+    public_profile = build_public_profile_api_row(profile)
+    public_profile.pop("trust_score", None)
+    public_profile.pop("correct_votes", None)
+    public_profile.pop("deleted_at", None)
+    public_profile["bio"] = None if private_profile else public_profile.get("bio")
+    public_profile["badge_list"] = [] if private_profile else public_profile.get("badge_list", [])
+    public_profile["reputation_points"] = 0 if private_profile else safe_public_count(public_profile.get("reputation_points"))
+    public_profile["monthly_reputation_points"] = 0 if private_profile else safe_public_count(public_profile.get("monthly_reputation_points"))
+
+    return {
+        "profile": public_profile,
+        "counts": {
+            "claims": len(posts),
+            "replies": len(replies),
+            "evidence": len(evidence_items),
+        },
+        "voting": {
+            "total_votes": total_votes,
+            "finalized_votes": finalized_votes,
+            "accuracy_percentage": round((correct_votes / finalized_votes) * 100, 1) if finalized_votes else None,
+        },
+    }
+
+
+def fetch_private_vote_history(supabase: Any, user_id: str) -> list[dict]:
+    try:
+        vote_result = (
+            supabase.table("votes")
+            .select("claim_id,vote_type,created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(PROFILE_ACTIVITY_LIMIT)
+            .execute()
+        )
+    except Exception as error:
+        print("[profile activity] private votes failed:", str(error), flush=True)
+        raise HTTPException(status_code=503, detail="Could not load voting history right now.")
+
+    votes = list(vote_result.data or [])
+    claim_ids = [str(row.get("claim_id") or "") for row in votes]
+    claims = fetch_claims_for_public_activity(supabase, claim_ids)
+    history: list[dict] = []
+
+    for vote in votes:
+        claim_id = str(vote.get("claim_id") or "")
+        claim = claims.get(claim_id)
+        vote_type = str(vote.get("vote_type") or "").upper()
+
+        if not claim or vote_type not in {"TRUE", "FAKE", "UNSURE"}:
+            continue
+
+        verdict = get_public_claim_verdict(claim.get("status"))
+        history.append(
+            {
+                "claim_id": claim_id,
+                "claim_title": str(claim.get("title") or "Untitled claim")[:200],
+                "vote_type": vote_type,
+                "claim_status": claim.get("status"),
+                "final_verdict": verdict,
+                "result": "PENDING" if verdict is None else "MATCHED" if vote_type == ("UNSURE" if verdict == "NEEDS_MORE_EVIDENCE" else verdict) else "DID_NOT_MATCH",
+                "voted_at": vote.get("created_at"),
+            }
+        )
+
+    return history
+
+
 def get_authenticated_identity(request: Request) -> dict:
     authorization = request.headers.get("authorization", "")
 
@@ -4264,6 +4644,44 @@ def public_profile(identifier: str, request: Request, username: str = ""):
         "ok": True,
         "profile": build_public_profile_api_row(profile_row),
     }
+
+
+@app.get("/profiles/{username}/posts")
+def public_profile_posts(username: str, request: Request):
+    enforce_rate_limit(request, "profile_posts", 180, AI_RATE_LIMIT_WINDOW_SECONDS)
+    supabase, profile = get_public_profile_activity_context(request, username)
+    posts = fetch_public_profile_posts(supabase, str(profile.get("id") or ""))
+    return {"ok": True, "posts": posts, "count": len(posts)}
+
+
+@app.get("/profiles/{username}/replies")
+def public_profile_replies(username: str, request: Request):
+    enforce_rate_limit(request, "profile_replies", 180, AI_RATE_LIMIT_WINDOW_SECONDS)
+    supabase, profile = get_public_profile_activity_context(request, username)
+    replies = fetch_public_profile_replies(supabase, str(profile.get("id") or ""))
+    return {"ok": True, "replies": replies, "count": len(replies)}
+
+
+@app.get("/profiles/{username}/evidence")
+def public_profile_evidence(username: str, request: Request):
+    enforce_rate_limit(request, "profile_evidence", 180, AI_RATE_LIMIT_WINDOW_SECONDS)
+    supabase, profile = get_public_profile_activity_context(request, username)
+    evidence_items = fetch_public_profile_evidence(supabase, str(profile.get("id") or ""))
+    return {"ok": True, "evidence": evidence_items, "count": len(evidence_items)}
+
+
+@app.get("/profiles/{username}/summary")
+def public_profile_summary(username: str, request: Request):
+    enforce_rate_limit(request, "profile_summary", 180, AI_RATE_LIMIT_WINDOW_SECONDS)
+    supabase, profile = get_public_profile_activity_context(request, username)
+    return {"ok": True, **build_public_profile_summary(supabase, profile)}
+
+
+@app.get("/profiles/me/votes")
+def private_profile_votes(request: Request):
+    user_id = get_authenticated_user_id(request)
+    history = fetch_private_vote_history(get_supabase_client(), user_id)
+    return {"ok": True, "votes": history, "count": len(history)}
 
 
 @app.get("/search/mentions")

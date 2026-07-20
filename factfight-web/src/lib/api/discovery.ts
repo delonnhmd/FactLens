@@ -2,7 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import { requestPublicRenderJson } from "@/lib/api/render-client";
+import { RenderApiError, requestPublicRenderJson, requestRenderJson } from "@/lib/api/render-client";
 import type {
   LeaderboardData,
   LeaderboardScope,
@@ -74,14 +74,31 @@ const publicProfileSchema = z.looseObject({
   reputation_points: numeric,
   monthly_reputation_points: numeric,
   badge_list: badgeList,
-  evidence_count: numeric,
-  correct_votes: numeric,
+  evidence_count: numeric.optional().default(0),
+  correct_votes: numeric.optional().default(0),
   created_at: nullableText,
   is_deleted: z.boolean().optional().default(false),
 });
 const publicProfileResponseSchema = z.looseObject({
   ok: z.boolean(),
   profile: publicProfileSchema.optional(),
+  counts: z
+    .looseObject({
+      claims: numeric,
+      replies: numeric,
+      evidence: numeric,
+    })
+    .optional(),
+  voting: z
+    .looseObject({
+      total_votes: numeric,
+      finalized_votes: numeric,
+      accuracy_percentage: z.preprocess(
+        (value) => (value === null || value === undefined ? null : Number(value)),
+        z.number().finite().min(0).max(100).nullable(),
+      ),
+    })
+    .optional(),
   reason: z.string().optional(),
 });
 
@@ -146,12 +163,18 @@ export async function getLeaderboard(scope: LeaderboardScope): Promise<Leaderboa
   }
 }
 
-export async function getPublicProfile(identifier: string): Promise<PublicProfileDetail | null> {
+export async function getPublicProfile(
+  identifier: string,
+  accessToken: string | null = null,
+): Promise<PublicProfileDetail | null> {
   const normalized = identifier.trim().replace(/^@+/, "").toLowerCase();
   if (!/^[a-z0-9_-]{1,120}$/.test(normalized)) return null;
 
   try {
-    const payload = await requestPublicRenderJson(`/public-profile/${encodeURIComponent(normalized)}`);
+    const path = `/profiles/${encodeURIComponent(normalized)}/summary`;
+    const payload = accessToken
+      ? await requestRenderJson(path, accessToken, { method: "GET" })
+      : await requestPublicRenderJson(path);
     const parsed = publicProfileResponseSchema.safeParse(payload);
     if (!parsed.success) throw new DiscoveryReadError("Could not load this profile right now.");
     if (!parsed.data.ok || !parsed.data.profile) return null;
@@ -170,12 +193,18 @@ export async function getPublicProfile(identifier: string): Promise<PublicProfil
       reputationPoints: privateProfile ? 0 : row.reputation_points,
       monthlyReputationPoints: privateProfile ? 0 : row.monthly_reputation_points,
       badges: privateProfile ? Object.freeze([]) : Object.freeze(row.badge_list),
-      evidenceCount: privateProfile ? 0 : row.evidence_count,
-      correctVotes: privateProfile ? 0 : row.correct_votes,
+      claimsCount: parsed.data.counts?.claims ?? 0,
+      repliesCount: parsed.data.counts?.replies ?? 0,
+      evidenceCount: parsed.data.counts?.evidence ?? 0,
+      correctVotes: 0,
+      totalVotes: parsed.data.voting?.total_votes ?? 0,
+      finalizedVotes: parsed.data.voting?.finalized_votes ?? 0,
+      accuracyPercentage: parsed.data.voting?.accuracy_percentage ?? null,
       createdAt: privateProfile ? null : row.created_at,
       isDeleted: row.is_deleted,
     });
   } catch (error) {
+    if (error instanceof RenderApiError && error.status === 404) return null;
     if (error instanceof DiscoveryReadError) throw error;
     throw new DiscoveryReadError("Could not load this profile right now.");
   }

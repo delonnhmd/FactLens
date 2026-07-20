@@ -168,6 +168,14 @@ export default function SettingsScreen() {
           />
         </Section>
 
+        <Section title="My activity" styles={styles}>
+          <SettingsLink
+            label="Voting history"
+            onPress={() => router.push("/my-activity/votes")}
+            styles={styles}
+          />
+        </Section>
+
         <Section title="Account" styles={styles}>
           {/* APPLE GUIDELINE 1.2 — user blocking (NEW) */}
           <SettingsLink

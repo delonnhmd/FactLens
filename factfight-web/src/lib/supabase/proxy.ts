@@ -49,6 +49,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/profile/claims/") ||
     pathname === "/profile/saved" ||
     pathname.startsWith("/profile/saved/") ||
+    pathname === "/my-activity" ||
+    pathname.startsWith("/my-activity/") ||
     pathname === "/settings" ||
     pathname.startsWith("/settings/") ||
     pathname === "/notifications" ||

@@ -57,7 +57,7 @@ function RootStack() {
   const inAuthFlow = firstSegment === "auth" || firstSegment === "callback";
   const inAuthCallback = firstSegment === "callback" || (firstSegment === "auth" && secondSegment === "callback");
   const inPublicFlow =
-    inAuthFlow || firstSegment === "legal" || firstSegment === "profile" || firstSegment === "+not-found";
+    inAuthFlow || firstSegment === "legal" || firstSegment === "profile" || firstSegment === "user" || firstSegment === "+not-found";
   const shouldRouteToLogin = !loading && !isAuthenticated && !inPublicFlow;
   const shouldRouteToHome = !loading && isAuthenticated && firstSegment === "auth" && !inAuthCallback;
 
