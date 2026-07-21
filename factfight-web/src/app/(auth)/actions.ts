@@ -35,6 +35,7 @@ function friendlySignInError(): AuthActionState {
 function friendlySignUpError(error: {
   code?: string;
   message: string;
+  status?: number;
 }): AuthActionState {
   if (error.code === "user_already_exists" || error.code === "email_exists") {
     return { message: "An account with this email may already exist. Try logging in." };
@@ -59,7 +60,18 @@ function friendlySignUpError(error: {
     return { message: "Account creation is temporarily unavailable." };
   }
 
-  return { message: error.message || "Account creation failed. Please try again." };
+  if (
+    error.code === "unexpected_failure" ||
+    error.status === 500 ||
+    /sending confirmation email/i.test(error.message)
+  ) {
+    return {
+      message:
+        "Account creation is temporarily unavailable because the confirmation email could not be sent. Please try again shortly.",
+    };
+  }
+
+  return { message: "Account creation failed. Please try again." };
 }
 
 export async function loginAction(
@@ -88,7 +100,6 @@ export async function loginAction(
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
 
   if (claimsError || !claimsData?.claims?.sub) {
-    await supabase.auth.signOut();
     return friendlySignInError();
   }
 
@@ -98,7 +109,6 @@ export async function loginAction(
   });
 
   if (!profileResult.ok) {
-    await supabase.auth.signOut();
     return { message: profileResult.message };
   }
 
@@ -153,7 +163,10 @@ export async function signupAction(
   if (error) {
     console.error("Supabase signup failed", {
       code: error.code ?? "unknown",
-      message: error.message,
+      category:
+        error.status === 500
+          ? "supabase_auth_service_failure"
+          : "supabase_auth_request_failure",
       status: error.status ?? null,
     });
     return friendlySignUpError(error);
@@ -166,7 +179,6 @@ export async function signupAction(
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
 
   if (claimsError || !claimsData?.claims?.sub) {
-    await supabase.auth.signOut();
     return { message: "Your account was created, but sign-in could not be verified." };
   }
 
@@ -176,14 +188,12 @@ export async function signupAction(
   });
 
   if (!profileResult.ok) {
-    await supabase.auth.signOut();
     return { message: profileResult.message };
   }
 
   const termsResult = await acceptTerms(data.session.access_token);
 
   if (!termsResult.ok) {
-    await supabase.auth.signOut();
     return { message: termsResult.message };
   }
 

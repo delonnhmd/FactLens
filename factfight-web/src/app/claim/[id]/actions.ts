@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { deleteOwnClaim, voteOnClaim } from "@/lib/api/claim-mutations";
-import { getVerifiedSession } from "@/lib/auth/verified-session";
+import {
+  getVerifiedSession,
+  refreshVerifiedSession,
+} from "@/lib/auth/verified-session";
 import { createClient } from "@/lib/supabase/server";
 import { removeUserImage, uploadUserImage, validateOptionalUserImage } from "@/lib/storage/user-images";
 import {
@@ -57,11 +60,31 @@ export async function voteClaimAction(
     return { message: "Log in to vote on this claim.", success: false, loginRequired: true };
   }
 
-  const result = await voteOnClaim(
+  let result = await voteOnClaim(
     session.accessToken,
     parsed.data.claimId,
     parsed.data.voteType,
   );
+
+  if (!result.ok && result.status === 401) {
+    const refreshedSession = await refreshVerifiedSession();
+
+    if (refreshedSession.ok) {
+      result = await voteOnClaim(
+        refreshedSession.accessToken,
+        parsed.data.claimId,
+        parsed.data.voteType,
+      );
+    }
+
+    if (!refreshedSession.ok || (!result.ok && result.status === 401)) {
+      return {
+        message: "Your session could not be verified. Please sign in again.",
+        success: false,
+        loginRequired: true,
+      };
+    }
+  }
 
   if (!result.ok) {
     return { message: result.message, success: false };

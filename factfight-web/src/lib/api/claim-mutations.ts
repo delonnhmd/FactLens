@@ -11,7 +11,7 @@ const deleteResponseSchema = z.looseObject({ ok: z.literal(true) });
 
 export type ClaimMutationResult<T> =
   | { ok: true; data: T }
-  | { ok: false; message: string };
+  | { ok: false; message: string; status?: number };
 
 function friendlyCreateError(error: unknown): string {
   if (!(error instanceof RenderApiError)) {
@@ -36,12 +36,17 @@ function friendlyVoteError(error: unknown): string {
     return "Could not save your vote right now. Please try again.";
   }
 
-  if (error.status === 401) return "Log in to vote.";
-  if (error.status === 403) return "Your account cannot vote right now.";
+  if (error.status === 401) return "Your session could not be verified.";
+  if (error.status === 400) return error.message || "The vote request was invalid.";
+  if (error.status === 403) return error.message || "Your account cannot vote right now.";
   if (error.status === 404) return "This claim is no longer available.";
-  if (error.status === 409 && error.alreadyVoted) return "You already voted on this claim.";
-  if (error.status === 409) return "Voting is closed for this claim.";
-  if (error.status === 422) return "Choose True, Fake, or Unsure.";
+  if (error.status === 409 && error.alreadyVoted) {
+    return error.message || "You already voted on this claim.";
+  }
+  if (error.status === 409) return error.message || "Voting is closed for this claim.";
+  if (error.status === 422) return error.message || "Choose True, Fake, or Unsure.";
+  if (error.status === 429) return error.message || "Too many vote attempts. Please wait and try again.";
+  if (error.status === 500) return error.message || "The vote could not be recorded right now.";
 
   return "Could not save your vote right now. Please try again.";
 }
@@ -99,7 +104,11 @@ export async function voteOnClaim(
 
     return { ok: true, data: null };
   } catch (error) {
-    return { ok: false, message: friendlyVoteError(error) };
+    return {
+      ok: false,
+      message: friendlyVoteError(error),
+      status: error instanceof RenderApiError ? error.status : undefined,
+    };
   }
 }
 

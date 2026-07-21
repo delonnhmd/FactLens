@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
 
   if (claimsError || !claimsData?.claims?.sub) {
-    await supabase.auth.signOut();
     return loginFailure("session_invalid");
   }
 
@@ -38,7 +37,6 @@ export async function GET(request: NextRequest) {
   });
 
   if (!profileResult.ok) {
-    await supabase.auth.signOut();
     return loginFailure("profile_unavailable");
   }
 
@@ -47,7 +45,6 @@ export async function GET(request: NextRequest) {
   const termsResult = await acceptTerms(data.session.access_token);
 
   if (!termsResult.ok) {
-    await supabase.auth.signOut();
     return loginFailure("terms_unavailable");
   }
 

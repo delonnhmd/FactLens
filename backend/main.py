@@ -118,7 +118,37 @@ load_dotenv()
 # PHASE 4 STEP 27
 app = FastAPI(title="Verifact backend", docs_url=None, redoc_url=None, openapi_url=None)
 
-PUBLIC_SITE_URL = "https://verifact.pennyfloat.com"
+DEFAULT_CORS_ALLOWED_ORIGINS = (
+    "https://factfight.com",
+    "https://www.factfight.com",
+    # Preserved while the legacy Verifact web entry point remains available.
+    "https://verifact.pennyfloat.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+
+
+def get_cors_allowed_origins() -> list[str]:
+    configured_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+    if not configured_origins.strip():
+        return list(DEFAULT_CORS_ALLOWED_ORIGINS)
+
+    origins: list[str] = []
+    for value in configured_origins.split(","):
+        origin = value.strip().rstrip("/")
+        parsed = urlparse(origin)
+        if (
+            parsed.scheme in {"http", "https"}
+            and parsed.netloc
+            and not any((parsed.path, parsed.params, parsed.query, parsed.fragment))
+            and parsed.username is None
+            and parsed.password is None
+        ):
+            origins.append(origin)
+
+    return origins or list(DEFAULT_CORS_ALLOWED_ORIGINS)
+
+PUBLIC_SITE_URL = "https://factfight.com"
 FALLBACK_SUPABASE_URL = "https://islcxqkevxxopatqvlqz.supabase.co"
 FALLBACK_SUPABASE_ANON_KEY = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
@@ -1311,7 +1341,11 @@ COMMUNITY_GUIDELINES_HTML = build_legal_page(
     """,
 )
 
-PUBLIC_SITE_URL = os.environ.get("VERIFACT_PUBLIC_SITE_URL", "https://verifact.pennyfloat.com").rstrip("/")
+PUBLIC_SITE_URL = (
+    os.environ.get("FACTFIGHT_PUBLIC_SITE_URL")
+    or os.environ.get("VERIFACT_PUBLIC_SITE_URL")
+    or "https://factfight.com"
+).rstrip("/")
 VERIFACT_APP_STORE_URL = os.environ.get("VERIFACT_APP_STORE_URL", "").strip()
 VERIFACT_GOOGLE_PLAY_URL = os.environ.get("VERIFACT_GOOGLE_PLAY_URL", "").strip()
 VERIFACT_DEFAULT_OG_IMAGE_URL = f"{PUBLIC_SITE_URL}/assets/icon/icon.png"
@@ -2010,10 +2044,10 @@ def resolve_display_rank(current_rank, highest_rank_achieved):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_allowed_origins(),
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Accept", "Authorization", "Content-Type"],
 )
 
 

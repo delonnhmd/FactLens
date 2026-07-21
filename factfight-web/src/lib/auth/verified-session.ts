@@ -13,6 +13,29 @@ export type VerifiedSessionResult =
       message: string;
     };
 
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+async function readVerifiedSession(
+  supabase: ServerSupabaseClient,
+): Promise<VerifiedSessionResult> {
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const userId =
+    typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : "";
+
+  if (claimsError || !userId) {
+    return { ok: false, message: "Log in to continue." };
+  }
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token ?? "";
+
+  if (sessionError || !accessToken) {
+    return { ok: false, message: "Your session has expired. Log in again." };
+  }
+
+  return { ok: true, accessToken, userId };
+}
+
 /**
  * Validates the signed auth token before reading the session's access token.
  * getSession() is used only as the token transport for Render; it is never the
@@ -29,32 +52,30 @@ export type VerifiedSessionResult =
  */
 export async function getVerifiedSession(): Promise<VerifiedSessionResult> {
   const supabase = await createClient();
+  let session = await readVerifiedSession(supabase);
 
-  const readClaims = async () => {
-    const { data, error } = await supabase.auth.getClaims();
-    const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
-    return { ok: !error && Boolean(userId), userId };
-  };
-
-  let claims = await readClaims();
-
-  if (!claims.ok) {
+  if (!session.ok) {
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (!refreshError) {
-      claims = await readClaims();
+      session = await readVerifiedSession(supabase);
     }
   }
 
-  if (!claims.ok) {
-    return { ok: false, message: "Log in to continue." };
+  return session;
+}
+
+/**
+ * Force-rotates an authenticated session and then validates the new token.
+ * Server Actions can persist the rotated cookies, so callers can safely retry
+ * one API request without clearing the user's local session.
+ */
+export async function refreshVerifiedSession(): Promise<VerifiedSessionResult> {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.refreshSession();
+
+  if (error) {
+    return { ok: false, message: "Your session could not be refreshed." };
   }
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token ?? "";
-
-  if (sessionError || !accessToken) {
-    return { ok: false, message: "Your session has expired. Log in again." };
-  }
-
-  return { ok: true, accessToken, userId: claims.userId };
+  return readVerifiedSession(supabase);
 }

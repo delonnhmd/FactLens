@@ -33,6 +33,51 @@ export async function requestPasswordResetAction(
   };
 }
 
+export async function resendConfirmationAction(
+  _previousState: PasswordActionState,
+  formData: FormData,
+): Promise<PasswordActionState> {
+  const parsed = passwordResetRequestSchema.safeParse({ email: formData.get("email") });
+  if (!parsed.success) {
+    return {
+      message: "Enter a valid email address.",
+      success: false,
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: parsed.data.email,
+    options: {
+      emailRedirectTo: `${publicEnvironment.siteUrl}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    console.error("Supabase confirmation resend failed", {
+      code: error.code ?? "unknown",
+      category:
+        error.status === 500
+          ? "supabase_auth_service_failure"
+          : "supabase_auth_request_failure",
+      status: error.status ?? null,
+    });
+    return {
+      message: "Confirmation email service is temporarily unavailable. Please try again later.",
+      success: false,
+    };
+  }
+
+  // The same response is returned whether or not the address has a pending account.
+  return {
+    message:
+      "If a pending account exists for that email, a new confirmation link is on its way.",
+    success: true,
+  };
+}
+
 export async function completePasswordResetAction(
   _previousState: PasswordActionState,
   formData: FormData,

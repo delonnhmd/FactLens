@@ -1,6 +1,8 @@
 import { MailCheck } from "lucide-react";
 import Link from "next/link";
 
+import { ResendConfirmationForm } from "@/components/auth/resend-confirmation-form";
+
 export default function ConfirmedPage() {
   return (
     <section
@@ -19,6 +21,7 @@ export default function ConfirmedPage() {
       <p className="mx-auto mt-4 max-w-md leading-7 text-[var(--ff-text-secondary)]">
         Use the verification link in your email to continue. Your FactFight profile will be prepared only after that link completes successfully.
       </p>
+      <ResendConfirmationForm />
       <Link
         className="mt-7 inline-flex rounded-[var(--ff-radius-card)] border border-[var(--ff-navy)] bg-[var(--ff-navy)] px-5 py-3 font-medium text-white"
         href="/login"

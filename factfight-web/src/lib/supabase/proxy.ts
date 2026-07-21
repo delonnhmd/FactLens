@@ -5,6 +5,11 @@ import { publicEnvironment } from "@/lib/validation/env";
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
+  let refreshedCookies: Array<{
+    name: string;
+    value: string;
+    options?: Parameters<typeof response.cookies.set>[2];
+  }> = [];
 
   const supabase = createServerClient(
     publicEnvironment.supabaseUrl,
@@ -15,6 +20,7 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet, headers) {
+          refreshedCookies = cookiesToSet;
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
@@ -78,7 +84,9 @@ export async function updateSession(request: NextRequest) {
     loginUrl.search = "";
     loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     const redirectResponse = NextResponse.redirect(loginUrl);
-    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    refreshedCookies.forEach(({ name, value, options }) => {
+      redirectResponse.cookies.set(name, value, options);
+    });
     return redirectResponse;
   }
 
