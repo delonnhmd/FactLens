@@ -6,7 +6,7 @@ Production web: `https://factfight.com` / `https://www.factfight.com`
 
 Production API: `https://factlens-e8uf.onrender.com`
 
-Repository commit audited: `7c9ea4b30014fb61de3546453ea14fdd247a9f6f`
+Repository commit audited: `1e8b2be` (code); report follow-up commit: `bececf5`
 
 Status: code corrections are deployed, but production signup is **not fixed yet** because Supabase confirmation-email delivery is failing. A complete live signup, confirmation, authenticated vote, and password-reset test remains blocked until the Supabase SMTP problem is repaired.
 
@@ -421,7 +421,8 @@ No Expo/mobile source, Supabase SQL/RLS, service-role credential, OpenAI credent
 Completed deployment record for this audit:
 
 ```text
-Commit: 1e8b2be
+Code commit: 1e8b2be
+Report follow-up: bececf5
 Push: origin/main completed
 Vercel: dpl_fQoLv6SqMEFu2QR32o8uGn1PPL1i (Ready)
 Render: auto-deployed; explicit CORS live check passed
