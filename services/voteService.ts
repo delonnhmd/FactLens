@@ -6,6 +6,7 @@
 // PHASE 3 STEP 32
 import { supabase } from "../lib/supabase";
 import { getBackendUrl } from "../constants/apiConfig";
+import { fetchWithAuthRetry } from "../utils/authFetch";
 import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
@@ -298,14 +299,18 @@ export async function voteOnClaimViaApi(
   let data: Record<string, unknown> = {};
 
   try {
-    response = await fetch(`${backendUrl}/api/claims/${encodeURIComponent(claimId)}/vote`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ vote_type: normalizedVoteType }),
-    });
+    response = await fetchWithAuthRetry(
+      `${backendUrl}/api/claims/${encodeURIComponent(claimId)}/vote`,
+      (token) => ({
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ vote_type: normalizedVoteType }),
+      }),
+      accessToken,
+    );
 
     try {
       data = (await response.json()) as Record<string, unknown>;

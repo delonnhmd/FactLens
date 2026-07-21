@@ -13,6 +13,7 @@ import { useRouter } from "expo-router";
 import { ClaimQualityBox } from "../../components/ClaimQualityBox";
 import { Header } from "../../components/Header";
 import { MentionTextInput } from "../../components/MentionTextInput";
+import { APP_CONFIG } from "../../constants/appConfig";
 import { claimCategories } from "../../constants/claimCategories";
 import type { AppTheme } from "../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../context/TabBarVisibilityContext";
@@ -75,6 +76,14 @@ export default function CreateScreen() {
   const [imageError, setImageError] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // BUG 1 FIX: which required fields the user has interacted with, so a
+  // "required" hint appears once they've left a field empty rather than
+  // before they've even started filling out the form.
+  const [touchedFields, setTouchedFields] = useState<
+    Partial<Record<"title" | "description" | "sourceUrl" | "category" | "politicianTag", boolean>>
+  >({});
+  const markTouched = (field: keyof typeof touchedFields) =>
+    setTouchedFields((current) => (current[field] ? current : { ...current, [field]: true }));
   // PHASE 3 STEP 15
   const [profileGateError, setProfileGateError] = useState("");
   const [profileGateMessage, setProfileGateMessage] = useState("");
@@ -102,6 +111,25 @@ export default function CreateScreen() {
   const titleOverLimit = title.length > TITLE_MAX_LENGTH;
   const descriptionOverLimit = description.length > DESCRIPTION_MAX_LENGTH;
   const descriptionMentionLimitError = getMentionLimitError(description, CLAIM_MENTION_LIMIT, "Claim description");
+  // BUG 1 FIX: required fields for claim creation are title, description,
+  // category, and source URL. Politician name is only required when the
+  // category/subcategory combination calls for it. Video URL and the image
+  // are optional. (Evidence is added after a claim exists, on the claim
+  // detail screen — a separate flow, not part of creation.)
+  const titleMissing = !title.trim();
+  const descriptionMissing = !description.trim();
+  const sourceUrlMissing = !sourceUrl.trim() && !APP_CONFIG.TEST_MODE;
+  const categoryMissing = !category;
+  const politicianTagRequired = category === "Politics" && subCategory === "Politician";
+  const politicianTagMissing = politicianTagRequired && !politicianTag.trim();
+  const titleMissingMessage = touchedFields.title && titleMissing ? "Title is required." : undefined;
+  const descriptionMissingMessage =
+    touchedFields.description && descriptionMissing ? "Description is required." : undefined;
+  const sourceUrlMissingMessage =
+    touchedFields.sourceUrl && sourceUrlMissing ? "Source URL is required." : undefined;
+  const categoryMissingMessage = touchedFields.category && categoryMissing ? "Choose a category." : undefined;
+  const politicianTagMissingMessage =
+    touchedFields.politicianTag && politicianTagMissing ? "Enter the politician name." : undefined;
   // PHASE 4 STEP 11
   // PHASE 4 STEP 11 REVISED
   const claimQuality = useMemo(
@@ -217,9 +245,14 @@ export default function CreateScreen() {
     ? getSourceTrustLabel(sourcePreviewQuality.score, sourcePreviewQuality.label)
     : null;
   const submitDisabled =
+    titleMissing ||
     titleOverLimit ||
+    descriptionMissing ||
     descriptionOverLimit ||
     Boolean(descriptionMentionLimitError) ||
+    sourceUrlMissing ||
+    categoryMissing ||
+    politicianTagMissing ||
     videoUrlInvalid ||
     !claimQuality.canSubmit ||
     safetyBlocked ||
@@ -443,12 +476,32 @@ export default function CreateScreen() {
   const handleSubmit = async () => {
     console.log("[moderation] handleSubmit tapped", { moderationStatus, localSafetyBlocked, submitDisabled });
     if (submitDisabled) {
+      // Defensive: the Post Claim button is disabled whenever this is true, so
+      // this path only runs if disabled somehow didn't block the tap. Mark
+      // every required field touched so its inline "required" hint shows too.
+      setTouchedFields((current) => ({
+        ...current,
+        title: true,
+        description: true,
+        sourceUrl: true,
+        category: true,
+        politicianTag: true,
+      }));
       setErrors((currentErrors) => ({
         ...currentErrors,
-        title: titleOverLimit ? "Title must be 160 characters or fewer." : currentErrors.title,
-        description: descriptionOverLimit
-          ? `Description is ${description.length} characters. Please shorten to ${DESCRIPTION_MAX_LENGTH} or fewer.`
-          : descriptionMentionLimitError || currentErrors.description,
+        title: titleMissing
+          ? "Title is required."
+          : titleOverLimit
+            ? "Title must be 160 characters or fewer."
+            : currentErrors.title,
+        description: descriptionMissing
+          ? "Description is required."
+          : descriptionOverLimit
+            ? `Description is ${description.length} characters. Please shorten to ${DESCRIPTION_MAX_LENGTH} or fewer.`
+            : descriptionMentionLimitError || currentErrors.description,
+        sourceUrl: sourceUrlMissing ? "Source URL is required." : currentErrors.sourceUrl,
+        category: categoryMissing ? "Choose a category." : currentErrors.category,
+        politicianTag: politicianTagMissing ? "Enter the politician name." : currentErrors.politicianTag,
         videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
         general: safetyBlocked
           ? safetyWarningMessage
@@ -633,16 +686,20 @@ export default function CreateScreen() {
             <TextInput
               value={title}
               onChangeText={(value) => updateField("title", value)}
+              onBlur={() => markTouched("title")}
               placeholder="What claim should the community verify?"
-              style={[styles.titleInput, (errors.title || titleOverLimit) && styles.inputError]}
+              style={[
+                styles.titleInput,
+                (errors.title || titleMissingMessage || titleOverLimit) && styles.inputError,
+              ]}
               placeholderTextColor={appTheme.colors.muted}
               editable={!isSubmitting}
               multiline
             />
             <View style={styles.fieldFooter}>
-              {errors.title || titleOverLimit ? (
+              {errors.title || titleMissingMessage || titleOverLimit ? (
                 <Text style={styles.errorText}>
-                  {errors.title ?? "Title must be 160 characters or fewer."}
+                  {errors.title ?? titleMissingMessage ?? "Title must be 160 characters or fewer."}
                 </Text>
               ) : (
                 <View />
@@ -655,16 +712,22 @@ export default function CreateScreen() {
             <MentionTextInput
               value={description}
               onChangeText={(value) => updateField("description", value)}
+              onBlur={() => markTouched("description")}
               placeholder="Add context, what was said, and why it matters."
-              inputStyle={[styles.input, styles.textArea, (errors.description || descriptionOverLimit) && styles.inputError]}
+              inputStyle={[
+                styles.input,
+                styles.textArea,
+                (errors.description || descriptionMissingMessage || descriptionOverLimit) && styles.inputError,
+              ]}
               placeholderTextColor={appTheme.colors.muted}
               editable={!isSubmitting}
               multiline
             />
             <View style={styles.fieldFooter}>
-              {errors.description || descriptionOverLimit ? (
+              {errors.description || descriptionMissingMessage || descriptionOverLimit ? (
                 <Text style={styles.errorText}>
                   {errors.description ??
+                    descriptionMissingMessage ??
                     `Description is ${description.length} characters. Please shorten to ${DESCRIPTION_MAX_LENGTH} or fewer.`}
                 </Text>
               ) : (
@@ -702,15 +765,18 @@ export default function CreateScreen() {
             <TextInput
               value={sourceUrl}
               onChangeText={(value) => updateField("sourceUrl", value)}
+              onBlur={() => markTouched("sourceUrl")}
               placeholder="apple.com/news"
-              style={[styles.input, errors.sourceUrl && styles.inputError]}
+              style={[styles.input, (errors.sourceUrl || sourceUrlMissingMessage) && styles.inputError]}
               placeholderTextColor={appTheme.colors.muted}
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!isSubmitting}
             />
-            {errors.sourceUrl ? <Text style={styles.errorText}>{errors.sourceUrl}</Text> : null}
+            {errors.sourceUrl || sourceUrlMissingMessage ? (
+              <Text style={styles.errorText}>{errors.sourceUrl ?? sourceUrlMissingMessage}</Text>
+            ) : null}
             {sourcePreviewDomain && sourcePreviewQuality && sourcePreviewLabel ? (
               <View style={styles.sourcePreviewRow}>
                 <Text style={styles.sourcePreviewDomain}>{sourcePreviewDomain}</Text>
@@ -764,6 +830,7 @@ export default function CreateScreen() {
                     activeOpacity={0.8}
                     onPress={() => {
                       setCategory((currentCategory) => (currentCategory === option ? "" : option));
+                      markTouched("category");
                       if (errors.category || errors.general) {
                         setErrors((currentErrors) => ({ ...currentErrors, category: undefined, general: undefined }));
                       }
@@ -776,7 +843,9 @@ export default function CreateScreen() {
                 );
               })}
             </ScrollView>
-            {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
+            {errors.category || categoryMissingMessage ? (
+              <Text style={styles.errorText}>{errors.category ?? categoryMissingMessage}</Text>
+            ) : null}
           </View>
 
           {/* PHASE 5 election positioning UI */}
@@ -811,14 +880,17 @@ export default function CreateScreen() {
               <TextInput
                 value={politicianTag}
                 onChangeText={(value) => updateField("politicianTag", value)}
+                onBlur={() => markTouched("politicianTag")}
                 placeholder="Politician name"
-                style={[styles.input, errors.politicianTag && styles.inputError]}
+                style={[styles.input, (errors.politicianTag || politicianTagMissingMessage) && styles.inputError]}
                 placeholderTextColor={appTheme.colors.muted}
                 autoCapitalize="words"
                 autoCorrect={false}
                 editable={!isSubmitting}
               />
-              {errors.politicianTag ? <Text style={styles.errorText}>{errors.politicianTag}</Text> : null}
+              {errors.politicianTag || politicianTagMissingMessage ? (
+                <Text style={styles.errorText}>{errors.politicianTag ?? politicianTagMissingMessage}</Text>
+              ) : null}
             </View>
           ) : null}
 

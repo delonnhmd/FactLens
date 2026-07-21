@@ -40,6 +40,10 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
     errors.push("Description must be 2000 characters or fewer.");
   }
 
+  if (!(input.category ?? "").trim()) {
+    errors.push("Category is required.");
+  }
+
   if (!sourceUrl && !APP_CONFIG.TEST_MODE) {
     errors.push("Source URL is required.");
   } else if (sourceUrl && !isValidSourceUrl(sourceUrl)) {

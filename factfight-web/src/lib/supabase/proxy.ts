@@ -33,7 +33,21 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data, error } = await supabase.auth.getClaims();
+  let { data, error } = await supabase.auth.getClaims();
+
+  // See getVerifiedSession() for why a bare getClaims() failure isn't treated
+  // as "logged out" outright: it can reflect a token that only looks stale
+  // (a prior refresh rotated it at GoTrue but a Server Component couldn't
+  // persist the cookie), not an actually-dead session. Retry with an
+  // explicit refresh — middleware can always persist the cookie via setAll
+  // above — before deciding to redirect to /login.
+  if (error || !data?.claims?.sub) {
+    const { error: refreshError } = await supabase.auth.refreshSession();
+    if (!refreshError) {
+      ({ data, error } = await supabase.auth.getClaims());
+    }
+  }
+
   const pathname = request.nextUrl.pathname;
   const protectedRoute =
     pathname === "/feed" ||

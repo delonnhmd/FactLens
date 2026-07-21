@@ -20,6 +20,7 @@
 import { supabase } from "../lib/supabase";
 import { APP_CONFIG } from "../constants/appConfig";
 import { getBackendUrl } from "../constants/apiConfig";
+import { fetchWithAuthRetry } from "../utils/authFetch";
 // CONTENT SAFETY (NEW, additive) — objectionable-content gate at submission.
 import { checkContentSafety } from "./contentSafetyService";
 import { checkClaimSafety } from "../utils/claimSafety";
@@ -1846,15 +1847,19 @@ export async function createClaimViaApi(input: CreateClaimInput): Promise<ClaimR
   let responseData: Record<string, unknown> = {};
 
   try {
-    response = await fetch(`${backendUrl}/api/claims`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    response = await fetchWithAuthRetry(
+      `${backendUrl}/api/claims`,
+      (token) => ({
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      }),
+      accessToken,
+    );
 
     try {
       responseData = (await response.json()) as Record<string, unknown>;

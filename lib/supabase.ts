@@ -1,6 +1,7 @@
 // PHASE 3 STEP 1
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 
 const FALLBACK_SUPABASE_URL = "https://islcxqkevxxopatqvlqz.supabase.co";
@@ -39,3 +40,16 @@ export const supabase = createClient(
     },
   },
 );
+
+// autoRefreshToken's timer only ticks while JS is actively running. Without
+// this, backgrounding the app (e.g. the OS image picker while attaching a
+// claim photo) can silently stall the timer, so the token is already stale
+// by the time the user returns to vote. Per Supabase's React Native guidance:
+// https://supabase.com/docs/reference/javascript/auth-startautorefresh
+AppState.addEventListener("change", (state) => {
+  if (state === "active") {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
+});

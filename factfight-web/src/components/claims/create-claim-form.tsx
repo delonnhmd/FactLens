@@ -29,13 +29,25 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   ) : null;
 }
 
+type TouchedField = "title" | "sourceUrl" | "category" | "politicianTag" | "permanenceAccepted";
+
 export function CreateClaimForm() {
   const [state, formAction, pending] = useActionState(createClaimAction, initialState);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [category, setCategory] = useState("");
   const [subCategory, setSubCategory] = useState("");
-  const [description, setDescription] = useState("");
+  const [politicianTag, setPoliticianTag] = useState("");
+  const [permanenceAccepted, setPermanenceAccepted] = useState(false);
+  const [touched, setTouched] = useState<Partial<Record<TouchedField, boolean>>>({});
+
+  const markTouched = (field: TouchedField) =>
+    setTouched((current) => (current[field] ? current : { ...current, [field]: true }));
+
   const descriptionLength = description.length;
   const descriptionOverLimit = descriptionLength > CLAIM_DESCRIPTION_MAX_LENGTH;
+
   const titleError = firstError(state.fieldErrors?.title);
   const descriptionError = firstError(state.fieldErrors?.description);
   const sourceError = firstError(state.fieldErrors?.sourceUrl);
@@ -45,6 +57,39 @@ export function CreateClaimForm() {
   const politicianError = firstError(state.fieldErrors?.politicianTag);
   const permanenceError = firstError(state.fieldErrors?.permanenceAccepted);
   const imageError = firstError(state.fieldErrors?.claimImage);
+
+  // Required for every claim: title, description (within limit), category,
+  // source URL, and the permanence acknowledgement. Politician name is only
+  // required when the category/subcategory combination calls for it. Video
+  // URL and the image are optional. Evidence is added after a claim exists
+  // (a separate form on the claim detail page) — not part of creation.
+  const politicianRequired = category === "Politics" && subCategory === "Politician";
+  const titleMissing = !title.trim();
+  const sourceUrlMissing = !sourceUrl.trim();
+  const categoryMissing = !category;
+  const politicianTagMissing = politicianRequired && !politicianTag.trim();
+  const permanenceMissing = !permanenceAccepted;
+
+  const requiredFieldsValid =
+    !titleMissing &&
+    Boolean(description.trim()) &&
+    !descriptionOverLimit &&
+    !sourceUrlMissing &&
+    !categoryMissing &&
+    !politicianTagMissing &&
+    !permanenceMissing;
+
+  const submitDisabled = pending || !requiredFieldsValid;
+
+  const titleLiveMessage = touched.title && titleMissing ? "Title is required." : undefined;
+  const sourceUrlLiveMessage = touched.sourceUrl && sourceUrlMissing ? "Source URL is required." : undefined;
+  const categoryLiveMessage = touched.category && categoryMissing ? "Choose a category." : undefined;
+  const politicianLiveMessage =
+    touched.politicianTag && politicianTagMissing ? "Enter the politician name." : undefined;
+  const permanenceLiveMessage =
+    touched.permanenceAccepted && permanenceMissing
+      ? "Confirm that you understand when a claim becomes permanent."
+      : undefined;
 
   return (
     <form action={formAction} className="space-y-6" noValidate>
@@ -64,19 +109,22 @@ export function CreateClaimForm() {
             Claim title
           </label>
           <input
-            aria-describedby={titleError ? "claim-title-error" : "claim-title-help"}
-            aria-invalid={Boolean(titleError)}
+            aria-describedby={titleError ?? titleLiveMessage ? "claim-title-error" : "claim-title-help"}
+            aria-invalid={Boolean(titleError ?? titleLiveMessage)}
             className={inputClassName}
             id="claim-title"
             maxLength={160}
             name="title"
+            onBlur={() => markTouched("title")}
+            onChange={(event) => setTitle(event.target.value)}
             placeholder="State one specific claim that can be checked"
             required
+            value={title}
           />
           <p className="mt-2 text-xs text-[var(--ff-text-muted)]" id="claim-title-help">
             Keep it factual and specific. Maximum 160 characters.
           </p>
-          <FieldError id="claim-title-error" message={titleError} />
+          <FieldError id="claim-title-error" message={titleError ?? titleLiveMessage} />
         </div>
 
         <div>
@@ -129,22 +177,25 @@ export function CreateClaimForm() {
               Source URL
             </label>
             <input
-              aria-describedby={sourceError ? "claim-source-error" : "claim-source-help"}
-              aria-invalid={Boolean(sourceError)}
+              aria-describedby={sourceError ?? sourceUrlLiveMessage ? "claim-source-error" : "claim-source-help"}
+              aria-invalid={Boolean(sourceError ?? sourceUrlLiveMessage)}
               autoCapitalize="none"
               autoCorrect="off"
               className={inputClassName}
               id="claim-source"
               inputMode="url"
               name="sourceUrl"
+              onBlur={() => markTouched("sourceUrl")}
+              onChange={(event) => setSourceUrl(event.target.value)}
               placeholder="https://example.com/report"
               required
               type="url"
+              value={sourceUrl}
             />
             <p className="mt-2 text-xs text-[var(--ff-text-muted)]" id="claim-source-help">
               Link to where the claim appeared or a primary source.
             </p>
-            <FieldError id="claim-source-error" message={sourceError} />
+            <FieldError id="claim-source-error" message={sourceError ?? sourceUrlLiveMessage} />
           </div>
 
           <div>
@@ -179,13 +230,15 @@ export function CreateClaimForm() {
             Category
           </label>
           <select
-            aria-describedby={categoryError ? "claim-category-error" : undefined}
-            aria-invalid={Boolean(categoryError)}
+            aria-describedby={categoryError ?? categoryLiveMessage ? "claim-category-error" : undefined}
+            aria-invalid={Boolean(categoryError ?? categoryLiveMessage)}
             className={inputClassName}
             id="claim-category"
             name="category"
+            onBlur={() => markTouched("category")}
             onChange={(event) => {
               setCategory(event.target.value);
+              markTouched("category");
               if (event.target.value !== "Politics") setSubCategory("");
             }}
             required
@@ -198,7 +251,7 @@ export function CreateClaimForm() {
               </option>
             ))}
           </select>
-          <FieldError id="claim-category-error" message={categoryError} />
+          <FieldError id="claim-category-error" message={categoryError ?? categoryLiveMessage} />
         </div>
 
         {category === "Politics" ? (
@@ -226,32 +279,45 @@ export function CreateClaimForm() {
           </div>
         ) : null}
 
-        {category === "Politics" && subCategory === "Politician" ? (
+        {politicianRequired ? (
           <div>
             <label className="block text-sm font-medium" htmlFor="claim-politician">
               Politician name
             </label>
             <input
-              aria-describedby={politicianError ? "claim-politician-error" : undefined}
-              aria-invalid={Boolean(politicianError)}
+              aria-describedby={
+                politicianError ?? politicianLiveMessage ? "claim-politician-error" : undefined
+              }
+              aria-invalid={Boolean(politicianError ?? politicianLiveMessage)}
               autoComplete="off"
               className={inputClassName}
               id="claim-politician"
               maxLength={100}
               name="politicianTag"
+              onBlur={() => markTouched("politicianTag")}
+              onChange={(event) => setPoliticianTag(event.target.value)}
               required
+              value={politicianTag}
             />
-            <FieldError id="claim-politician-error" message={politicianError} />
+            <FieldError id="claim-politician-error" message={politicianError ?? politicianLiveMessage} />
           </div>
         ) : null}
 
         <div className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-4">
           <label className="flex cursor-pointer items-start gap-3 text-sm leading-6" htmlFor="claim-permanence">
             <input
-              aria-describedby={permanenceError ? "claim-permanence-error" : "claim-permanence-help"}
+              aria-describedby={
+                permanenceError ?? permanenceLiveMessage ? "claim-permanence-error" : "claim-permanence-help"
+              }
+              checked={permanenceAccepted}
               className="mt-1 h-4 w-4 shrink-0 accent-[var(--ff-navy)]"
               id="claim-permanence"
               name="permanenceAccepted"
+              onBlur={() => markTouched("permanenceAccepted")}
+              onChange={(event) => {
+                setPermanenceAccepted(event.target.checked);
+                markTouched("permanenceAccepted");
+              }}
               required
               type="checkbox"
             />
@@ -262,7 +328,7 @@ export function CreateClaimForm() {
           <p className="mt-2 pl-7 text-xs leading-5 text-[var(--ff-text-muted)]" id="claim-permanence-help">
             True and Fake votes also count toward the combined total of the related topic.
           </p>
-          <FieldError id="claim-permanence-error" message={permanenceError} />
+          <FieldError id="claim-permanence-error" message={permanenceError ?? permanenceLiveMessage} />
         </div>
       </fieldset>
 
@@ -274,11 +340,11 @@ export function CreateClaimForm() {
           Cancel
         </Link>
         <button
-          aria-disabled={pending || descriptionOverLimit}
+          aria-disabled={submitDisabled}
           className={`rounded-[var(--ff-radius-card)] border border-[var(--ff-navy)] bg-[var(--ff-navy)] px-6 py-3 text-sm font-medium text-white disabled:opacity-65 ${
             pending ? "disabled:cursor-wait" : "disabled:cursor-not-allowed"
           }`}
-          disabled={pending || descriptionOverLimit}
+          disabled={submitDisabled}
           type="submit"
         >
           {pending ? "Posting claim…" : descriptionOverLimit ? "Shorten description to post" : "Post claim"}
