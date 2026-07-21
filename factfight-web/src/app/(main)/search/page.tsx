@@ -7,7 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { searchPublicClaims } from "@/lib/api/claims";
 import { searchProfiles, searchTopics } from "@/lib/api/discovery";
-import { createClient } from "@/lib/supabase/server";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { claimCategories } from "@/lib/validation/claim-actions";
 
 export const dynamic = "force-dynamic";
@@ -34,9 +34,8 @@ export default async function SearchPage({
 }: {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) redirect("/login?next=/search");
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/search");
 
   const params = await searchParams;
   const query = firstParam(params.q).trim().slice(0, 100);

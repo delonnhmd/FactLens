@@ -6,18 +6,15 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBlockedUserIds } from "@/lib/api/blocks";
 import { getPublicProfile } from "@/lib/api/discovery";
-import { createClient } from "@/lib/supabase/server";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Blocked users | FactFight" };
 
 export default async function BlockedUsersPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) redirect("/login?next=/settings/blocked");
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session?.access_token) redirect("/login?next=/settings/blocked");
-  const blockedIds = (await getBlockedUserIds(sessionData.session.access_token)).slice(0, 100);
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/settings/blocked");
+  const blockedIds = (await getBlockedUserIds(session.accessToken)).slice(0, 100);
   const profileResults = await Promise.all(blockedIds.map((id) => getPublicProfile(id).catch(() => null)));
   const profiles = profileResults.filter((profile) => profile !== null);
 

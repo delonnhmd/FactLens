@@ -6,7 +6,7 @@ import { ClaimCard } from "@/components/claims/claim-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBlockedUserIds } from "@/lib/api/blocks";
 import { getFeedClaims } from "@/lib/api/claims";
-import { createClient } from "@/lib/supabase/server";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { parseFeedPage } from "@/lib/utils/pagination";
 
 export const dynamic = "force-dynamic";
@@ -21,15 +21,9 @@ interface FeedPageProps {
 }
 
 export default async function FeedPage({ searchParams }: FeedPageProps) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-
-  if (error || !data?.claims?.sub) {
-    redirect("/login");
-  }
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session?.access_token) redirect("/login");
-  const blockedAuthorIds = await getBlockedUserIds(sessionData.session.access_token);
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login");
+  const blockedAuthorIds = await getBlockedUserIds(session.accessToken);
 
   const parameters = await searchParams;
   const requestedPage = parseFeedPage(parameters.page);

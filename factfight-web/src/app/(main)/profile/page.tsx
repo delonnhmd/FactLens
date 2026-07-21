@@ -3,18 +3,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Avatar } from "@/components/ui/avatar";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { getPublicProfile } from "@/lib/api/discovery";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "My profile | FactFight" };
 
 export default async function MyProfilePage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
-  if (error || !userId) redirect("/login?next=/profile");
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/profile");
+  const userId = session.userId;
 
   const profile = await getPublicProfile(userId);
 

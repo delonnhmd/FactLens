@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { CreateClaimForm } from "@/components/claims/create-claim-form";
-import { createClient } from "@/lib/supabase/server";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +12,8 @@ export const metadata: Metadata = {
 };
 
 export default async function CreateClaimPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-
-  if (error || !data?.claims?.sub) {
+  const session = await getVerifiedSession();
+  if (!session.ok) {
     redirect("/login?next=/create");
   }
 

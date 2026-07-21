@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ClaimCard } from "@/components/claims/claim-card";
 import { SavedClaimButton } from "@/components/claims/saved-claim-button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { getClaimsByIds } from "@/lib/api/claims";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,15 +12,14 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Saved claims | FactFight" };
 
 export default async function SavedClaimsPage() {
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/profile/saved");
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
-  if (error || !userId) redirect("/login?next=/profile/saved");
 
   const { data: savedRows, error: savedError } = await supabase
     .from("saved_claims")
     .select("claim_id,created_at")
-    .eq("user_id", userId)
+    .eq("user_id", session.userId)
     .order("created_at", { ascending: false })
     .limit(100);
   if (savedError) throw new Error("Saved claims are temporarily unavailable.");

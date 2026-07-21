@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { Avatar } from "@/components/ui/avatar";
 import { getLeaderboard } from "@/lib/api/discovery";
-import { createClient } from "@/lib/supabase/server";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import type { LeaderboardScope } from "@/lib/types/discovery";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
 
@@ -16,9 +16,8 @@ export const metadata: Metadata = {
 };
 
 export default async function LeaderboardPage({ searchParams }: { readonly searchParams: Promise<{ scope?: string }> }) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub) redirect("/login?next=/leaderboard");
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/leaderboard");
 
   const params = await searchParams;
   const scope: LeaderboardScope = params.scope === "all_time" ? "all_time" : "monthly";

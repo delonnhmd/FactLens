@@ -4,18 +4,16 @@ import { redirect } from "next/navigation";
 
 import { logoutAction } from "@/app/(auth)/actions";
 import { SettingsForms } from "@/components/profile/settings-forms";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { getPublicProfile } from "@/lib/api/discovery";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Settings | FactFight" };
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
-  if (error || !userId) redirect("/login?next=/settings");
-  const profile = await getPublicProfile(userId);
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/settings");
+  const profile = await getPublicProfile(session.userId);
   if (!profile) return <p className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-5">Settings are temporarily unavailable.</p>;
 
   return (

@@ -436,3 +436,30 @@ fix: stabilize web auth callbacks and prevent vote actions from clearing session
 ```
 
 Do not mark the production incident closed until the live signup, email delivery, callback, profile creation, session refresh/navigation, authenticated vote, and password reset all pass with evidence.
+
+## Follow-up vote-session incident (2026-07-21)
+
+The report above was reopened because the logout symptom persisted after the first session-refresh patch. This follow-up used the live Vercel Runtime Logs for `www.factfight.com` and the current source at commit `121f303`.
+
+Evidence captured before the fix:
+
+- `POST /claim/3b36183b-77ef-4968-a728-75c373a41446` returned HTTP 200 at `04:52:09.803`.
+- Within the next two seconds, the browser issued several parallel `GET /claim/...`, `GET /feed`, and `GET /login` requests. The claim and feed requests returned HTTP 200; the logs did not show a server redirect or a vote-action failure.
+- The proxy nevertheless called `auth.refreshSession()` after any failed `getClaims()` on every route, including public claim pages. Supabase refresh-token rotation can race when the vote Server Action refresh and a parallel public page/prefetch refresh use the same cookie. A losing refresh can emit cookie-removal instructions, which explains a browser session disappearing after a successful vote.
+
+The follow-up fix:
+
+- Public claim/profile requests no longer perform an explicit session refresh. They never decide that a browser session is invalid and never clear cookies after a failed refresh race.
+- Protected routes still validate with `getClaims()` and retry once with `refreshSession()`.
+- Proxy cookie/header writes are buffered and applied only after the auth result is known. Cookie-removal instructions from a failed parallel refresh are discarded; successful rotated cookie chunks and cache headers are preserved.
+- Protected server-rendered pages now use the shared `getVerifiedSession()` retry path instead of independently treating one bare `getClaims()` failure as logout.
+
+Validation after the follow-up fix:
+
+- `npm.cmd test`: 8 files, 45 tests passed.
+- `npm.cmd run lint`: passed with no warnings/errors.
+- `npm.cmd run typecheck`: passed.
+- `npm.cmd run build`: passed; all application routes and the Next.js 16 proxy compiled.
+- Added regression coverage for public-route no-refresh behavior, failed-refresh cookie preservation, and multi-cookie successful rotation.
+
+This follow-up is not yet a closed live proof: a real authenticated user must still vote once on the deployed commit and then navigate to `/feed`/`/profile` while the browser Network tab confirms cookies were not cleared. The code and regression tests now cover the observed race; no Expo/mobile, Supabase SQL/RLS, DNS, or secret configuration change was made.

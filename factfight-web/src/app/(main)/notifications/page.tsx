@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { markAllNotificationsReadAction, markNotificationReadAction } from "@/app/(main)/notifications/actions";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { createClient } from "@/lib/supabase/server";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
 
@@ -11,10 +12,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Notifications | FactFight" };
 
 export default async function NotificationsPage() {
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/notifications");
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
-  if (error || !userId) redirect("/login?next=/notifications");
+  const userId = session.userId;
   const { data: notifications, error: readError } = await supabase.from("notifications").select("id,type,title,body,claim_id,read,created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(50);
   if (readError) throw new Error("Notifications are temporarily unavailable.");
   const unread = (notifications ?? []).filter((notification) => !notification.read).length;

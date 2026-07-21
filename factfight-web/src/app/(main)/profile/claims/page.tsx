@@ -3,18 +3,16 @@ import { redirect } from "next/navigation";
 
 import { ClaimCard } from "@/components/claims/claim-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { getClaimsByAuthorId } from "@/lib/api/claims";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "My claims | FactFight" };
 
 export default async function MyClaimsPage() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : "";
-  if (error || !userId) redirect("/login?next=/profile/claims");
-  const claims = await getClaimsByAuthorId(userId);
+  const session = await getVerifiedSession();
+  if (!session.ok) redirect("/login?next=/profile/claims");
+  const claims = await getClaimsByAuthorId(session.userId);
 
   return (
     <div className="mx-auto w-full max-w-[680px]">
