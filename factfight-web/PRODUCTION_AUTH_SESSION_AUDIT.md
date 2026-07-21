@@ -8,15 +8,17 @@ Production API: `https://factlens-e8uf.onrender.com`
 
 Repository commit audited: `7c9ea4b30014fb61de3546453ea14fdd247a9f6f`
 
-Status: code corrections and automated verification are complete locally. Production signup is **not fixed yet** because Supabase confirmation-email delivery is failing. A complete live signup, confirmation, authenticated vote, and password-reset test remains blocked until the Supabase SMTP problem is repaired and the code changes are deployed.
+Status: code corrections are deployed, but production signup is **not fixed yet** because Supabase confirmation-email delivery is failing. A complete live signup, confirmation, authenticated vote, and password-reset test remains blocked until the Supabase SMTP problem is repaired.
 
 ## Active production deployment
 
 - Host: Vercel (`fact-fight` project), not Render
 - Production branch: `main`
-- Current live deployment before this change: `dpl_CRSMS8owRBZZsHQekb6u9NQnBGHS`, Ready, aliasing both `factfight.com` and `www.factfight.com`; it corresponds to repository commit `7c9ea4b`
+- Previous live deployment: `dpl_CRSMS8owRBZZsHQekb6u9NQnBGHS`, Ready, corresponding to repository commit `7c9ea4b`
+- Current deployed commit: `1e8b2be`; Vercel deployment `dpl_fQoLv6SqMEFu2QR32o8uGn1PPL1i`, Ready, aliasing both `factfight.com` and `www.factfight.com`
 - Vercel production variables present: `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_RENDER_BACKEND_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (all encrypted in the CLI output)
-- Live HTML metadata and Vercel response headers were checked directly; the browser is serving the current Ready production deployment, not a stale local or preview build. The new fixes are not in that deployment yet.
+- Live HTML metadata and Vercel response headers were checked directly; the browser is serving the current Ready production deployment, not a stale local or preview build. The new fixes are in the current deployment.
+- Post-deploy verification confirmed the new `/confirmed` resend form and the new safe signup failure message on `www.factfight.com`.
 
 ## Executive conclusions
 
@@ -62,6 +64,16 @@ No password, access token, refresh token, email address, confirmation URL, or se
 This evidence rules out username/profile RLS as the signup root cause: the failure occurs inside Supabase Auth while sending the confirmation email, before a session exists and before FactFight calls `/profile/ensure`. It also shows email signup is enabled, confirmation is required, and the request reached the email stage rather than failing CAPTCHA, redirect validation, or anon-key authorization.
 
 The Supabase Dashboard and Auth Log Explorer were not accessible from the available CLI identity (`LegacyPlatformAuthRequiredError`). Therefore the provider-specific SMTP error, Auth user table, and profile row could not be independently inspected. The direct response reported `userCreated: false`; the Dashboard must still be checked after SMTP repair.
+
+### Post-deploy live verification
+
+After pushing commit `1e8b2be`:
+
+- Vercel production deployment `dpl_fQoLv6SqMEFu2QR32o8uGn1PPL1i` reached Ready and aliases both production domains.
+- A clean headless browser submitted one generated, non-personal signup through `https://www.factfight.com/signup`. The outer Server Action response was HTTP 200, the page stayed on `/signup`, the specific message `confirmation email could not be sent` rendered, and the old generic message did not render.
+- The corresponding Vercel log contains only redacted diagnostics: `category: 'supabase_auth_service_failure', status: 500`; no email, password, or token was logged.
+- Render auto-deployed the backend change. Live CORS now returns the exact requesting origin for `https://factfight.com`, `https://www.factfight.com`, and `http://localhost:3000`, while `https://evil.example` receives HTTP 400 with no allow-origin header.
+- This confirms the deployed diagnostic and CORS/session-protection changes. It does **not** prove signup, confirmation, login, voting, or reset success because Supabase still rejects confirmation-email delivery.
 
 ### Signup implementation
 
@@ -261,7 +273,7 @@ Supabase’s [SSR client guide](https://supabase.com/docs/guides/auth/server-sid
 - Location/evidence: `backend/main.py:121` and `:2036`; live preflight from FactFight, `www`, localhost, and `https://evil.example` all returns `Access-Control-Allow-Origin: *`. Credentials are false, so this is not wildcard credentialed CORS.
 - Impact: unnecessary cross-origin browser access to public/bearer APIs and a wider abuse surface.
 - Remediation: explicit production, legacy, and local origins with narrow methods/headers; optional `CORS_ALLOWED_ORIGINS` for exact previews.
-- Status: fixed locally; live service still needs deployment.
+- Status: deployed and live verification passed.
 
 ### FF-AUTH-005 — Medium — valid sessions were cleared after profile/terms infrastructure failures
 
@@ -405,6 +417,16 @@ No Expo/mobile source, Supabase SQL/RLS, service-role credential, OpenAI credent
 8. Vote on a real claim and record the browser Server Action, Vercel server-to-server status, cookies before/after, refreshed page, and subsequent navigation.
 9. Test wrong/expired token behavior and safe 400/403/409/429/500 messages without automatic logout.
 10. Request a password reset, complete `/auth/callback?next=/reset-password`, update the password, and log in with the new password.
+
+Completed deployment record for this audit:
+
+```text
+Commit: 1e8b2be
+Push: origin/main completed
+Vercel: dpl_fQoLv6SqMEFu2QR32o8uGn1PPL1i (Ready)
+Render: auto-deployed; explicit CORS live check passed
+Expo rebuild/EAS Update: not run; no mobile files changed
+```
 
 Recommended commit message:
 
