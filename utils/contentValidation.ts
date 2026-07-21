@@ -36,8 +36,8 @@ export function validateClaimContent(input: ClaimContentValidationInput): ClaimC
 
   if (!description) {
     errors.push("Description is required.");
-  } else if (description.length > 1000) {
-    errors.push("Description must be 1000 characters or fewer.");
+  } else if (description.length > 2000) {
+    errors.push("Description must be 2000 characters or fewer.");
   }
 
   if (!sourceUrl && !APP_CONFIG.TEST_MODE) {

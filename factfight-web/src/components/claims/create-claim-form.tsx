@@ -7,7 +7,11 @@ import {
   createClaimAction,
   type CreateClaimActionState,
 } from "@/app/(main)/create/actions";
-import { claimCategories, politicsSubCategories } from "@/lib/validation/claim-actions";
+import {
+  CLAIM_DESCRIPTION_MAX_LENGTH,
+  claimCategories,
+  politicsSubCategories,
+} from "@/lib/validation/claim-actions";
 
 const initialState: CreateClaimActionState = { message: "" };
 const inputClassName =
@@ -29,6 +33,9 @@ export function CreateClaimForm() {
   const [state, formAction, pending] = useActionState(createClaimAction, initialState);
   const [category, setCategory] = useState("");
   const [subCategory, setSubCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const descriptionLength = description.length;
+  const descriptionOverLimit = descriptionLength > CLAIM_DESCRIPTION_MAX_LENGTH;
   const titleError = firstError(state.fieldErrors?.title);
   const descriptionError = firstError(state.fieldErrors?.description);
   const sourceError = firstError(state.fieldErrors?.sourceUrl);
@@ -77,19 +84,42 @@ export function CreateClaimForm() {
             Description
           </label>
           <textarea
-            aria-describedby={descriptionError ? "claim-description-error" : "claim-description-help"}
-            aria-invalid={Boolean(descriptionError)}
+            aria-describedby={
+              descriptionError
+                ? "claim-description-error"
+                : descriptionOverLimit
+                  ? "claim-description-limit-warning"
+                  : "claim-description-help"
+            }
+            aria-invalid={Boolean(descriptionError) || descriptionOverLimit}
             className={`${inputClassName} min-h-36 resize-y`}
             id="claim-description"
-            maxLength={1_000}
             name="description"
+            onChange={(event) => setDescription(event.target.value)}
             placeholder="Add context that helps the community understand what should be verified"
             required
             rows={6}
+            value={description}
           />
-          <p className="mt-2 text-xs text-[var(--ff-text-muted)]" id="claim-description-help">
-            Maximum 1000 characters. Do not include private personal information.
-          </p>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <p className="text-xs text-[var(--ff-text-muted)]" id="claim-description-help">
+              Maximum {CLAIM_DESCRIPTION_MAX_LENGTH} characters. Do not include private personal information.
+            </p>
+            <span
+              aria-live="polite"
+              className={`shrink-0 text-xs tabular-nums ${
+                descriptionOverLimit ? "font-medium text-[var(--ff-fake)]" : "text-[var(--ff-text-muted)]"
+              }`}
+            >
+              {descriptionLength} / {CLAIM_DESCRIPTION_MAX_LENGTH}
+            </span>
+          </div>
+          {descriptionOverLimit ? (
+            <p className="mt-2 text-sm text-[var(--ff-fake)]" id="claim-description-limit-warning" role="alert">
+              Description is {descriptionLength} characters. Please shorten to {CLAIM_DESCRIPTION_MAX_LENGTH} or
+              fewer.
+            </p>
+          ) : null}
           <FieldError id="claim-description-error" message={descriptionError} />
         </div>
 
@@ -244,11 +274,14 @@ export function CreateClaimForm() {
           Cancel
         </Link>
         <button
-          className="rounded-[var(--ff-radius-card)] border border-[var(--ff-navy)] bg-[var(--ff-navy)] px-6 py-3 text-sm font-medium text-white disabled:cursor-wait disabled:opacity-65"
-          disabled={pending}
+          aria-disabled={pending || descriptionOverLimit}
+          className={`rounded-[var(--ff-radius-card)] border border-[var(--ff-navy)] bg-[var(--ff-navy)] px-6 py-3 text-sm font-medium text-white disabled:opacity-65 ${
+            pending ? "disabled:cursor-wait" : "disabled:cursor-not-allowed"
+          }`}
+          disabled={pending || descriptionOverLimit}
           type="submit"
         >
-          {pending ? "Posting claim…" : "Post claim"}
+          {pending ? "Posting claim…" : descriptionOverLimit ? "Shorten description to post" : "Post claim"}
         </button>
       </div>
     </form>

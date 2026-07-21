@@ -41,7 +41,7 @@ import { CLAIM_MENTION_LIMIT, getMentionLimitError } from "../../utils/mentions"
 
 // PHASE 2 STEP 10
 const TITLE_MAX_LENGTH = 160;
-const DESCRIPTION_MAX_LENGTH = 1000;
+const DESCRIPTION_MAX_LENGTH = 2000;
 // PHASE 5 election positioning UI
 const politicsSubCategories = ["Election 2026", "Policy", "Politician", "Government"];
 
@@ -447,7 +447,7 @@ export default function CreateScreen() {
         ...currentErrors,
         title: titleOverLimit ? "Title must be 160 characters or fewer." : currentErrors.title,
         description: descriptionOverLimit
-          ? "Description must be 1000 characters or fewer."
+          ? `Description is ${description.length} characters. Please shorten to ${DESCRIPTION_MAX_LENGTH} or fewer.`
           : descriptionMentionLimitError || currentErrors.description,
         videoUrl: videoUrlInvalid ? "Enter a valid video URL." : currentErrors.videoUrl,
         general: safetyBlocked
@@ -664,12 +664,13 @@ export default function CreateScreen() {
             <View style={styles.fieldFooter}>
               {errors.description || descriptionOverLimit ? (
                 <Text style={styles.errorText}>
-                  {errors.description ?? "Description must be 1000 characters or fewer."}
+                  {errors.description ??
+                    `Description is ${description.length} characters. Please shorten to ${DESCRIPTION_MAX_LENGTH} or fewer.`}
                 </Text>
               ) : (
                 <View />
               )}
-              <Text style={descriptionCounterStyle}>{description.length}/{DESCRIPTION_MAX_LENGTH}</Text>
+              <Text style={descriptionCounterStyle}>{description.length} / {DESCRIPTION_MAX_LENGTH}</Text>
             </View>
           </View>
 

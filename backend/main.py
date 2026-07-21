@@ -2058,7 +2058,7 @@ DUPLICATE_CHECK_RATE_LIMIT_MAX_REQUESTS = 120
 CLAIMS_CREATE_RATE_LIMIT_MAX_REQUESTS = 30
 CLAIMS_PER_DAY_LIMIT = max(1, int(os.environ.get("CLAIMS_PER_DAY_LIMIT", "20")))
 CLAIM_TITLE_MAX_LENGTH = 160
-CLAIM_DESCRIPTION_MAX_LENGTH = 1000
+CLAIM_DESCRIPTION_MAX_LENGTH = 2000
 
 RESERVED_USERNAME_MESSAGE = (
     "This username is reserved. If you represent this person or organization, "
@@ -7199,7 +7199,10 @@ def validate_claim_create_payload(payload: ClaimCreateRequest) -> dict:
     if not description:
         raise HTTPException(status_code=422, detail="Description is required.")
     if len(description) > CLAIM_DESCRIPTION_MAX_LENGTH:
-        raise HTTPException(status_code=422, detail="Description must be 1000 characters or fewer.")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Description must be {CLAIM_DESCRIPTION_MAX_LENGTH} characters or fewer.",
+        )
     if not category:
         raise HTTPException(status_code=422, detail="Category is required.")
     if not str(payload.source_url or "").strip():

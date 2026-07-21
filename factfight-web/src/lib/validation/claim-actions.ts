@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { getSafeExternalUrl } from "@/lib/utils/urls";
 
+export const CLAIM_TITLE_MAX_LENGTH = 160;
+export const CLAIM_DESCRIPTION_MAX_LENGTH = 2000;
+
 export const claimCategories = [
   "Politics",
   "Business",
@@ -75,12 +78,15 @@ export const createClaimSchema = z
       .string()
       .trim()
       .min(1, "Title is required.")
-      .max(160, "Title must be 160 characters or fewer."),
+      .max(CLAIM_TITLE_MAX_LENGTH, `Title must be ${CLAIM_TITLE_MAX_LENGTH} characters or fewer.`),
     description: z
       .string()
       .trim()
       .min(1, "Description is required.")
-      .max(1_000, "Description must be 1000 characters or fewer."),
+      .max(
+        CLAIM_DESCRIPTION_MAX_LENGTH,
+        `Description must be ${CLAIM_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+      ),
     sourceUrl: requiredUrlSchema,
     videoUrl: optionalUrlSchema,
     category: z.enum(claimCategories, { error: "Choose a category." }),

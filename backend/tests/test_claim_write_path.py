@@ -191,6 +191,31 @@ def test_missing_title_returns_422(fake_database):
     assert fake_database.inserted_claim_payload is None
 
 
+def test_description_over_2000_chars_returns_422(fake_database):
+    body = {**valid_claim_body(), "description": "x" * 2001}
+    response = client.post("/api/claims", json=body)
+
+    assert response.status_code == 422
+    assert "2000" in response.json()["detail"]
+    assert fake_database.inserted_claim_payload is None
+
+
+def test_description_of_exactly_2000_chars_is_accepted(fake_database):
+    body = {**valid_claim_body(), "description": "x" * 2000}
+    response = client.post("/api/claims", json=body)
+
+    assert response.status_code == 201
+    assert fake_database.inserted_claim_payload["description"] == "x" * 2000
+
+
+def test_description_between_old_and_new_limit_is_now_accepted(fake_database):
+    # Proves the limit was actually raised from 1000 -> 2000, not left in place.
+    body = {**valid_claim_body(), "description": "x" * 1500}
+    response = client.post("/api/claims", json=body)
+
+    assert response.status_code == 201
+
+
 def test_vote_endpoint_enforces_server_user_and_returns_201(fake_database):
     fake_database.claim = {
         "id": CLAIM_ID,
