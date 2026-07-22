@@ -210,6 +210,43 @@ export async function getPublicProfile(
   }
 }
 
+const VIEWER_PROFILE_CACHE_TTL_MS = 60_000;
+const viewerProfileCache = new Map<string, { expiresAt: number; profile: PublicProfileDetail | null }>();
+
+/**
+ * getPublicProfile() throws on anything other than a clean 404, by design,
+ * so callers that need the profile as their primary content can surface a
+ * real error. The viewer's own identity shown in the corner of the
+ * authenticated app shell is decorative, not primary content, and it is
+ * fetched on every protected page via the (main) layout plus the public
+ * claim/topic/profile pages when signed in - letting a transient backend
+ * hiccup there throw would take down every page in the app, not just
+ * profile pages. This wrapper makes that fetch best-effort.
+ *
+ * It also caches the result for a short window per user. /profiles/{id}/summary
+ * is rate-limited (180/hour); calling it on every single navigation - and
+ * every Next.js Link prefetch - for the same signed-in user can plausibly
+ * exhaust that limit during an active browsing session, at which point the
+ * non-404 error response used to propagate as a crash. A minute of staleness
+ * on a display name/avatar in the corner of the shell is not user-visible.
+ */
+export async function getViewerProfileSummary(userId: string): Promise<PublicProfileDetail | null> {
+  const cached = viewerProfileCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.profile;
+  }
+
+  let profile: PublicProfileDetail | null = null;
+  try {
+    profile = await getPublicProfile(userId);
+  } catch {
+    profile = null;
+  }
+
+  viewerProfileCache.set(userId, { expiresAt: Date.now() + VIEWER_PROFILE_CACHE_TTL_MS, profile });
+  return profile;
+}
+
 export async function searchProfiles(query: string): Promise<readonly ProfileSearchResult[]> {
   const normalized = query.trim().replace(/^@+/, "").slice(0, 50);
   if (normalized.length < 2) return Object.freeze([]);

@@ -18,7 +18,7 @@ import {
   getPublicProfilePosts,
   getPublicProfileReplies,
 } from "@/lib/api/profile-activity";
-import { getPublicProfile } from "@/lib/api/discovery";
+import { getPublicProfile, getViewerProfileSummary } from "@/lib/api/discovery";
 import { createClient } from "@/lib/supabase/server";
 import type {
   PublicProfileEvidence,
@@ -67,7 +67,7 @@ export default async function PublicProfilePage({
 
   const profile = await getPublicProfile(username, accessToken);
   if (!profile || profile.isDeleted) notFound();
-  const viewerProfile = viewerId ? await getPublicProfile(viewerId) : null;
+  const viewerProfile = viewerId ? await getViewerProfileSummary(viewerId) : null;
 
   let posts: readonly PublicProfilePost[] = [];
   let replies: readonly PublicProfileReply[] = [];

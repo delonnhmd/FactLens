@@ -10,7 +10,7 @@ import { TopicVerdictBadge } from "@/components/topics/topic-verdict-badge";
 import { AppStoreLink } from "@/components/ui/app-store-link";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getPublicTopicPageData } from "@/lib/api/topics";
-import { getPublicProfile } from "@/lib/api/discovery";
+import { getViewerProfileSummary } from "@/lib/api/discovery";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import { createClient } from "@/lib/supabase/server";
 import { publicEnvironment } from "@/lib/validation/env";
@@ -73,7 +73,7 @@ export default async function TopicPage({ params }: TopicPageProps) {
   const supabase = await createClient();
   const { data: viewerData } = await supabase.auth.getClaims();
   const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
-  const viewerProfile = viewerId ? await getPublicProfile(viewerId) : null;
+  const viewerProfile = viewerId ? await getViewerProfileSummary(viewerId) : null;
 
   const pageContent = (
     <>

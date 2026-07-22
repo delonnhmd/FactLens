@@ -17,7 +17,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { VoteActionPanel } from "@/components/voting/vote-action-panel";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getClaimPageData } from "@/lib/api/claims";
-import { getPublicProfile } from "@/lib/api/discovery";
+import { getViewerProfileSummary } from "@/lib/api/discovery";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import type { ClaimStatus, PublicClaim } from "@/lib/types/claim";
@@ -147,7 +147,7 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
   const supabase = await createClient();
   const { data: viewerData } = await supabase.auth.getClaims();
   const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
-  const viewerProfile = viewerId ? await getPublicProfile(viewerId) : null;
+  const viewerProfile = viewerId ? await getViewerProfileSummary(viewerId) : null;
   const createdAt = claim.createdAt ? new Date(claim.createdAt).getTime() : Number.NaN;
   const canDelete =
     viewerId === claim.authorId &&
