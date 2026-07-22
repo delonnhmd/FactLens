@@ -2,66 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { publicEnvironment } from "@/lib/validation/env";
+import { refreshViaSingleFlight } from "@/lib/supabase/refresh-single-flight";
 
 type CookieToSet = {
   name: string;
   value: string;
   options?: Parameters<NextResponse["cookies"]["set"]>[2];
 };
-
-type RefreshGrantResult =
-  | { ok: true; accessToken: string; refreshToken: string }
-  | { ok: false };
-
-// Two different requests (e.g. a vote Server Action and a parallel page
-// prefetch) can each hold the same stale refresh token and race to rotate it.
-// Supabase revokes the whole token family when a refresh token is reused
-// concurrently, which is what previously turned into "logged out after
-// voting" even for sessions that had been valid for days. Coalescing
-// concurrent refreshes for the same token into a single network call removes
-// the race instead of just hiding its symptom. This map is process-local
-// (module scope survives across requests on a warm instance, not across
-// isolates), so it reduces the race without requiring cross-instance state.
-const inFlightRefreshes = new Map<string, Promise<RefreshGrantResult>>();
-
-function refreshViaSingleFlight(refreshToken: string): Promise<RefreshGrantResult> {
-  const existing = inFlightRefreshes.get(refreshToken);
-  if (existing) {
-    return existing;
-  }
-
-  const attempt = fetch(
-    `${publicEnvironment.supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
-    {
-      method: "POST",
-      headers: {
-        apikey: publicEnvironment.supabaseAnonKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    },
-  )
-    .then(async (response) => {
-      if (!response.ok) {
-        return { ok: false as const };
-      }
-      const body = (await response.json().catch(() => null)) as {
-        access_token?: string;
-        refresh_token?: string;
-      } | null;
-      if (!body?.access_token || !body.refresh_token) {
-        return { ok: false as const };
-      }
-      return { ok: true as const, accessToken: body.access_token, refreshToken: body.refresh_token };
-    })
-    .catch(() => ({ ok: false as const }))
-    .finally(() => {
-      inFlightRefreshes.delete(refreshToken);
-    });
-
-  inFlightRefreshes.set(refreshToken, attempt);
-  return attempt;
-}
 
 function isProtectedRoute(pathname: string): boolean {
   return (

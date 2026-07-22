@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { refreshViaSingleFlight } from "@/lib/supabase/refresh-single-flight";
 
 export type VerifiedSessionResult =
   | {
@@ -37,6 +38,39 @@ async function readVerifiedSession(
 }
 
 /**
+ * Refreshes the session behind `supabase` via the same single-flight cache
+ * the root proxy uses. A bare getClaims()/getSession() failure here used to
+ * trigger its own independent refreshSession() call — uncoordinated with the
+ * proxy's own refresh for the very same page load. Two independent refreshes
+ * of the same stale refresh token (one from the proxy handling the request,
+ * one from this Server Action) race exactly like two concurrent requests do:
+ * Supabase revokes the whole token family on concurrent reuse. Routing both
+ * through refreshViaSingleFlight means a proxy refresh and a Server Action
+ * refresh for the same request coalesce into one network call instead of
+ * fighting over the same token.
+ */
+async function attemptSingleFlightRefresh(supabase: ServerSupabaseClient): Promise<boolean> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const currentRefreshToken = sessionData.session?.refresh_token;
+
+  if (!currentRefreshToken) {
+    return false;
+  }
+
+  const grant = await refreshViaSingleFlight(currentRefreshToken);
+  if (!grant.ok) {
+    return false;
+  }
+
+  const { error: setSessionError } = await supabase.auth.setSession({
+    access_token: grant.accessToken,
+    refresh_token: grant.refreshToken,
+  });
+
+  return !setSessionError;
+}
+
+/**
  * Validates the signed auth token before reading the session's access token.
  * getSession() is used only as the token transport for Render; it is never the
  * authorization decision.
@@ -55,8 +89,8 @@ export async function getVerifiedSession(): Promise<VerifiedSessionResult> {
   let session = await readVerifiedSession(supabase);
 
   if (!session.ok) {
-    const { error: refreshError } = await supabase.auth.refreshSession();
-    if (!refreshError) {
+    const refreshed = await attemptSingleFlightRefresh(supabase);
+    if (refreshed) {
       session = await readVerifiedSession(supabase);
     }
   }
@@ -71,9 +105,9 @@ export async function getVerifiedSession(): Promise<VerifiedSessionResult> {
  */
 export async function refreshVerifiedSession(): Promise<VerifiedSessionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.auth.refreshSession();
+  const refreshed = await attemptSingleFlightRefresh(supabase);
 
-  if (error) {
+  if (!refreshed) {
     return { ok: false, message: "Your session could not be refreshed." };
   }
 
