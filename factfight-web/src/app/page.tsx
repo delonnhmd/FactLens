@@ -1,6 +1,7 @@
 import { Bot, FileCheck2, UsersRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { ClaimCard } from "@/components/claims/claim-card";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
@@ -9,6 +10,7 @@ import { AppStoreLink } from "@/components/ui/app-store-link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SITE_TAGLINE } from "@/lib/constants/public-site";
 import { getPublicHomeClaims, type PublicHomeClaims } from "@/lib/api/claims";
+import { createClient } from "@/lib/supabase/server";
 
 export const revalidate = 60;
 
@@ -57,6 +59,18 @@ async function loadClaims(): Promise<PublicHomeClaims | null> {
 }
 
 export default async function Home() {
+  // An already-signed-in visitor landing on the marketing homepage (e.g. a
+  // bookmark to factfight.com) has nothing to do here - the hero/pitch
+  // content is for prospective visitors, and this page's wide hero layout
+  // doesn't fit inside the authenticated app's narrower sidebar shell. Send
+  // them straight into the app instead of leaving them on a page with no way
+  // back to their own navigation.
+  const supabase = await createClient();
+  const { data: viewerData } = await supabase.auth.getClaims();
+  if (typeof viewerData?.claims?.sub === "string") {
+    redirect("/feed");
+  }
+
   const data = await loadClaims();
 
   return (

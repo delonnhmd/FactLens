@@ -10,12 +10,14 @@ import { ClaimTools } from "@/components/claims/claim-tools";
 import { SourceQualityBadge } from "@/components/claims/source-quality-badge";
 import { AddEvidenceForm } from "@/components/evidence/add-evidence-form";
 import { EvidenceList } from "@/components/evidence/evidence-list";
+import { AuthenticatedAppShell } from "@/components/navigation/authenticated-app-shell";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
 import { PublicSiteHeader } from "@/components/navigation/public-site-header";
 import { Avatar } from "@/components/ui/avatar";
 import { VoteActionPanel } from "@/components/voting/vote-action-panel";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getClaimPageData } from "@/lib/api/claims";
+import { getPublicProfile } from "@/lib/api/discovery";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import type { ClaimStatus, PublicClaim } from "@/lib/types/claim";
@@ -145,6 +147,7 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
   const supabase = await createClient();
   const { data: viewerData } = await supabase.auth.getClaims();
   const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
+  const viewerProfile = viewerId ? await getPublicProfile(viewerId) : null;
   const createdAt = claim.createdAt ? new Date(claim.createdAt).getTime() : Number.NaN;
   const canDelete =
     viewerId === claim.authorId &&
@@ -177,12 +180,10 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
   // user-authored string from terminating the JSON-LD script element.
   const serializedClaimReview = JSON.stringify(claimReview).replace(/</g, "\\u003c");
 
-  return (
-    <div className="min-h-screen bg-[var(--ff-surface)] text-[var(--ff-text)]">
+  const articleContent = (
+    <>
       <script dangerouslySetInnerHTML={{ __html: serializedClaimReview }} type="application/ld+json" />
-      <PublicSiteHeader />
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-7 sm:py-10">
-        <article className="overflow-hidden rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white">
+      <article className="overflow-hidden rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white">
           <div className="p-5 sm:p-8">
             <header className="flex items-center gap-3">
               <Avatar avatarUrl={claim.author.avatarUrl} displayName={claim.author.displayName} verified={claim.author.verified} />
@@ -253,8 +254,28 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
             <VoteActionPanel claimId={claim.id} pathIdentifier={id} votingOpen={isVotingOpen(claim)} />
             <ClaimTools canDelete={canDelete} claimId={claim.id} pathIdentifier={id} />
           </div>
-        </article>
-      </main>
+      </article>
+    </>
+  );
+
+  if (viewerProfile) {
+    return (
+      <AuthenticatedAppShell
+        profile={{
+          displayName: viewerProfile.displayName,
+          username: viewerProfile.username,
+          avatarUrl: viewerProfile.avatarUrl,
+        }}
+      >
+        <div className="mx-auto w-full max-w-3xl">{articleContent}</div>
+      </AuthenticatedAppShell>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[var(--ff-surface)] text-[var(--ff-text)]">
+      <PublicSiteHeader />
+      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-7 sm:py-10">{articleContent}</main>
       <PublicSiteFooter />
     </div>
   );

@@ -8,6 +8,7 @@ import {
   PublicProfilePosts,
   PublicProfileReplies,
 } from "@/components/profile/public-profile-activity";
+import { AuthenticatedAppShell } from "@/components/navigation/authenticated-app-shell";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
 import { PublicSiteHeader } from "@/components/navigation/public-site-header";
 import { Avatar } from "@/components/ui/avatar";
@@ -66,6 +67,7 @@ export default async function PublicProfilePage({
 
   const profile = await getPublicProfile(username, accessToken);
   if (!profile || profile.isDeleted) notFound();
+  const viewerProfile = viewerId ? await getPublicProfile(viewerId) : null;
 
   let posts: readonly PublicProfilePost[] = [];
   let replies: readonly PublicProfileReply[] = [];
@@ -124,21 +126,39 @@ export default async function PublicProfilePage({
     );
   }
 
+  const pageContent = (
+    <>
+      <header className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-6 sm:p-8">
+        <div className="flex items-center gap-4"><Avatar avatarUrl={profile.avatarUrl} displayName={profile.displayName} /><div className="min-w-0"><h1 className="truncate text-3xl font-medium text-[var(--ff-navy)]">{profile.displayName}</h1><p className="truncate text-[var(--ff-text-muted)]">@{profile.username}</p></div></div>
+        {viewerId && viewerId !== profile.id ? <BlockUserForm userId={profile.id} /> : null}
+      </header>
+
+      <nav aria-label="Profile activity" className="mt-5 grid grid-cols-4 overflow-hidden rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-1">
+        {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? "page" : undefined} className={`rounded-[9px] px-2 py-2.5 text-center text-sm ${activeTab === tab.id ? "bg-[var(--ff-navy)] font-medium text-white" : "text-[var(--ff-text-secondary)] hover:bg-[var(--ff-surface)]"}`} href={`/profile/${encodeURIComponent(profile.publicProfileSlug)}?tab=${tab.id}`} key={tab.id}>{tab.label}</Link>)}
+      </nav>
+
+      <div className="mt-5">{tabContent}</div>
+    </>
+  );
+
+  if (viewerProfile) {
+    return (
+      <AuthenticatedAppShell
+        profile={{
+          displayName: viewerProfile.displayName,
+          username: viewerProfile.username,
+          avatarUrl: viewerProfile.avatarUrl,
+        }}
+      >
+        <div className="mx-auto w-full max-w-3xl">{pageContent}</div>
+      </AuthenticatedAppShell>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--ff-surface)]">
       <PublicSiteHeader />
-      <main className="mx-auto w-full max-w-3xl px-4 py-7 sm:px-7 sm:py-10">
-        <header className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-6 sm:p-8">
-          <div className="flex items-center gap-4"><Avatar avatarUrl={profile.avatarUrl} displayName={profile.displayName} /><div className="min-w-0"><h1 className="truncate text-3xl font-medium text-[var(--ff-navy)]">{profile.displayName}</h1><p className="truncate text-[var(--ff-text-muted)]">@{profile.username}</p></div></div>
-          {viewerId && viewerId !== profile.id ? <BlockUserForm userId={profile.id} /> : null}
-        </header>
-
-        <nav aria-label="Profile activity" className="mt-5 grid grid-cols-4 overflow-hidden rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-1">
-          {tabs.map((tab) => <Link aria-current={activeTab === tab.id ? "page" : undefined} className={`rounded-[9px] px-2 py-2.5 text-center text-sm ${activeTab === tab.id ? "bg-[var(--ff-navy)] font-medium text-white" : "text-[var(--ff-text-secondary)] hover:bg-[var(--ff-surface)]"}`} href={`/profile/${encodeURIComponent(profile.publicProfileSlug)}?tab=${tab.id}`} key={tab.id}>{tab.label}</Link>)}
-        </nav>
-
-        <div className="mt-5">{tabContent}</div>
-      </main>
+      <main className="mx-auto w-full max-w-3xl px-4 py-7 sm:px-7 sm:py-10">{pageContent}</main>
       <PublicSiteFooter />
     </div>
   );

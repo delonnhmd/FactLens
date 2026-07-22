@@ -3,13 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ClaimCard } from "@/components/claims/claim-card";
+import { AuthenticatedAppShell } from "@/components/navigation/authenticated-app-shell";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
 import { PublicSiteHeader } from "@/components/navigation/public-site-header";
 import { TopicVerdictBadge } from "@/components/topics/topic-verdict-badge";
 import { AppStoreLink } from "@/components/ui/app-store-link";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getPublicTopicPageData } from "@/lib/api/topics";
+import { getPublicProfile } from "@/lib/api/discovery";
 import { SITE_NAME } from "@/lib/constants/public-site";
+import { createClient } from "@/lib/supabase/server";
 import { publicEnvironment } from "@/lib/validation/env";
 
 export const revalidate = 60;
@@ -67,11 +70,13 @@ export default async function TopicPage({ params }: TopicPageProps) {
   }
 
   const { topic, claims } = data;
+  const supabase = await createClient();
+  const { data: viewerData } = await supabase.auth.getClaims();
+  const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
+  const viewerProfile = viewerId ? await getPublicProfile(viewerId) : null;
 
-  return (
-    <div className="min-h-screen bg-[var(--ff-surface)] text-[var(--ff-text)]">
-      <PublicSiteHeader />
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-7 sm:py-12">
+  const pageContent = (
+    <>
         <header className="rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-5 sm:p-8">
           <p className="text-sm font-medium text-[var(--ff-ai)]">Topic cluster</p>
           <h1 className="mt-2 max-w-3xl text-3xl font-medium tracking-[-0.03em] text-[var(--ff-navy)] sm:text-4xl">{topic.label}</h1>
@@ -101,12 +106,34 @@ export default async function TopicPage({ params }: TopicPageProps) {
           </div>
         </section>
 
-        <aside className="mt-10 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-5 text-center sm:p-7">
-          <h2 className="text-xl font-medium text-[var(--ff-navy)]">Join the verification</h2>
-          <p className="mx-auto mt-2 max-w-xl leading-7 text-[var(--ff-text-secondary)]">Log in to FactFight on the web to vote on claims and contribute evidence.</p>
-          <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row"><Link className="inline-flex items-center justify-center rounded-[var(--ff-radius-card)] bg-[var(--ff-navy)] px-5 py-3 text-sm font-medium text-white" href="/feed">Open web app</Link><AppStoreLink label="Get the mobile app" /></div>
-        </aside>
-      </main>
+        {!viewerProfile ? (
+          <aside className="mt-10 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white p-5 text-center sm:p-7">
+            <h2 className="text-xl font-medium text-[var(--ff-navy)]">Join the verification</h2>
+            <p className="mx-auto mt-2 max-w-xl leading-7 text-[var(--ff-text-secondary)]">Log in to FactFight on the web to vote on claims and contribute evidence.</p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row"><Link className="inline-flex items-center justify-center rounded-[var(--ff-radius-card)] bg-[var(--ff-navy)] px-5 py-3 text-sm font-medium text-white" href="/feed">Open web app</Link><AppStoreLink label="Get the mobile app" /></div>
+          </aside>
+        ) : null}
+    </>
+  );
+
+  if (viewerProfile) {
+    return (
+      <AuthenticatedAppShell
+        profile={{
+          displayName: viewerProfile.displayName,
+          username: viewerProfile.username,
+          avatarUrl: viewerProfile.avatarUrl,
+        }}
+      >
+        <div className="mx-auto w-full max-w-6xl">{pageContent}</div>
+      </AuthenticatedAppShell>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[var(--ff-surface)] text-[var(--ff-text)]">
+      <PublicSiteHeader />
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-7 sm:py-12">{pageContent}</main>
       <PublicSiteFooter />
     </div>
   );
