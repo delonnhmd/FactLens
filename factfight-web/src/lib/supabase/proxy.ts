@@ -9,6 +9,60 @@ type CookieToSet = {
   options?: Parameters<NextResponse["cookies"]["set"]>[2];
 };
 
+type RefreshGrantResult =
+  | { ok: true; accessToken: string; refreshToken: string }
+  | { ok: false };
+
+// Two different requests (e.g. a vote Server Action and a parallel page
+// prefetch) can each hold the same stale refresh token and race to rotate it.
+// Supabase revokes the whole token family when a refresh token is reused
+// concurrently, which is what previously turned into "logged out after
+// voting" even for sessions that had been valid for days. Coalescing
+// concurrent refreshes for the same token into a single network call removes
+// the race instead of just hiding its symptom. This map is process-local
+// (module scope survives across requests on a warm instance, not across
+// isolates), so it reduces the race without requiring cross-instance state.
+const inFlightRefreshes = new Map<string, Promise<RefreshGrantResult>>();
+
+function refreshViaSingleFlight(refreshToken: string): Promise<RefreshGrantResult> {
+  const existing = inFlightRefreshes.get(refreshToken);
+  if (existing) {
+    return existing;
+  }
+
+  const attempt = fetch(
+    `${publicEnvironment.supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
+    {
+      method: "POST",
+      headers: {
+        apikey: publicEnvironment.supabaseAnonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    },
+  )
+    .then(async (response) => {
+      if (!response.ok) {
+        return { ok: false as const };
+      }
+      const body = (await response.json().catch(() => null)) as {
+        access_token?: string;
+        refresh_token?: string;
+      } | null;
+      if (!body?.access_token || !body.refresh_token) {
+        return { ok: false as const };
+      }
+      return { ok: true as const, accessToken: body.access_token, refreshToken: body.refresh_token };
+    })
+    .catch(() => ({ ok: false as const }))
+    .finally(() => {
+      inFlightRefreshes.delete(refreshToken);
+    });
+
+  inFlightRefreshes.set(refreshToken, attempt);
+  return attempt;
+}
+
 function isProtectedRoute(pathname: string): boolean {
   return (
     pathname === "/feed" ||
@@ -93,25 +147,45 @@ export async function updateSession(request: NextRequest) {
   // persist the cookie), not an actually-dead session. Retry with an
   // explicit refresh — middleware can always persist the cookie via setAll
   // above — before deciding to redirect to /login.
-  // Public claim/profile pages do not need to refresh the session. In
-  // particular, refreshing here can race with the vote Server Action or a
-  // parallel prefetch: Supabase refresh-token rotation lets one request win
-  // and another request clear the old cookie. A public request must never be
-  // the request that decides a valid browser session is gone.
-  if (protectedRoute && !initialClaimsValid) {
-    inRefreshAttempt = true;
-    const { error: refreshError } = await supabase.auth.refreshSession();
-    inRefreshAttempt = false;
-    if (!refreshError) {
-      ({ data, error } = await supabase.auth.getClaims());
-      refreshClaimsValid = !error && Boolean(data?.claims?.sub);
-    } else {
-      // A failed refresh can emit cookie-removal instructions. Do not send
-      // those instructions to the browser: a failed parallel refresh is not
-      // proof that the user's session is invalid, and automatic clearing is
-      // the logout symptom this proxy must prevent.
-      refreshCookies = [];
-      refreshHeaders = {};
+  // This runs for every route, including public claim/profile pages: those
+  // pages read getClaims() directly to decide what to render (e.g. whether
+  // to show vote buttons or a login prompt) and have no retry of their own,
+  // so skipping recovery here previously made a merely-stale access token
+  // render as "logged out" on any public page. Refreshing is safe here
+  // because refreshViaSingleFlight coalesces concurrent refreshes of the same
+  // token into one network call — that's what actually caused the original
+  // "logged out after voting" bug (two requests racing to rotate the same
+  // refresh token), not the act of refreshing on a public route per se.
+  if (!initialClaimsValid) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentRefreshToken = sessionData.session?.refresh_token;
+
+    if (currentRefreshToken) {
+      const grant = await refreshViaSingleFlight(currentRefreshToken);
+
+      if (grant.ok) {
+        inRefreshAttempt = true;
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token: grant.accessToken,
+          refresh_token: grant.refreshToken,
+        });
+        inRefreshAttempt = false;
+
+        if (!setSessionError) {
+          ({ data, error } = await supabase.auth.getClaims());
+          refreshClaimsValid = !error && Boolean(data?.claims?.sub);
+        }
+      }
+
+      if (!refreshClaimsValid) {
+        // A failed grant, a losing single-flight race, or a setSession error
+        // can emit or imply cookie-removal instructions. Do not send those to
+        // the browser: none of those outcomes are proof the user's session is
+        // invalid, and automatic clearing is the logout symptom this proxy
+        // must prevent.
+        refreshCookies = [];
+        refreshHeaders = {};
+      }
     }
   }
 
