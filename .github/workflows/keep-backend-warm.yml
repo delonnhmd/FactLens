@@ -1,0 +1,23 @@
+name: Keep Render backend warm
+
+# Render's free tier spins the backend down after a period of inactivity,
+# and the next real request then has to wait for it to cold-start (tens of
+# seconds), which can exceed the web app's request timeout and look like a
+# failed vote/claim submission. Pinging a lightweight health endpoint often
+# enough keeps it warm so real user requests don't pay that cold-start cost.
+#
+# Note: GitHub disables scheduled workflows after 60 days with no repository
+# activity (any push/commit resets that clock), and schedules can run a few
+# minutes late under GitHub's own load - this reduces cold starts, it does
+# not guarantee zero.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: curl -fsS --max-time 45 "https://factlens-e8uf.onrender.com/health"
