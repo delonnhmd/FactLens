@@ -2070,6 +2070,20 @@ AI_CLAIM_COOLDOWN_SECONDS = 45
 SOURCE_SCORE_RATE_LIMIT_MAX_REQUESTS = 120
 RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
 CLAIM_AI_COOLDOWNS: dict[str, float] = {}
+# Every configured rate-limit window and the AI cooldown are well under an
+# hour; an entry untouched for longer than this is stale regardless of which
+# bucket it belongs to.
+_STALE_ENTRY_TTL_SECONDS = 3600
+_rate_limit_sweep_counter = 0
+# These dicts previously kept one entry per (bucket, IP) or per claim_id for
+# the lifetime of the process with no eviction - a visitor who is never seen
+# again still left its entry in memory forever. On a public app with many
+# distinct IPs and an ever-growing set of claim IDs, that grows without
+# bound until the process runs out of memory and Render kills/restarts it
+# (which is also why a restart made things "work again": it reset these
+# dicts to empty). Sweeping periodically bounds their size to roughly what's
+# been active in the last hour instead of everything since the last restart.
+_RATE_LIMIT_SWEEP_INTERVAL = 200
 
 # PHASE 6 STEP 1 — Duplicate claim detection tuning.
 # Statuses a claim can have while it is still worth voting on. A duplicate is
@@ -2123,7 +2137,26 @@ def get_client_ip(request: Request) -> str:
 
 
 # PHASE 4 STEP 27
+def _sweep_stale_rate_limit_state(now: float) -> None:
+    stale_bucket_keys = [
+        key
+        for key, timestamps in RATE_LIMIT_BUCKETS.items()
+        if not timestamps or now - timestamps[-1] > _STALE_ENTRY_TTL_SECONDS
+    ]
+    for key in stale_bucket_keys:
+        RATE_LIMIT_BUCKETS.pop(key, None)
+
+    stale_cooldown_keys = [
+        claim_id
+        for claim_id, last_request in CLAIM_AI_COOLDOWNS.items()
+        if now - last_request > _STALE_ENTRY_TTL_SECONDS
+    ]
+    for claim_id in stale_cooldown_keys:
+        CLAIM_AI_COOLDOWNS.pop(claim_id, None)
+
+
 def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_seconds: int) -> None:
+    global _rate_limit_sweep_counter
     now = monotonic()
     key = f"{bucket}:{get_client_ip(request)}"
     recent_requests = [
@@ -2138,6 +2171,11 @@ def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_
 
     recent_requests.append(now)
     RATE_LIMIT_BUCKETS[key] = recent_requests
+
+    _rate_limit_sweep_counter += 1
+    if _rate_limit_sweep_counter >= _RATE_LIMIT_SWEEP_INTERVAL:
+        _rate_limit_sweep_counter = 0
+        _sweep_stale_rate_limit_state(now)
 
 
 # PHASE 4 STEP 27
