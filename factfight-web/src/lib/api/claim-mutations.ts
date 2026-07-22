@@ -27,6 +27,7 @@ function friendlyCreateError(error: unknown): string {
   if (error.status === 400 || error.status === 422) {
     return error.message || "Check the claim fields and try again.";
   }
+  if (error.status === 503) return error.message || "FactFight services are waking up. Please try again in a moment.";
 
   return "Could not create your claim right now. Please try again.";
 }
@@ -47,6 +48,7 @@ function friendlyVoteError(error: unknown): string {
   if (error.status === 422) return error.message || "Choose True, Fake, or Unsure.";
   if (error.status === 429) return error.message || "Too many vote attempts. Please wait and try again.";
   if (error.status === 500) return error.message || "The vote could not be recorded right now.";
+  if (error.status === 503) return error.message || "FactFight services are waking up. Please try again in a moment.";
 
   return "Could not save your vote right now. Please try again.";
 }

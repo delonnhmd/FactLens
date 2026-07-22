@@ -2,7 +2,12 @@ import "server-only";
 
 import { publicEnvironment } from "@/lib/validation/env";
 
-const REQUEST_TIMEOUT_MS = 20_000;
+// Render's backend can cold-start after a period of inactivity (free-tier
+// services spin down and take tens of seconds to wake on the next request).
+// 20s was tight enough that a cold start could exceed it, surfacing as a
+// generic "could not save your vote" network failure even though the
+// backend was simply still waking up, not actually failing.
+const REQUEST_TIMEOUT_MS = 30_000;
 
 interface RenderErrorPayload {
   readonly code?: string;
