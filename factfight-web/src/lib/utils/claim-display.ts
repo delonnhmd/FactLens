@@ -7,9 +7,11 @@ const statusLabels: Record<ClaimStatus, string> = {
   FINALIZED_TRUE: "Finalized true",
   FINALIZED_FAKE: "Finalized fake",
   INSUFFICIENT_DATA: "Insufficient data",
-  LOCKED: "Locked",
+  // 24H MODEL: closed-but-unpublished claims are just waiting on the server
+  // sweep (runs every ~10 min) — never a dead "Locked" state.
+  LOCKED: "Finalizing verdict",
   OPEN: "Open",
-  VOTING_CLOSED: "Voting closed",
+  VOTING_CLOSED: "Finalizing verdict",
   COMMUNITY_TRUE: "Community says true",
   COMMUNITY_FAKE: "Community says fake",
   NEEDS_MORE_EVIDENCE: "Needs more evidence",
