@@ -52,7 +52,7 @@ import {
   type SourceMessageColor,
   type SourceQuality,
 } from "../../../services/sourceQuality";
-import { getScoreLockAt, getVoteAcceptUntil } from "../../../utils/verificationTiming";
+import { getVoteAcceptUntil } from "../../../utils/verificationTiming";
 import {
   cleanSourceReviewText,
   cleanUserError,
@@ -122,14 +122,16 @@ const verdictLabels = {
   FINALIZED_TRUE: "Finalized true",
   FINALIZED_FAKE: "Finalized fake",
   INSUFFICIENT_DATA: "Insufficient data",
-  LOCKED: "Voting locked",
+  // 24H MODEL: closed-but-unpublished claims are just waiting on the server
+  // sweep (runs every ~10 min) — never a dead "Locked" state.
+  LOCKED: "Finalizing verdict…",
   EARLY_VERDICT: "Early verdict candidate",
   ACTIVE: "Active voting",
   PENDING: "Pending",
   COMMUNITY_TRUE: "Community says true",
   COMMUNITY_FAKE: "Community says fake",
   NEEDS_MORE_EVIDENCE: "Needs more evidence",
-  VOTING_CLOSED: "Voting closed",
+  VOTING_CLOSED: "Finalizing verdict…",
   OPEN: "Open voting",
 };
 
@@ -1079,7 +1081,6 @@ export default function ClaimDetailScreen() {
     isVotingOpen(claim);
   // PHASE 3 STEP 22
   const voteWindowClosesAt = getVoteAcceptUntil(claim);
-  const scoreLockAt = getScoreLockAt(claim);
   // PHASE 3 STEP 22
   const voteDisabled = !votingOpen || !isAuthenticated || !isVerified || Boolean(claim.userVote) || voteSubmitting;
   const finalStatus =
@@ -1106,7 +1107,7 @@ export default function ClaimDetailScreen() {
   const verdictCalculatedText = claim.verdictCalculatedAt
     ? new Date(claim.verdictCalculatedAt).toLocaleString()
     : "Pending save";
-  const engineVerdict = verdictTitle ?? (claim.status === "LOCKED" || claim.status === "VOTING_CLOSED" ? "Locking score" : "Pending");
+  const engineVerdict = verdictTitle ?? (votingOpen ? "Pending" : "Finalizing verdict…");
   // PHASE 3 STEP 5
   const evidenceCount = claim.evidenceCount ?? claim.evidence.length;
   // PHASE 4 STEP 10
@@ -1201,16 +1202,17 @@ export default function ClaimDetailScreen() {
         : claim.userVote
           ? "You already voted on this claim."
           : "Choose one option before voting closes.";
-  // PHASE 4 STEP 26
-  const phaseLabel = claim.phase4Locked
-    ? "Phase 4 - Locked"
-    : `Phase ${claim.currentPhase} - ${votingOpen ? "Voting" : "Locking"}`;
-  const scoreLockPassed = new Date(scoreLockAt).getTime() <= Date.now();
+  // 24H MODEL: voting runs the full 24 hours and the server sweep finalizes
+  // at that same mark — countdown while open, a brief "Finalizing…" while
+  // waiting for the sweep, then the published verdict.
+  const phaseLabel = finalStatus
+    ? "Verdict published"
+    : `Phase ${claim.currentPhase} - ${votingOpen ? "Voting" : "Finalizing"}`;
   const timeLabel = votingOpen
-    ? `${getTimeRemaining(voteWindowClosesAt)} voting left`
-    : scoreLockPassed
+    ? `Voting ends in ${getTimeRemaining(voteWindowClosesAt)}`
+    : finalStatus
       ? "Finalized"
-      : `${getTimeRemaining(scoreLockAt)} to final lock`;
+      : "Finalizing…";
   const minVotesLabel = `${totalVotes}/${claim.minVotesRequired}`;
   // PHASE 4 STEP 16
   const reportButtonActive = reportSubmitting || Boolean(selectedReportReason);
@@ -1983,8 +1985,8 @@ export default function ClaimDetailScreen() {
           <Text style={styles.label}>Verification timeline</Text>
           <PhaseStatusRow timeLabel={timeLabel} phaseLabel={phaseLabel} />
           <Text style={styles.date}>Posted {new Date(claim.createdAt).toLocaleString()}</Text>
-          <Text style={styles.date}>Voting closes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
-          <Text style={styles.date}>Verdict locks {new Date(scoreLockAt).toLocaleString()}</Text>
+          {/* 24H MODEL: voting ends and the verdict publishes at the same mark. */}
+          <Text style={styles.date}>Voting ends & verdict publishes {new Date(voteWindowClosesAt).toLocaleString()}</Text>
           <Text style={styles.date}>Minimum votes: {minVotesLabel}</Text>
           <Text style={styles.date}>
             Early verdict: {claim.earlyVerdictFired ? "Candidate triggered" : "Not triggered"}

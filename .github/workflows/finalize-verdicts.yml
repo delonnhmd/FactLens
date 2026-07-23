@@ -1,0 +1,30 @@
+name: Finalize due claim verdicts
+
+# Verdict finalization is exclusively server-side: this cron calls the
+# backend's /internal/finalize-sweep every 10 minutes, which finalizes every
+# claim past its 24-hour voting deadline (Verdict Formula v1, service-role
+# write). The sweep is idempotent — already-finalized claims are skipped —
+# so overlapping or late runs are harmless.
+#
+# Requires the FINALIZE_SWEEP_SECRET repository secret (Settings -> Secrets
+# and variables -> Actions). Its value must match the backend's
+# FINALIZE_SWEEP_SECRET env var on Render (or SAFETY_WEBHOOK_SECRET, which
+# the endpoint accepts as a fallback so no new Render env var is needed).
+#
+# Note: GitHub disables scheduled workflows after 60 days without repo
+# activity, and schedules can run a few minutes late under GitHub's load —
+# the sweep catching up late is fine because it is idempotent.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run finalize sweep
+        run: |
+          curl -fsS --max-time 120 -X POST \
+            "https://factlens-e8uf.onrender.com/internal/finalize-sweep" \
+            -H "x-finalize-secret: ${{ secrets.FINALIZE_SWEEP_SECRET }}"

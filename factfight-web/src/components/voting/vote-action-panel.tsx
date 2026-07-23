@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState, useSyncExternalStore } from "react";
 
 import { voteClaimAction, type VoteActionState } from "@/app/claim/[id]/actions";
+import type { ClaimStatus } from "@/lib/types/claim";
 
 const initialState: VoteActionState = { message: "", success: false };
 
@@ -32,10 +33,55 @@ const voteLabels: Record<string, string> = {
   UNSURE: "Not sure",
 };
 
+// 24H MODEL: verdicts publish at the 24-hour mark via the server sweep, so
+// the panel renders the verdict itself once it exists.
+const trueBox = "border-[color-mix(in_srgb,var(--ff-true)_40%,var(--ff-border))] bg-[color-mix(in_srgb,var(--ff-true)_7%,white)]";
+const fakeBox = "border-[color-mix(in_srgb,var(--ff-fake)_40%,var(--ff-border))] bg-[color-mix(in_srgb,var(--ff-fake)_6%,white)]";
+const unsureBox = "border-[color-mix(in_srgb,var(--ff-unsure)_45%,var(--ff-border))] bg-[color-mix(in_srgb,var(--ff-unsure)_10%,white)]";
+
+const finalVerdictDisplay: Partial<Record<ClaimStatus, { label: string; boxClassName: string; textClassName: string }>> = {
+  FINALIZED_TRUE: { label: "Finalized: True", boxClassName: trueBox, textClassName: "text-[var(--ff-true)]" },
+  COMMUNITY_TRUE: { label: "Community says: True", boxClassName: trueBox, textClassName: "text-[var(--ff-true)]" },
+  FINALIZED_FAKE: { label: "Finalized: Fake", boxClassName: fakeBox, textClassName: "text-[var(--ff-fake)]" },
+  COMMUNITY_FAKE: { label: "Community says: Fake", boxClassName: fakeBox, textClassName: "text-[var(--ff-fake)]" },
+  NEEDS_MORE_EVIDENCE: { label: "Needs more evidence", boxClassName: unsureBox, textClassName: "text-[#8A5700]" },
+  INSUFFICIENT_DATA: { label: "Insufficient data", boxClassName: unsureBox, textClassName: "text-[#8A5700]" },
+};
+
+// Hydration flag store: never emits, so the snapshot only flips when the
+// client takes over rendering from the server. Time-dependent text (the
+// countdown) renders only after that flip so server and client HTML match.
+function subscribeNever(): () => void {
+  return () => {};
+}
+
+function formatRemaining(deadline: string | null | undefined): string | null {
+  if (!deadline) {
+    return null;
+  }
+
+  const remainingMs = new Date(deadline).getTime() - Date.now();
+
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    return null;
+  }
+
+  const totalMinutes = Math.ceil(remainingMs / (60 * 1000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
 interface VoteActionPanelProps {
   readonly claimId: string;
   readonly pathIdentifier: string;
   readonly votingOpen: boolean;
+  // The server-published verdict, when one exists — renders the clear final
+  // result instead of any voting UI.
+  readonly finalStatus?: ClaimStatus | null;
+  // ISO timestamp when voting ends (= when the verdict publishes) for the
+  // live countdown.
+  readonly voteDeadline?: string | null;
   // The signed-in viewer's existing vote. The backend rejects repeat votes
   // (409, no overwrite), so when this is set the buttons are replaced with a
   // clear "You voted X" indicator — there is no vote-changing path.
@@ -44,9 +90,23 @@ interface VoteActionPanelProps {
   readonly compact?: boolean;
 }
 
-export function VoteActionPanel({ claimId, pathIdentifier, votingOpen, viewerVote = null, compact = false }: VoteActionPanelProps) {
+export function VoteActionPanel({
+  claimId,
+  pathIdentifier,
+  votingOpen,
+  finalStatus = null,
+  voteDeadline = null,
+  viewerVote = null,
+  compact = false,
+}: VoteActionPanelProps) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(voteClaimAction, initialState);
+  const mounted = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  const [, setCountdownTick] = useState(0);
 
   useEffect(() => {
     if (state.success) {
@@ -54,35 +114,79 @@ export function VoteActionPanel({ claimId, pathIdentifier, votingOpen, viewerVot
     }
   }, [router, state.success]);
 
+  // Keep the countdown live while voting is open, and re-check the server
+  // for the published verdict once the deadline passes (the sweep runs every
+  // ~10 minutes, so the "Finalizing…" state resolves itself).
+  useEffect(() => {
+    if (finalStatus) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setCountdownTick((tick) => tick + 1);
+
+      if (!votingOpen) {
+        router.refresh();
+      }
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [finalStatus, router, votingOpen]);
+
   const sectionSpacing = compact ? "mt-5" : "mt-8";
   const sectionPadding = compact ? "p-4" : "p-5 sm:p-6";
   const headingClass = compact ? "text-sm font-medium text-[var(--ff-navy)]" : "text-lg font-medium text-[var(--ff-navy)]";
+  const verdict = finalStatus ? finalVerdictDisplay[finalStatus] : undefined;
+
+  if (verdict) {
+    return (
+      <section aria-label="Final verdict" className={`${sectionSpacing} rounded-[var(--ff-radius-card)] border ${verdict.boxClassName} ${sectionPadding}`}>
+        <p className={`text-sm font-semibold uppercase tracking-wide ${verdict.textClassName}`}>
+          {verdict.label}
+        </p>
+        <p className="mt-1 text-xs leading-5 text-[var(--ff-text-secondary)]">
+          Community voting has ended and the verdict is published.
+          {viewerVote && voteLabels[viewerVote] ? ` You voted ${voteLabels[viewerVote]}.` : ""}
+        </p>
+      </section>
+    );
+  }
 
   if (viewerVote && voteLabels[viewerVote]) {
     return (
       <section aria-label="Your vote" className={`${sectionSpacing} rounded-[var(--ff-radius-card)] border border-[color-mix(in_srgb,var(--ff-true)_35%,var(--ff-border))] bg-[color-mix(in_srgb,var(--ff-true)_6%,white)] ${sectionPadding}`}>
         <p className="text-sm font-medium text-[var(--ff-navy)]">✓ You voted {voteLabels[viewerVote]}</p>
         <p className="mt-1 text-xs leading-5 text-[var(--ff-text-secondary)]">
-          Votes are final and can&apos;t be changed.
+          {votingOpen
+            ? "Votes are final and can't be changed."
+            : "Voting has ended — the final verdict is being calculated."}
         </p>
       </section>
     );
   }
 
   if (!votingOpen) {
+    // Brief residual window between the 24h deadline and the next server
+    // sweep run (cron every ~10 minutes). Auto-refreshes above.
     return (
-      <section className={`${sectionSpacing} rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] ${sectionPadding}`}>
-        <h2 className={headingClass}>Voting is closed</h2>
+      <section aria-live="polite" className={`${sectionSpacing} rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] ${sectionPadding}`}>
+        <h2 className={headingClass}>Finalizing verdict…</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">
-          The current community result and any server-published verdict remain available above.
+          Voting has ended. The final verdict is being calculated and will appear here in a few minutes.
         </p>
       </section>
     );
   }
 
+  const remaining = mounted ? formatRemaining(voteDeadline) : null;
+
   return (
     <section className={`${sectionSpacing} rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-[var(--ff-surface)] ${sectionPadding}`}>
-      <h2 className={headingClass}>Cast your vote</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className={headingClass}>Cast your vote</h2>
+        {remaining ? (
+          <p className="text-xs font-medium text-[var(--ff-text-muted)]">Voting ends in {remaining}</p>
+        ) : null}
+      </div>
       {compact ? null : (
         <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">
           Review the claim and evidence first. You can vote once, and your trust weight is calculated only by the server.

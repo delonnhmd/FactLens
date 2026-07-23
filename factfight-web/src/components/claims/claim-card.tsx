@@ -11,7 +11,7 @@ import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import type { PublicClaim } from "@/lib/types/claim";
 import type { VoteType } from "@/lib/validation/claim-actions";
 import { getClaimTypeLabel } from "@/lib/utils/claim-display";
-import { isVotingOpen } from "@/lib/utils/claim-voting";
+import { getFinalStatus, isVotingOpen } from "@/lib/utils/claim-voting";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
 import { getSourceDomain } from "@/lib/utils/urls";
 
@@ -91,12 +91,16 @@ export function ClaimCard({ claim, viewerVote = null }: ClaimCardProps) {
         </div>
 
         {/* Vote buttons directly below the vote bar — same panel as the claim
-            detail page, including the "You voted X" state once a vote exists. */}
+            detail page. Three states: countdown + buttons while voting is
+            open, "Finalizing verdict…" in the brief gap before the server
+            sweep publishes, then the clear final verdict. */}
         <VoteActionPanel
           claimId={claim.id}
           compact
+          finalStatus={getFinalStatus(claim)}
           pathIdentifier={claim.id}
           viewerVote={viewerVote}
+          voteDeadline={claim.voteAcceptUntil}
           votingOpen={isVotingOpen(claim)}
         />
 

@@ -38,7 +38,6 @@ import {
   getVoteAcceptUntil,
 } from "../utils/verificationTiming";
 import {
-  buildVerificationResponse,
   calculateClaimVerificationResult,
   getVerificationVerdictReason,
   mapVerificationVerdictToStatus,
@@ -197,18 +196,6 @@ export interface ClaimRow {
   profiles?: ClaimProfileRow | ClaimProfileRow[] | null;
 }
 
-interface VerificationVoteRow {
-  id: string;
-  user_id: string;
-  vote_type: string;
-  vote_value: number | null;
-  trust_weight: number | null;
-  accepted: boolean | null;
-  suspicious: boolean | null;
-  rejected_reason: string | null;
-  created_at: string;
-}
-
 export interface CreateClaimInput {
   authorId: string;
   title: string;
@@ -301,33 +288,6 @@ function logClaimsFetchError(error: SupabaseErrorLike) {
 
 function logClaimsFetchErrorFull(error: unknown) {
   console.log("[CLAIMS FETCH ERROR FULL]", JSON.stringify(error, null, 2));
-}
-
-function logClaimFinalizeWarning(claimId: string, error: SupabaseErrorLike) {
-  console.log("[claims finalize warning]", {
-    claimId,
-    code: error.code,
-    message: error.message,
-    details: error.details,
-    hint: error.hint,
-  });
-}
-
-// PHASE 5 STEP 1
-async function processClaimReputation(claimId: string) {
-  const { error } = await supabase.rpc("process_claim_reputation", {
-    target_claim_id: claimId,
-  });
-
-  if (error) {
-    console.log("[claims reputation warning]", {
-      claimId,
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
-  }
 }
 
 function getClaimLoadError(error: unknown): string {
@@ -559,27 +519,6 @@ function mapStatus(status: string | null): ClaimStatus {
   }
 
   return "OPEN";
-}
-
-// PHASE 4 STEP 26
-function isTerminalClaimStatus(status: ClaimStatus): boolean {
-  return (
-    status === "FINALIZED_TRUE" ||
-    status === "FINALIZED_FAKE" ||
-    status === "INSUFFICIENT_DATA" ||
-    status === "NEEDS_MORE_EVIDENCE" ||
-    status === "COMMUNITY_TRUE" ||
-    status === "COMMUNITY_FAKE"
-  );
-}
-
-// PHASE 4 STEP 26
-function getPublishedStatus(result: ReturnType<typeof buildVerificationResponse>): ClaimStatus {
-  if (!result.min_votes_met) {
-    return "INSUFFICIENT_DATA";
-  }
-
-  return mapVerificationVerdictToStatus(result.verdict);
 }
 
 function mapAiStatus(status: string | null): ClaimAiStatus {
@@ -1207,42 +1146,6 @@ export function mapClaimToInsert(input: CreateClaimInput, authorId: string) {
   return payload;
 }
 
-// PHASE 3 STEP 17
-function mapVoteRowToVerificationVote(row: VerificationVoteRow): VerificationVote {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    vote: row.vote_type === "TRUE" ? "TRUE" : row.vote_type === "FAKE" ? "FAKE" : "NOT_SURE",
-    createdAt: row.created_at,
-    voteValue: row.vote_value,
-    trustWeight: row.trust_weight ?? 1,
-    manualTrustWeight: row.trust_weight ?? 1,
-    accepted: row.accepted ?? true,
-    suspicious: row.suspicious ?? false,
-    rejectedReason: row.rejected_reason,
-  };
-}
-
-async function fetchVerificationVotesForClaim(claimId: string): Promise<{ votes: VerificationVote[]; error?: string }> {
-  const { data, error } = await supabase
-    .from("votes")
-    .select("id,user_id,vote_type,vote_value,trust_weight,accepted,suspicious,rejected_reason,created_at")
-    .eq("claim_id", claimId);
-
-  if (error) {
-    return {
-      votes: [],
-      error: getClaimServiceErrorMessage(error.message),
-    };
-  }
-
-  return {
-    votes: ((data ?? []) as VerificationVoteRow[])
-      .filter((vote) => vote.accepted ?? true)
-      .map(mapVoteRowToVerificationVote),
-  };
-}
-
 export async function fetchClaims(): Promise<ClaimsResult> {
   return fetchLatestClaims();
 }
@@ -1582,161 +1485,16 @@ export async function fetchTrendingClaimsPage(
 }
 
 // PHASE 3 STEP 10
-export async function finalizeExpiredClaim(claimId: string): Promise<ClaimResult> {
-  const latestClaimResult = await fetchClaimById(claimId);
-
-  if (latestClaimResult.error || !latestClaimResult.claim) {
-    return latestClaimResult;
-  }
-
-  const latestClaim = latestClaimResult.claim;
-
-  if (isTerminalClaimStatus(latestClaim.status)) {
-    return latestClaimResult;
-  }
-
-  const votesResult = await fetchVerificationVotesForClaim(claimId);
-
-  if (votesResult.error) {
-    return {
-      claim: latestClaim,
-      error: votesResult.error,
-    };
-  }
-
-  const verificationResponse = buildVerificationResponse(latestClaim, votesResult.votes);
-  const scoreLockPassed = new Date(latestClaim.scoreLockAt).getTime() <= Date.now();
-  // PHASE 4 STEP 26
-  const voteWindowClosed = new Date(latestClaim.voteAcceptUntil).getTime() <= Date.now();
-  const shouldPublish = scoreLockPassed;
-  const publishedStatus = getPublishedStatus(verificationResponse);
-  const finalizedAt = new Date().toISOString();
-  const verdictReason =
-    !verificationResponse.min_votes_met
-      ? "Minimum vote requirement was not met."
-      : getVerificationVerdictReason(verificationResponse);
-  const interimStatus: ClaimStatus =
-    verificationResponse.early_verdict_fired && !shouldPublish
-      ? "EARLY_VERDICT"
-      : verificationResponse.phase4_locked || voteWindowClosed
-        ? "LOCKED"
-        : "ACTIVE";
-  const updateRow = {
-    current_phase: verificationResponse.current_phase,
-    phase4_locked: verificationResponse.phase4_locked,
-    early_verdict_fired: verificationResponse.early_verdict_fired,
-    suspicious_activity: verificationResponse.suspicious_activity,
-    weighted_community_score: verificationResponse.weighted_community_score,
-    final_score: verificationResponse.final_score,
-    total_votes: verificationResponse.vote_count,
-    ...(!shouldPublish ? { status: interimStatus } : {}),
-    ...(shouldPublish
-      ? {
-          status: publishedStatus,
-          verdict_reason: verdictReason,
-          verdict_calculated_at: finalizedAt,
-          published_at: finalizedAt,
-          phase4_locked: true,
-        }
-      : {}),
-    updated_at: new Date().toISOString(),
-  };
-  const localFinalizedClaim: Claim = {
-    ...latestClaim,
-    currentPhase: verificationResponse.current_phase,
-    phase4Locked: shouldPublish ? true : verificationResponse.phase4_locked,
-    earlyVerdictFired: verificationResponse.early_verdict_fired,
-    suspiciousActivity: verificationResponse.suspicious_activity,
-    weightedCommunityScore: verificationResponse.weighted_community_score,
-    finalScore: verificationResponse.final_score,
-    totalVotes: verificationResponse.vote_count,
-    ...(!shouldPublish ? { status: interimStatus } : {}),
-    ...(shouldPublish
-      ? {
-          status: publishedStatus,
-          verdictReason,
-          verdictCalculatedAt: finalizedAt,
-          publishedAt: finalizedAt,
-        }
-      : {}),
-  };
-
-  const { error } = await supabase.from("claims").update(updateRow).eq("id", claimId);
-
-  if (error) {
-    // PHASE 3 STEP 25
-    // Client-side verdict saving is best-effort. RLS can block this for non-authors,
-    // but the feed should still render the fetched claim.
-    logClaimFinalizeWarning(claimId, error);
-    // PHASE 5 STEP 1
-    if (shouldPublish) {
-      const { error: rpcError } = await supabase.rpc("finalize_expired_claim", {
-        target_claim_id: claimId,
-      });
-
-      if (rpcError) {
-        logClaimFinalizeWarning(claimId, rpcError);
-      } else {
-        await processClaimReputation(claimId);
-        const refreshedAfterRpc = await fetchClaimById(claimId);
-
-        if (refreshedAfterRpc.claim) {
-          return refreshedAfterRpc;
-        }
-      }
-    }
-
-    return {
-      claim: localFinalizedClaim,
-    };
-  }
-
-  // PHASE 5 STEP 1
-  if (shouldPublish) {
-    await processClaimReputation(claimId);
-  }
-
-  const refreshedClaim = await fetchClaimById(claimId);
-
-  if (refreshedClaim.error || !refreshedClaim.claim) {
-    return refreshedClaim;
-  }
-
-  return {
-    claim: refreshedClaim.claim,
-  };
-}
-
-// PHASE 3 STEP 10
-export async function finalizeExpiredClaims(claims: Claim[]): Promise<ClaimsResult> {
-  const now = Date.now();
-  const finalizedClaims = await Promise.all(
-    claims.map(async (claim) => {
-      if (isTerminalClaimStatus(claim.status)) {
-        return claim;
-      }
-
-      const result = await finalizeExpiredClaim(claim.id);
-
-      if (result.error) {
-        console.log("[claims finalize warning]", {
-          claimId: claim.id,
-          message: result.error,
-        });
-      }
-
-      return result.claim ?? claim;
-    }),
-  );
-
-  return {
-    claims: finalizedClaims,
-  };
-}
-
-// PHASE 3 STEP 10
+// FINALIZATION IS SERVER-SIDE ONLY. The old client-side publish path
+// (finalizeExpiredClaim / finalizeExpiredClaims) was silently broken and has
+// been removed: its direct claims UPDATE was filtered to 0 rows by RLS for
+// non-author viewers -- Supabase reports that as success, not an error -- so
+// the error-gated RPC fallback never ran and verdicts almost never published.
+// The backend's scheduled sweep (/internal/finalize-sweep -> SQL
+// finalize_due_claims, migration 055) now publishes every verdict, including
+// reputation processing; clients only READ the finalized status.
 export async function refreshClaimVerdict(claimId: string): Promise<ClaimResult> {
-  return finalizeExpiredClaim(claimId);
+  return fetchClaimById(claimId);
 }
 
 export async function fetchClaimById(id: string): Promise<ClaimResult> {

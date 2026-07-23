@@ -20,7 +20,7 @@ import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getClaimPageData } from "@/lib/api/claims";
 import { getViewerProfileSummary } from "@/lib/api/discovery";
 import { getViewerVoteForClaim } from "@/lib/api/viewer-votes";
-import { isVotingOpen } from "@/lib/utils/claim-voting";
+import { getFinalStatus, isVotingOpen } from "@/lib/utils/claim-voting";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import type { ClaimStatus, PublicClaim } from "@/lib/types/claim";
@@ -233,7 +233,14 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
               </p>
             ) : null}
 
-            <VoteActionPanel claimId={claim.id} pathIdentifier={id} viewerVote={viewerVote} votingOpen={isVotingOpen(claim)} />
+            <VoteActionPanel
+              claimId={claim.id}
+              finalStatus={getFinalStatus(claim)}
+              pathIdentifier={id}
+              viewerVote={viewerVote}
+              voteDeadline={claim.voteAcceptUntil}
+              votingOpen={isVotingOpen(claim)}
+            />
             <ClaimTools canDelete={canDelete} claimId={claim.id} pathIdentifier={id} />
           </div>
       </article>

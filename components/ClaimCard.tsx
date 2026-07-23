@@ -21,7 +21,8 @@ import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality
 // screen uses, so the feed card and detail render one consistent voted state.
 import { VoteBreakdownBars } from "./VoteBreakdownBars";
 import { VoteButtons, getVoteOptionLabel } from "./VoteButtons";
-import { isVotingOpen } from "../services/claimVoting";
+import { getTimeRemaining, isVotingOpen } from "../services/claimVoting";
+import { getVoteAcceptUntil } from "../utils/verificationTiming";
 // CLAIM TRANSLATION (NEW): per-claim translate link with language picker.
 import { useClaimTranslation } from "../hooks/useClaimTranslation";
 import { useAppTheme, useDisplaySettings } from "../hooks/useTheme";
@@ -273,9 +274,30 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
   const hasMedia = resolveClaimMedia(claim.media).kind !== "none";
   // PHASE 5 election positioning UI
   const isLive = isLiveClaim(claim.createdAt);
-  // Feed voting (NEW): same open/closed rule the detail screen applies.
-  const votingOpen = isVotingOpen(claim);
   const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
+  // 24H MODEL: one deadline — voting ends and the server sweep finalizes at
+  // the same 24-hour mark. Three card states: open (countdown + buttons),
+  // finalizing (brief gap until the sweep publishes), final (verdict shown).
+  const hasFinalVerdict =
+    claim.status === "FINALIZED_TRUE" ||
+    claim.status === "FINALIZED_FAKE" ||
+    claim.status === "INSUFFICIENT_DATA" ||
+    claim.status === "NEEDS_MORE_EVIDENCE" ||
+    claim.status === "COMMUNITY_TRUE" ||
+    claim.status === "COMMUNITY_FAKE";
+  const votingOpen = !hasFinalVerdict && isVotingOpen(claim);
+  const awaitingFinalization = !hasFinalVerdict && !votingOpen;
+  // Ticks once a minute while voting is open so the countdown stays live.
+  const [, setCountdownTick] = useState(0);
+
+  useEffect(() => {
+    if (!votingOpen) {
+      return;
+    }
+
+    const interval = setInterval(() => setCountdownTick((tick) => tick + 1), 60 * 1000);
+    return () => clearInterval(interval);
+  }, [votingOpen]);
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -760,16 +782,30 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
           totalVotes={totalVotes}
         />
         <View style={styles.voteButtonsWrap}>
+          {votingOpen ? (
+            <Text style={styles.voteCountdown}>
+              Voting ends in {getTimeRemaining(getVoteAcceptUntil(claim))}
+            </Text>
+          ) : null}
           {claim.userVote ? (
             <View style={styles.votedRow}>
               <Ionicons name="checkmark-circle" size={15} color={appTheme.colors.success} />
               <Text style={styles.votedText}>You voted {getVoteOptionLabel(claim.userVote)}</Text>
             </View>
           ) : null}
-          {/* The backend rejects a second vote (409) — VoteButtons locks and
-              highlights the chosen option once userVote is set, so there is no
-              silent overwrite and no "Change vote" path. */}
-          <VoteButtons disabled={!votingOpen} userVote={claim.userVote} onVote={handleVote} />
+          {awaitingFinalization ? (
+            // Brief residual gap between the 24h deadline and the next server
+            // sweep run (cron every 10 min) — never a dead "Locked" state.
+            <View style={styles.finalizingRow}>
+              <Ionicons name="hourglass-outline" size={14} color={appTheme.colors.subtext} />
+              <Text style={styles.finalizingText}>Finalizing verdict…</Text>
+            </View>
+          ) : votingOpen ? (
+            // The backend rejects a second vote (409) — VoteButtons locks and
+            // highlights the chosen option once userVote is set, so there is
+            // no silent overwrite and no "Change vote" path.
+            <VoteButtons userVote={claim.userVote} onVote={handleVote} />
+          ) : null}
         </View>
       </View>
 
@@ -1024,6 +1060,22 @@ function createStyles(theme: AppTheme) {
   votedText: {
     color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
+  voteCountdown: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontWeight: "500",
+  },
+  finalizingRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  finalizingText: {
+    color: theme.colors.subtext,
+    fontSize: theme.typography.small.fontSize,
+    fontStyle: "italic",
     fontWeight: "500",
   },
   // CLAIM TRANSLATION (NEW)

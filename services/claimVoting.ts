@@ -2,10 +2,7 @@
 import type { Claim, ClaimStatus } from "../types/claim";
 import { DEFAULT_VERIFICATION_MODE } from "../constants/verificationConfig";
 import type { VerificationMode } from "../types/verification";
-import {
-  getScoreLockAt,
-  getVoteAcceptUntil,
-} from "../utils/verificationTiming";
+import { getVoteAcceptUntil } from "../utils/verificationTiming";
 import {
   calculateClaimVerificationResult,
   getVerdictPublishesAt,
@@ -125,12 +122,11 @@ export function getCurrentClaimStatus(claim: Claim, now = new Date()): ClaimStat
     return claim.earlyVerdictFired || claim.status === "EARLY_VERDICT" ? "EARLY_VERDICT" : "ACTIVE";
   }
 
-  // PHASE 3 STEP 22
-  if (new Date(getScoreLockAt(claim)).getTime() > now.getTime()) {
-    return "LOCKED";
-  }
-
-  return calculateAutomaticVerdict(claim).status;
+  // 24H MODEL: voting close and finalize-eligibility are the same moment,
+  // and the verdict is published exclusively by the server sweep. The client
+  // never fabricates a final status — until the published row arrives the
+  // claim is simply awaiting finalization (rendered as "Finalizing verdict…").
+  return "VOTING_CLOSED";
 }
 
 export function applyCurrentClaimStatus(claim: Claim, now = new Date()): Claim {

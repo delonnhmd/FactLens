@@ -23,7 +23,10 @@ export const TEST_VERIFICATION_CONFIG = {
 
 export const PRODUCTION_VERIFICATION_CONFIG = {
   mode: "production",
-  voteWindowMinutes: 20 * 60,
+  // 24H MODEL: voting stays open the full 24 hours and the claim finalizes at
+  // that same mark (server-side sweep). The old 20h-vote/24h-publish split
+  // left a 4-hour "Locked" dead zone with no result showing.
+  voteWindowMinutes: 24 * 60,
   scoreLockMinutes: 24 * 60,
   expiresMinutes: 24 * 60,
   minVotesRequired: 15,

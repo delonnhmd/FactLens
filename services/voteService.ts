@@ -7,7 +7,7 @@
 import { supabase } from "../lib/supabase";
 import { getBackendUrl } from "../constants/apiConfig";
 import { fetchWithAuthRetry } from "../utils/authFetch";
-import { fetchClaimById, finalizeExpiredClaim } from "./claimService";
+import { fetchClaimById } from "./claimService";
 import { getScoreLockAt, getVoteAcceptUntil } from "../utils/verificationTiming";
 import type { Claim, VoteOption } from "../types/claim";
 import type { Profile } from "./profileService";
@@ -425,7 +425,6 @@ export async function voteOnClaim(
 
   // PHASE 3 STEP 22
   const voteAcceptUntil = getVoteAcceptUntil(claimResult.claim);
-  const scoreLockAt = getScoreLockAt(claimResult.claim);
   const canAcceptVote = new Date(voteAcceptUntil).getTime() > Date.now();
   console.log("[vote] voteAcceptUntil:", voteAcceptUntil);
   console.log("[vote] canAcceptVote:", canAcceptVote);
@@ -448,22 +447,16 @@ export async function voteOnClaim(
   if (claimResult.claim.phase4Locked || claimResult.claim.status === "VOTING_CLOSED" || claimResult.claim.status === "LOCKED") {
     return {
       claim: claimResult.claim,
-      error: "Voting is closed. Final score is being locked.",
+      error: "Voting has ended. The verdict is being finalized.",
     };
   }
 
   if (hasVoteWindowClosed(claimResult.claim)) {
-    const finalizedClaim =
-      new Date(scoreLockAt).getTime() <= Date.now()
-        ? await finalizeExpiredClaim(claimId)
-        : { claim: claimResult.claim };
-
+    // Finalization is server-side only (scheduled sweep) — the client never
+    // publishes a verdict; it just reports that voting has ended.
     return {
-      claim: finalizedClaim.claim ?? claimResult.claim,
-      error:
-        new Date(scoreLockAt).getTime() <= Date.now()
-          ? "This claim is read-only."
-          : "Voting is closed. Final score is being locked.",
+      claim: claimResult.claim,
+      error: "Voting has ended. The verdict is being finalized.",
     };
   }
 

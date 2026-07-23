@@ -31,7 +31,6 @@ import {
   fetchLatestClaimsPage as fetchRemoteLatestClaimsPage,
   fetchTrendingClaims as fetchRemoteTrendingClaims,
   fetchTrendingClaimsPage as fetchRemoteTrendingClaimsPage,
-  finalizeExpiredClaims as finalizeRemoteExpiredClaims,
   refreshClaimVerdict as refreshRemoteClaimVerdict,
   searchClaims as searchRemoteClaims,
   searchClaimsPage as searchRemoteClaimsPage,
@@ -598,9 +597,10 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       }
 
       clearClaimsError();
-      // PHASE 3 STEP 10
-      const finalizedResult = await finalizeRemoteExpiredClaims(result.claims);
-      const claimsWithVotes = await applyUserVotes(finalizedResult.claims);
+      // Finalization is server-side only (scheduled sweep); loaded claims are
+      // displayed as-is and the overdue-refresh effect below picks up newly
+      // published verdicts.
+      const claimsWithVotes = await applyUserVotes(result.claims);
 
       setClaims((currentClaimsState) =>
         sortClaimsNewestFirst(replace ? claimsWithVotes : mergeClaimLists(currentClaimsState, claimsWithVotes)),
@@ -779,10 +779,15 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
     };
   }, [applyRemoteClaims]);
 
-  // PHASE 3 STEP 10
-  // PHASE 4 STEP 15
+  // Overdue-claim refresh: the scheduled server sweep publishes verdicts
+  // within minutes of the 24h deadline. Claims the local state still shows as
+  // non-terminal past that deadline are REFETCHED (read-only) on each clock
+  // tick so the published verdict appears without a manual refresh. This
+  // replaced the old client-side finalize path, which was silently broken
+  // (RLS filtered its UPDATE to 0 rows with no error, so verdicts almost
+  // never published) and is now removed entirely.
   useEffect(() => {
-    const expiredOpenClaims = claimsRef.current.filter(
+    const overdueClaims = claimsRef.current.filter(
       (claim) =>
         (claim.status === "OPEN" ||
           claim.status === "ACTIVE" ||
@@ -794,28 +799,34 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
         !finalizingExpiredClaimIdsRef.current.has(claim.id),
     );
 
-    if (expiredOpenClaims.length === 0) {
+    if (overdueClaims.length === 0) {
       return;
     }
 
     let mounted = true;
-    expiredOpenClaims.forEach((claim) => finalizingExpiredClaimIdsRef.current.add(claim.id));
+    overdueClaims.forEach((claim) => finalizingExpiredClaimIdsRef.current.add(claim.id));
 
-    finalizeRemoteExpiredClaims(expiredOpenClaims)
-      .then(async (result) => {
-        const claimsWithVotes = await applyUserVotes(result.claims);
+    Promise.all(overdueClaims.map((claim) => fetchRemoteClaimById(claim.id)))
+      .then(async (results) => {
+        const refreshedClaims = results
+          .map((result) => result.claim)
+          .filter((claim): claim is Claim => Boolean(claim));
+
+        if (refreshedClaims.length === 0) {
+          return;
+        }
+
+        const claimsWithVotes = await applyUserVotes(refreshedClaims);
 
         if (mounted) {
           setClaims((currentClaimsState) => mergeClaimLists(currentClaimsState, claimsWithVotes));
         }
       })
-      .catch((finalizeError) => {
-        if (mounted) {
-          setError(finalizeError instanceof Error ? finalizeError.message : "Could not finalize expired claims.");
-        }
+      .catch((refreshError) => {
+        console.log("[claims overdue refresh warning]", refreshError);
       })
       .finally(() => {
-        expiredOpenClaims.forEach((claim) => finalizingExpiredClaimIdsRef.current.delete(claim.id));
+        overdueClaims.forEach((claim) => finalizingExpiredClaimIdsRef.current.delete(claim.id));
       });
 
     return () => {

@@ -131,7 +131,7 @@ def compute_verdict(claim_id: str, supabase: Any) -> dict:
     """
     claim_result = (
         supabase.table("claims")
-        .select("id, votes_true, votes_fake, votes_unsure, naturally_true_category")
+        .select("id, votes_true, votes_fake, votes_unsure, naturally_true_category, min_votes_required")
         .eq("id", claim_id)
         .single()
         .execute()
@@ -141,6 +141,7 @@ def compute_verdict(claim_id: str, supabase: Any) -> dict:
     true_votes = int(claim.get("votes_true") or 0)
     fake_votes = int(claim.get("votes_fake") or 0)
     not_sure_votes = int(claim.get("votes_unsure") or 0)
+    min_votes_required = int(claim.get("min_votes_required") or 15)
     decisive = true_votes + fake_votes
     total_votes = decisive + not_sure_votes
     not_sure_pct = (not_sure_votes / total_votes) if total_votes > 0 else 0.0
@@ -159,6 +160,15 @@ def compute_verdict(claim_id: str, supabase: Any) -> dict:
             **base,
             "verdict": "DISPUTED",
             "reason": "Values question — Verifact does not rule on values disputes.",
+        }
+
+    # Gate b0: under the claim's minimum total votes (default 15). Mirrored in
+    # the finalize_expired_claim SQL function (migration 055).
+    if total_votes < min_votes_required:
+        return {
+            **base,
+            "verdict": "INSUFFICIENT_DATA",
+            "reason": "Minimum vote requirement was not met.",
         }
 
     # Gate b: not enough decisive votes.

@@ -7112,6 +7112,70 @@ def finalize_claim_verdict_v1(claim_id: str, request: Request):
     }
 
 
+# SERVER-SIDE FINALIZATION SWEEP (NEW) — the scheduled publisher.
+#
+# Verdict finalization used to be client-triggered and silently broken: the
+# mobile app's direct claims UPDATE was filtered to 0 rows by RLS for
+# non-authors (Supabase reports that as success, not an error), so its RPC
+# fallback never fired and verdicts almost never published. This endpoint is
+# called by a GitHub Actions cron every 10 minutes (same mechanism as the
+# keep-backend-warm ping) and finalizes every due claim through the
+# finalize_due_claims SQL function (migration 055 — Verdict Formula v1 with
+# the 15-vote minimum gate), executed with the service-role key so it never
+# depends on who is logged in. Idempotent: already-finalized claims are
+# excluded by the function's status guard.
+FINALIZE_SWEEP_BATCH_LIMIT = 200
+_NON_TERMINAL_CLAIM_STATUSES = {"OPEN", "ACTIVE", "EARLY_VERDICT", "LOCKED", "VOTING_CLOSED"}
+
+
+def _require_finalize_sweep_secret(request: Request) -> None:
+    """Shared-secret guard, same pattern as _require_safety_secret. Uses
+    FINALIZE_SWEEP_SECRET, falling back to SAFETY_WEBHOOK_SECRET so an
+    already-configured Render service needs no new environment variable."""
+    expected = os.environ.get("FINALIZE_SWEEP_SECRET", "") or os.environ.get("SAFETY_WEBHOOK_SECRET", "")
+
+    if not expected:
+        raise HTTPException(status_code=503, detail="Finalize sweep is not configured.")
+
+    provided = request.headers.get("x-finalize-secret", "")
+
+    if not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized finalize request.")
+
+
+@app.get("/internal/finalize-sweep")
+@app.post("/internal/finalize-sweep")
+def internal_finalize_sweep(request: Request):
+    _require_finalize_sweep_secret(request)
+    supabase = get_supabase_client()
+
+    try:
+        result = supabase.rpc(
+            "finalize_due_claims",
+            {"batch_limit": FINALIZE_SWEEP_BATCH_LIMIT},
+        ).execute()
+    except Exception as error:
+        print("[finalize-sweep] rpc failed:", str(error), flush=True)
+        raise HTTPException(status_code=502, detail="Finalize sweep failed.")
+
+    rows = result.data or []
+    finalized = [
+        row for row in rows
+        if str(row.get("new_status") or "") not in _NON_TERMINAL_CLAIM_STATUSES
+    ]
+    summary = {
+        "ok": True,
+        "checked": len(rows),
+        "finalized": len(finalized),
+        "results": [
+            {"claim_id": row.get("claim_id"), "status": row.get("new_status")}
+            for row in rows
+        ],
+    }
+    print("[finalize-sweep] checked:", len(rows), "finalized:", len(finalized), flush=True)
+    return summary
+
+
 # PHASE 4 STEP 8
 @app.get("/ai/library")
 def ai_library():
@@ -7388,7 +7452,10 @@ def generate_claim_write_slug(title: str) -> str:
 
 def build_claim_insert_payload(author_id: str, fields: dict, embedding: Any = None, topic_cluster_id: str | None = None) -> dict:
     created_at = datetime.now(timezone.utc)
-    vote_window_end = created_at + timedelta(hours=20)
+    # 24H MODEL: voting stays open the full 24 hours and the claim finalizes
+    # at that same mark (the scheduled sweep publishes the verdict). The old
+    # 20h-vote/24h-publish split left a 4-hour dead zone with no result.
+    vote_window_end = created_at + timedelta(hours=24)
     score_lock_at = created_at + timedelta(hours=24)
     created_at_iso = created_at.isoformat()
     score_lock_at_iso = score_lock_at.isoformat()
@@ -7425,7 +7492,7 @@ def build_claim_insert_payload(author_id: str, fields: dict, embedding: Any = No
         "is_flagged": False,
         "mode": "production",
         "current_phase": 1,
-        "vote_window_minutes": 1200,
+        "vote_window_minutes": 1440,
         "vote_window_end": vote_window_end.isoformat(),
         "vote_accept_until": vote_window_end.isoformat(),
         "score_lock_at": score_lock_at_iso,

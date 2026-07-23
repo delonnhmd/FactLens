@@ -53,11 +53,13 @@ function getVerdictConfig(status: ClaimStatus, theme: AppTheme) {
   }
 
   if (status === "LOCKED" || status === "VOTING_CLOSED") {
+    // 24H MODEL: voting has ended and the server sweep (every ~10 min) is
+    // about to publish the verdict — a brief transition, not a dead zone.
     return {
-      label: "Voting locked",
-      badge: "Locked",
-      badgeColor: theme.colors.subtext,
-      badgeTextColor: theme.colors.secondarySurface,
+      label: "Finalizing verdict…",
+      badge: "Finalizing",
+      badgeColor: theme.colors.warningBg,
+      badgeTextColor: theme.colors.warningText,
     };
   }
 
