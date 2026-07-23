@@ -6,6 +6,7 @@ import { ClaimCard } from "@/components/claims/claim-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBlockedUserIds } from "@/lib/api/blocks";
 import { getFeedClaims } from "@/lib/api/claims";
+import { getViewerVotesByClaimId } from "@/lib/api/viewer-votes";
 import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { parseFeedPage } from "@/lib/utils/pagination";
 
@@ -28,6 +29,10 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const parameters = await searchParams;
   const requestedPage = parseFeedPage(parameters.page);
   const feed = await getFeedClaims(requestedPage, blockedAuthorIds);
+  const viewerVotes = await getViewerVotesByClaimId(
+    session.userId,
+    feed.claims.map((claim) => claim.id),
+  );
 
   return (
     <div className="mx-auto w-full max-w-[680px]">
@@ -45,7 +50,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       ) : (
         <section aria-label="Recent claims" className="space-y-5">
           {feed.claims.map((claim) => (
-            <ClaimCard claim={claim} key={claim.id} />
+            <ClaimCard claim={claim} key={claim.id} viewerVote={viewerVotes[claim.id] ?? null} />
           ))}
         </section>
       )}

@@ -17,6 +17,13 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import type { Claim, ClaimStatus, ReportReason, VoteOption } from "../types/claim";
 import { getSourceQuality, getSourceTrustLabel } from "../services/sourceQuality";
+// Feed voting (NEW): the same vote buttons + breakdown bars the claim detail
+// screen uses, so the feed card and detail render one consistent voted state.
+import { VoteBreakdownBars } from "./VoteBreakdownBars";
+import { VoteButtons, getVoteOptionLabel } from "./VoteButtons";
+import { isVotingOpen } from "../services/claimVoting";
+// CLAIM TRANSLATION (NEW): per-claim translate link with language picker.
+import { useClaimTranslation } from "../hooks/useClaimTranslation";
 import { useAppTheme, useDisplaySettings } from "../hooks/useTheme";
 import type { AppTheme } from "../context/DisplaySettingsContext";
 import { MentionText } from "./MentionText";
@@ -172,11 +179,6 @@ function LiveBadge({ styles }: { styles: ReturnType<typeof createStyles> }) {
   );
 }
 
-function formatPercent(value: number | null | undefined): string {
-  const normalized = value === null || value === undefined ? 0.5 : value > 1 ? value / 100 : value;
-  return `${Math.round(normalized * 100)}%`;
-}
-
 // TASK 2 (admin badge): the author's badge_list is joined into every claim
 // (CLAIM_PROFILE_SELECT -> mapAuthor.badgeList), so we can show an "Admin" badge
 // on the author row from the same data the profile screens use. The badge is
@@ -198,27 +200,6 @@ function getSourceDomain(sourceUrl: string): string {
   } catch {
     return trimmedUrl.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[/?#]/)[0] || "source";
   }
-}
-
-function getAiDotColor(claim: Claim, theme: AppTheme): string {
-  if (claim.isFlagged) {
-    return theme.colors.danger;
-  }
-
-  if (claim.aiCheck.status === "PENDING" || claim.claimType === "OPINION") {
-    return theme.colors.warning;
-  }
-
-  return theme.colors.ai;
-}
-
-function getAiSummary(claim: Claim): string {
-  return (
-    claim.aiCheck.sourceNotes ||
-    claim.aiSummary ||
-    claim.aiCheck.reason ||
-    "AI pre-check pending. Community voting decides the final result."
-  );
 }
 
 function getSourcePillStyle(score: number, label: string, styles: ReturnType<typeof createStyles>) {
@@ -254,9 +235,14 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
   // PHASE 5 PRE-LAUNCH: collapse long descriptions until "Read more" is tapped.
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
-  const descriptionWordCount = claim.description ? claim.description.trim().split(/\s+/).length : 0;
+  // CLAIM TRANSLATION (NEW): when a translation is showing, the title and
+  // description below (including the Read more truncation) render the
+  // translated text; "See original" flips back instantly.
+  const translation = useClaimTranslation(claim);
+  const baseDescription = translation.displayDescription;
+  const descriptionWordCount = baseDescription ? baseDescription.trim().split(/\s+/).length : 0;
   const descriptionIsLong = descriptionWordCount > FEED_DESCRIPTION_WORD_LIMIT;
-  const displayDescription = descriptionExpanded ? claim.description : truncateDescription(claim.description);
+  const displayDescription = descriptionExpanded ? baseDescription : truncateDescription(baseDescription);
   const sourceQuality = useMemo(() => getSourceQuality(claim.sourceUrl), [claim.sourceUrl]);
   const sourceDomain = getSourceDomain(claim.sourceUrl);
   // PHASE 4 STEP 18
@@ -277,7 +263,6 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
     claim.status === "NEEDS_MORE_EVIDENCE"
       ? verdictLabels[claim.status]
       : null;
-  const aiSummary = getAiSummary(claim);
   const avatarInitial = (claim.authorUsername || claim.authorDisplayName || "U").slice(0, 1).toUpperCase();
   const authorHandle = claim.authorUsername ? `@${claim.authorUsername}` : "Contributor";
   // TASK 2 (admin badge): show an Admin badge on the author row for admin accounts.
@@ -288,6 +273,9 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
   const hasMedia = resolveClaimMedia(claim.media).kind !== "none";
   // PHASE 5 election positioning UI
   const isLive = isLiveClaim(claim.createdAt);
+  // Feed voting (NEW): same open/closed rule the detail screen applies.
+  const votingOpen = isVotingOpen(claim);
+  const totalVotes = claim.votesTrue + claim.votesFake + claim.votesUnsure;
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -662,7 +650,7 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
           ) : null}
 
           <Text style={styles.title}>
-            {claim.title}
+            {translation.displayTitle}
           </Text>
 
           <MentionText text={displayDescription} style={styles.description} />
@@ -675,6 +663,41 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
               accessibilityHint="Expands the full claim description"
             >
               <Text style={styles.readMore}>Read more</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* CLAIM TRANSLATION (NEW): Translate → language picker → translated
+              text in place; while translated, an AI disclaimer + "See original".
+              Hidden when the claim already reads as the only language we could
+              offer (the picker never lists the claim's own detected language). */}
+          {translation.isShowingTranslation ? (
+            <View style={styles.translateRow}>
+              <Text style={styles.translateDisclaimer}>
+                Translated by AI — may not be fully accurate.{" "}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={translation.showOriginal}
+                accessibilityRole="button"
+                accessibilityLabel="See original"
+              >
+                <Text style={styles.translateLink}>See original</Text>
+              </TouchableOpacity>
+            </View>
+          ) : translation.canTranslate ? (
+            <TouchableOpacity
+              style={styles.translateRow}
+              activeOpacity={0.7}
+              disabled={translation.isTranslating}
+              onPress={translation.promptTranslate}
+              accessibilityRole="button"
+              accessibilityLabel="Translate this claim"
+              accessibilityHint="Choose a language to translate the claim into"
+            >
+              <Ionicons name="language-outline" size={13} color={appTheme.colors.link} />
+              <Text style={styles.translateLink}>
+                {translation.isTranslating ? "Translating…" : "Translate"}
+              </Text>
             </TouchableOpacity>
           ) : null}
 
@@ -724,36 +747,42 @@ function ClaimCardComponent({ claim, onPress, onVote, onReport, onDeleted }: Cla
         </View>
       </TouchableOpacity>
 
-      <View style={styles.aiStrip}>
-        <View style={[styles.aiDot, { backgroundColor: getAiDotColor(claim, appTheme) }]} />
-        <Text style={styles.aiSummary} numberOfLines={1}>
-          {aiSummary}
-        </Text>
-        <Text style={styles.aiConfidence}>{formatPercent(claim.aiCheck.confidence ?? claim.aiConfidence)}</Text>
+      {/* Feed voting (NEW): community vote bar with the real vote buttons
+          directly below it — the same VoteButtons the detail screen uses, so
+          the voted state renders identically in both places. The AI risk strip
+          that used to sit here now lives only on the claim detail screen. */}
+      <View style={styles.voteSection}>
+        <VoteBreakdownBars
+          label="Community voting data"
+          votesTrue={claim.votesTrue}
+          votesFake={claim.votesFake}
+          votesUnsure={claim.votesUnsure}
+          totalVotes={totalVotes}
+        />
+        <View style={styles.voteButtonsWrap}>
+          {claim.userVote ? (
+            <View style={styles.votedRow}>
+              <Ionicons name="checkmark-circle" size={15} color={appTheme.colors.success} />
+              <Text style={styles.votedText}>You voted {getVoteOptionLabel(claim.userVote)}</Text>
+            </View>
+          ) : null}
+          {/* The backend rejects a second vote (409) — VoteButtons locks and
+              highlights the chosen option once userVote is set, so there is no
+              silent overwrite and no "Change vote" path. */}
+          <VoteButtons disabled={!votingOpen} userVote={claim.userVote} onVote={handleVote} />
+        </View>
       </View>
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionColumn} activeOpacity={0.8} onPress={() => handleVote("TRUE")}>
-          <Ionicons name="thumbs-up-outline" size={14} color={appTheme.colors.subtext} />
-          <Text style={styles.actionText}>True</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionColumn, styles.actionDivider]} activeOpacity={0.8} onPress={() => handleVote("FAKE")}>
-          <Ionicons name="thumbs-down-outline" size={14} color={appTheme.colors.subtext} />
-          <Text style={styles.actionText}>Fake</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionColumn, styles.actionDivider]}
-          activeOpacity={0.8}
-          onPress={() => handleVote("NOT_SURE")}
-        >
-          <Ionicons name="help-circle-outline" size={14} color={appTheme.colors.subtext} />
-          <Text style={styles.actionText}>Not sure</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionColumn, styles.actionDivider]} activeOpacity={0.8} onPress={handleOptions}>
-          <Ionicons name="ellipsis-horizontal" size={14} color={appTheme.colors.subtext} />
-          <Text style={styles.actionText}>More</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={styles.moreRow}
+        activeOpacity={0.8}
+        onPress={handleOptions}
+        accessibilityRole="button"
+        accessibilityLabel="More post options"
+      >
+        <Ionicons name="ellipsis-horizontal" size={14} color={appTheme.colors.subtext} />
+        <Text style={styles.actionText}>More</Text>
+      </TouchableOpacity>
       {/* Step 2 of the report flow: optional note before the existing submit. */}
       <ReportNoteModal
         visible={pendingReportReason !== null}
@@ -977,50 +1006,51 @@ function createStyles(theme: AppTheme) {
     fontSize: Math.round(11 * (theme.typography.body.fontSize / 16)),
     fontWeight: "500",
   },
-  aiStrip: {
-    alignItems: "center",
-    backgroundColor: theme.colors.secondarySurface,
+  // Feed voting (NEW)
+  voteSection: {
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: theme.borderWidth,
-    flexDirection: "row",
+  },
+  voteButtonsWrap: {
     gap: 8,
+    paddingBottom: 12,
     paddingHorizontal: 14,
-    paddingVertical: 8,
   },
-  aiDot: {
-    borderRadius: 3,
-    height: 6,
-    width: 6,
+  votedRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 5,
   },
-  aiSummary: {
-    color: theme.colors.subtext,
-    flex: 1,
+  votedText: {
+    color: theme.colors.success,
     fontSize: theme.typography.small.fontSize,
-    fontWeight: "400",
-  },
-  aiConfidence: {
-    color: theme.colors.text,
-    fontSize: theme.typography.small.fontSize,
-    fontVariant: ["tabular-nums"],
     fontWeight: "500",
   },
-  actionRow: {
+  // CLAIM TRANSLATION (NEW)
+  translateRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  translateLink: {
+    color: theme.colors.link,
+    fontSize: Math.round(13 * (theme.typography.body.fontSize / 16)),
+    fontWeight: "500",
+  },
+  translateDisclaimer: {
+    color: theme.colors.subtext,
+    fontSize: Math.round(12 * (theme.typography.body.fontSize / 16)),
+    fontWeight: "400",
+  },
+  moreRow: {
     alignItems: "center",
     borderTopColor: theme.colors.lightBorder,
     borderTopWidth: theme.borderWidth,
     flexDirection: "row",
-    minHeight: 44,
-  },
-  actionColumn: {
-    alignItems: "center",
-    flex: 1,
-    gap: 3,
+    gap: 6,
     justifyContent: "center",
-    minHeight: 44,
-  },
-  actionDivider: {
-    borderLeftColor: theme.colors.lightBorder,
-    borderLeftWidth: theme.borderWidth,
+    minHeight: 40,
   },
   actionText: {
     color: theme.colors.subtext,

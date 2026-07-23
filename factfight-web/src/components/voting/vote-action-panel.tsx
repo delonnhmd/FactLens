@@ -26,13 +26,25 @@ const choices = [
   },
 ] as const;
 
+const voteLabels: Record<string, string> = {
+  TRUE: "True",
+  FAKE: "Fake",
+  UNSURE: "Not sure",
+};
+
 interface VoteActionPanelProps {
   readonly claimId: string;
   readonly pathIdentifier: string;
   readonly votingOpen: boolean;
+  // The signed-in viewer's existing vote. The backend rejects repeat votes
+  // (409, no overwrite), so when this is set the buttons are replaced with a
+  // clear "You voted X" indicator — there is no vote-changing path.
+  readonly viewerVote?: string | null;
+  // Compact styling for the feed card (the detail page keeps full size).
+  readonly compact?: boolean;
 }
 
-export function VoteActionPanel({ claimId, pathIdentifier, votingOpen }: VoteActionPanelProps) {
+export function VoteActionPanel({ claimId, pathIdentifier, votingOpen, viewerVote = null, compact = false }: VoteActionPanelProps) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(voteClaimAction, initialState);
 
@@ -42,10 +54,25 @@ export function VoteActionPanel({ claimId, pathIdentifier, votingOpen }: VoteAct
     }
   }, [router, state.success]);
 
+  const sectionSpacing = compact ? "mt-5" : "mt-8";
+  const sectionPadding = compact ? "p-4" : "p-5 sm:p-6";
+  const headingClass = compact ? "text-sm font-medium text-[var(--ff-navy)]" : "text-lg font-medium text-[var(--ff-navy)]";
+
+  if (viewerVote && voteLabels[viewerVote]) {
+    return (
+      <section aria-label="Your vote" className={`${sectionSpacing} rounded-[var(--ff-radius-card)] border border-[color-mix(in_srgb,var(--ff-true)_35%,var(--ff-border))] bg-[color-mix(in_srgb,var(--ff-true)_6%,white)] ${sectionPadding}`}>
+        <p className="text-sm font-medium text-[var(--ff-navy)]">✓ You voted {voteLabels[viewerVote]}</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--ff-text-secondary)]">
+          Votes are final and can&apos;t be changed.
+        </p>
+      </section>
+    );
+  }
+
   if (!votingOpen) {
     return (
-      <section className="mt-8 rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] p-5 sm:p-6">
-        <h2 className="text-lg font-medium text-[var(--ff-navy)]">Voting is closed</h2>
+      <section className={`${sectionSpacing} rounded-[var(--ff-radius-card)] bg-[var(--ff-surface)] ${sectionPadding}`}>
+        <h2 className={headingClass}>Voting is closed</h2>
         <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">
           The current community result and any server-published verdict remain available above.
         </p>
@@ -54,19 +81,21 @@ export function VoteActionPanel({ claimId, pathIdentifier, votingOpen }: VoteAct
   }
 
   return (
-    <section className="mt-8 rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-[var(--ff-surface)] p-5 sm:p-6">
-      <h2 className="text-lg font-medium text-[var(--ff-navy)]">Cast your vote</h2>
-      <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">
-        Review the claim and evidence first. You can vote once, and your trust weight is calculated only by the server.
-      </p>
+    <section className={`${sectionSpacing} rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-[var(--ff-surface)] ${sectionPadding}`}>
+      <h2 className={headingClass}>Cast your vote</h2>
+      {compact ? null : (
+        <p className="mt-2 text-sm leading-6 text-[var(--ff-text-secondary)]">
+          Review the claim and evidence first. You can vote once, and your trust weight is calculated only by the server.
+        </p>
+      )}
 
-      <form action={formAction} className="mt-5">
+      <form action={formAction} className={compact ? "mt-3" : "mt-5"}>
         <input name="claimId" type="hidden" value={claimId} />
         <input name="pathIdentifier" type="hidden" value={pathIdentifier} />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className={compact ? "grid grid-cols-3 gap-2" : "grid grid-cols-1 gap-3 sm:grid-cols-3"}>
           {choices.map((choice) => (
             <button
-              className={`rounded-[var(--ff-radius-card)] border bg-white px-4 py-3 text-sm font-medium disabled:cursor-wait disabled:opacity-55 ${choice.className}`}
+              className={`rounded-[var(--ff-radius-card)] border bg-white px-4 ${compact ? "py-2.5" : "py-3"} text-sm font-medium disabled:cursor-wait disabled:opacity-55 ${choice.className}`}
               disabled={pending || state.success}
               key={choice.value}
               name="voteType"

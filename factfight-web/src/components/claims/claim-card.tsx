@@ -1,22 +1,29 @@
 import { ArrowRight, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
-import { AiRiskSignal } from "@/components/claims/ai-risk-signal";
 import { ClaimMedia } from "@/components/claims/claim-media";
 import { ClaimStatusBadge } from "@/components/claims/claim-status-badge";
 import { SourceQualityBadge } from "@/components/claims/source-quality-badge";
+import { TranslatableClaimText } from "@/components/claims/translatable-claim-text";
 import { Avatar } from "@/components/ui/avatar";
+import { VoteActionPanel } from "@/components/voting/vote-action-panel";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import type { PublicClaim } from "@/lib/types/claim";
+import type { VoteType } from "@/lib/validation/claim-actions";
 import { getClaimTypeLabel } from "@/lib/utils/claim-display";
+import { isVotingOpen } from "@/lib/utils/claim-voting";
 import { formatAbsoluteDate } from "@/lib/utils/dates";
 import { getSourceDomain } from "@/lib/utils/urls";
 
 interface ClaimCardProps {
   readonly claim: PublicClaim;
+  // The signed-in viewer's existing vote on this claim (null/undefined when
+  // unknown or signed out). Passed by pages that can resolve it so a voted
+  // claim never presents as unvoted.
+  readonly viewerVote?: VoteType | null;
 }
 
-export function ClaimCard({ claim }: ClaimCardProps) {
+export function ClaimCard({ claim, viewerVote = null }: ClaimCardProps) {
   const sourceDomain = claim.sourceDomain ?? getSourceDomain(claim.sourceUrl);
 
   return (
@@ -37,16 +44,13 @@ export function ClaimCard({ claim }: ClaimCardProps) {
           </div>
         </header>
 
-        <h2 className="mt-5 text-xl leading-7 font-medium text-[var(--ff-navy)] sm:text-2xl sm:leading-8">
-          <Link className="rounded-sm hover:underline" href={`/claim/${claim.id}`}>
-            {claim.title}
-          </Link>
-        </h2>
-        {claim.description ? (
-          <p className="mt-3 line-clamp-3 whitespace-pre-line leading-7 text-[var(--ff-text-secondary)]">
-            {claim.description}
-          </p>
-        ) : null}
+        <TranslatableClaimText
+          claimId={claim.id}
+          description={claim.description}
+          href={`/claim/${claim.id}`}
+          title={claim.title}
+          variant="card"
+        />
 
         <div className="mt-5">
           <ClaimMedia claim={claim} />
@@ -79,13 +83,22 @@ export function ClaimCard({ claim }: ClaimCardProps) {
           </div>
         ) : null}
 
-        <div className="mt-5">
-          <AiRiskSignal confidence={claim.aiConfidence} status={claim.aiStatus} />
-        </div>
-
+        {/* The AI risk signal box is intentionally NOT rendered on the feed
+            card — it stays on the claim detail page, where the full context
+            lives. The underlying AI analysis data is untouched. */}
         <div className="mt-5 border-t border-[var(--ff-border)] pt-5">
           <VoteBreakdown votes={claim.votes} />
         </div>
+
+        {/* Vote buttons directly below the vote bar — same panel as the claim
+            detail page, including the "You voted X" state once a vote exists. */}
+        <VoteActionPanel
+          claimId={claim.id}
+          compact
+          pathIdentifier={claim.id}
+          viewerVote={viewerVote}
+          votingOpen={isVotingOpen(claim)}
+        />
 
         <div className="mt-5 border-t border-[var(--ff-border)] pt-4">
           <Link

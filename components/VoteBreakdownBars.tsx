@@ -10,9 +10,18 @@ interface VoteBreakdownBarsProps {
   votesFake: number;
   votesUnsure: number;
   totalVotes: number;
+  // The feed card labels this section "Community voting data"; the claim
+  // detail screen keeps the original "Final vote breakdown" wording.
+  label?: string;
 }
 
-export function VoteBreakdownBars({ votesTrue, votesFake, votesUnsure, totalVotes }: VoteBreakdownBarsProps) {
+export function VoteBreakdownBars({
+  votesTrue,
+  votesFake,
+  votesUnsure,
+  totalVotes,
+  label = "Final vote breakdown",
+}: VoteBreakdownBarsProps) {
   const appTheme = useAppTheme();
   const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const barConfig = [
@@ -28,7 +37,7 @@ export function VoteBreakdownBars({ votesTrue, votesFake, votesUnsure, totalVote
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionLabel}>Final vote breakdown · {totalVotes} votes</Text>
+      <Text style={styles.sectionLabel}>{label} · {totalVotes} votes</Text>
       {barConfig.map((item) => {
         const value = values[item.key];
         const width: DimensionValue = totalVotes > 0 ? `${Math.max((value / totalVotes) * 100, 4)}%` : "0%";

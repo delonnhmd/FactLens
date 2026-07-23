@@ -41,6 +41,8 @@ import { hideClaimFromFeeds, unhideClaim } from "../../../services/moderationSer
 import type { AppTheme } from "../../../context/DisplaySettingsContext";
 import { useScrollAwareTabBar } from "../../../context/TabBarVisibilityContext";
 import { useAppTheme } from "../../../hooks/useTheme";
+// CLAIM TRANSLATION (NEW): shared with the feed card.
+import { useClaimTranslation } from "../../../hooks/useClaimTranslation";
 import { calculateAutomaticVerdict, getTimeRemaining, isVotingOpen } from "../../../services/claimVoting";
 import {
   formatSourceCredibilityScore,
@@ -385,6 +387,14 @@ export default function ClaimDetailScreen() {
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
   const [authorAvatarLoadFailed, setAuthorAvatarLoadFailed] = useState(false);
+  // CLAIM TRANSLATION (NEW): same hook the feed card uses, so the detail page
+  // shows the identical translate → disclaimer → see-original flow. Called
+  // before any early return with safe fallbacks (hooks must run every render).
+  const translation = useClaimTranslation({
+    id: claim?.id ?? "",
+    title: claim?.title ?? "",
+    description: claim?.description ?? "",
+  });
   const evidenceNoteMentionLimitError = getMentionLimitError(
     evidenceNote,
     EVIDENCE_MENTION_LIMIT,
@@ -1300,10 +1310,41 @@ export default function ClaimDetailScreen() {
           />
           <View style={styles.claimBody}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>{claim.title}</Text>
+              <Text style={styles.title}>{translation.displayTitle}</Text>
               <StatusBadge status={claim.status} />
             </View>
-            <MentionText text={claim.description} style={styles.description} />
+            <MentionText text={translation.displayDescription} style={styles.description} />
+            {/* CLAIM TRANSLATION (NEW): same flow as the feed card. */}
+            {translation.isShowingTranslation ? (
+              <View style={styles.translateRow}>
+                <Text style={styles.translateDisclaimer}>
+                  Translated by AI — may not be fully accurate.{" "}
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={translation.showOriginal}
+                  accessibilityRole="button"
+                  accessibilityLabel="See original"
+                >
+                  <Text style={styles.translateLink}>See original</Text>
+                </TouchableOpacity>
+              </View>
+            ) : translation.canTranslate ? (
+              <TouchableOpacity
+                style={styles.translateRow}
+                activeOpacity={0.7}
+                disabled={translation.isTranslating}
+                onPress={translation.promptTranslate}
+                accessibilityRole="button"
+                accessibilityLabel="Translate this claim"
+                accessibilityHint="Choose a language to translate the claim into"
+              >
+                <Ionicons name="language-outline" size={13} color={appTheme.colors.link} />
+                <Text style={styles.translateLink}>
+                  {translation.isTranslating ? "Translating…" : "Translate"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             {/* Shared media block (image / YouTube thumb / link) at the top of
                 the claim body — same helper + rendering as the feed card. Opens
                 the underlying media in the browser on tap. Nothing renders (and
@@ -2394,6 +2435,24 @@ function createStyles(theme: AppTheme) {
     fontSize: 14,
     color: theme.colors.text,
     lineHeight: 20,
+  },
+  // CLAIM TRANSLATION (NEW)
+  translateRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginTop: 6,
+  },
+  translateLink: {
+    color: theme.colors.link,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  translateDisclaimer: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontWeight: "400",
   },
   category: {
     alignSelf: "flex-start",

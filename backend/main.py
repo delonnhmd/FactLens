@@ -74,6 +74,11 @@ try:
         compute_verdict,
         map_verdict_to_claim_status,
     )
+    # CLAIM TRANSLATION (NEW) — per-claim en/vi/zh/es translation, cached.
+    from services.claim_translation import (
+        SUPPORTED_TRANSLATION_LANGUAGES,
+        translate_claim_text,
+    )
 except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:app
     from backend.services.openai_factcheck import (
         analyze_claim_with_openai,
@@ -111,6 +116,11 @@ except ModuleNotFoundError:  # Allows repo-root command: uvicorn backend.main:ap
     from backend.services.verdict_engine import (
         compute_verdict,
         map_verdict_to_claim_status,
+    )
+    # CLAIM TRANSLATION (NEW) — per-claim en/vi/zh/es translation, cached.
+    from backend.services.claim_translation import (
+        SUPPORTED_TRANSLATION_LANGUAGES,
+        translate_claim_text,
     )
 
 
@@ -2108,6 +2118,14 @@ CLAIMS_PER_DAY_LIMIT = max(1, int(os.environ.get("CLAIMS_PER_DAY_LIMIT", "20")))
 CLAIM_TITLE_MAX_LENGTH = 160
 CLAIM_DESCRIPTION_MAX_LENGTH = 2000
 
+# CLAIM TRANSLATION — the loose per-IP limit covers every /translate hit
+# (mostly instant cache reads); the strict per-user/IP cap applies only to
+# uncached requests that actually reach OpenAI, to control API cost.
+TRANSLATE_RATE_LIMIT_MAX_REQUESTS = 120
+TRANSLATE_AI_RATE_LIMIT_MAX_REQUESTS = max(
+    1, int(os.environ.get("TRANSLATE_AI_CALLS_PER_HOUR", "20"))
+)
+
 RESERVED_USERNAME_MESSAGE = (
     "This username is reserved. If you represent this person or organization, "
     "please apply for verification."
@@ -2155,10 +2173,12 @@ def _sweep_stale_rate_limit_state(now: float) -> None:
         CLAIM_AI_COOLDOWNS.pop(claim_id, None)
 
 
-def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_seconds: int) -> None:
+def enforce_identity_rate_limit(identity: str, bucket: str, max_requests: int, window_seconds: int) -> None:
+    """Same sliding-window limiter as enforce_rate_limit, keyed by an explicit
+    identity (a user id for authenticated callers) instead of the client IP."""
     global _rate_limit_sweep_counter
     now = monotonic()
-    key = f"{bucket}:{get_client_ip(request)}"
+    key = f"{bucket}:{identity}"
     recent_requests = [
         timestamp
         for timestamp in RATE_LIMIT_BUCKETS.get(key, [])
@@ -2166,7 +2186,7 @@ def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_
     ]
 
     if len(recent_requests) >= max_requests:
-        print("[rate-limit] blocked:", bucket, get_client_ip(request), flush=True)
+        print("[rate-limit] blocked:", bucket, identity, flush=True)
         raise HTTPException(status_code=429, detail="Too many actions. Please try again later.")
 
     recent_requests.append(now)
@@ -2176,6 +2196,10 @@ def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_
     if _rate_limit_sweep_counter >= _RATE_LIMIT_SWEEP_INTERVAL:
         _rate_limit_sweep_counter = 0
         _sweep_stale_rate_limit_state(now)
+
+
+def enforce_rate_limit(request: Request, bucket: str, max_requests: int, window_seconds: int) -> None:
+    enforce_identity_rate_limit(get_client_ip(request), bucket, max_requests, window_seconds)
 
 
 # PHASE 4 STEP 27
@@ -2232,6 +2256,10 @@ class ClaimCreateRequest(BaseModel):
 
 class ClaimVoteRequest(BaseModel):
     vote_type: str
+
+
+class ClaimTranslateRequest(BaseModel):
+    target_language: str
 
 
 class ClaimReportRequest(BaseModel):
@@ -7223,6 +7251,19 @@ def get_authenticated_user_id(request: Request) -> str:
     return str(user_id)
 
 
+def get_optional_authenticated_user_id(request: Request) -> str | None:
+    """Resolve the caller's user id when a bearer token is present, without
+    requiring one. Used by public endpoints (e.g. claim translation) that
+    rate-limit authenticated users by id and anonymous visitors by IP."""
+    if not request.headers.get("authorization", "").lower().startswith("bearer "):
+        return None
+
+    try:
+        return get_authenticated_user_id(request)
+    except HTTPException:
+        return None
+
+
 def normalize_claim_write_url(value: str | None) -> str:
     """Match the mobile normalizeUrl() behavior for claim write payloads."""
     normalized = str(value or "").strip()
@@ -8292,6 +8333,107 @@ def api_vote_on_claim(claim_id: str, payload: ClaimVoteRequest, request: Request
 
     refreshed_claim = fetch_claim_row(normalized_claim_id) or claim
     return {"ok": True, "vote": inserted_vote, "claim": refreshed_claim}
+
+
+# CLAIM TRANSLATION (NEW) — translate a claim's title + description into
+# en/vi/zh/es. Public (works for logged-out web readers), cached per
+# claim+language in public.claim_translations (migration 054), and the
+# uncached path that reaches OpenAI is capped per user (per IP when
+# anonymous). If migration 054 has not been run yet the endpoint still
+# translates — it just cannot cache.
+@app.post("/api/claims/{claim_id}/translate")
+def api_translate_claim(claim_id: str, payload: ClaimTranslateRequest, request: Request):
+    enforce_rate_limit(
+        request,
+        "claims_translate",
+        TRANSLATE_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+
+    target_language = str(payload.target_language or "").strip().lower()
+    if target_language not in SUPPORTED_TRANSLATION_LANGUAGES:
+        raise HTTPException(status_code=422, detail="target_language must be one of en, vi, zh, es.")
+
+    normalized_claim_id = claim_id.strip()
+    if not is_uuid(normalized_claim_id):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    supabase = get_supabase_client()
+
+    cache_available = True
+    cached_row = None
+    try:
+        cached_result = (
+            supabase.table("claim_translations")
+            .select("translated_title,translated_description")
+            .eq("claim_id", normalized_claim_id)
+            .eq("language_code", target_language)
+            .limit(1)
+            .execute()
+        )
+        cached_row = get_first_row(cached_result)
+    except Exception as error:
+        print("[claims/translate] cache read failed:", str(error), flush=True)
+        cache_available = False
+
+    if cached_row:
+        return {
+            "ok": True,
+            "cached": True,
+            "target_language": target_language,
+            "translated_title": str(cached_row.get("translated_title") or ""),
+            "translated_description": str(cached_row.get("translated_description") or ""),
+        }
+
+    claim_result = (
+        supabase.table("claims")
+        .select("id,title,description,is_deleted")
+        .eq("id", normalized_claim_id)
+        .limit(1)
+        .execute()
+    )
+    claim = get_first_row(claim_result)
+    if not claim or claim.get("is_deleted"):
+        raise HTTPException(status_code=404, detail="Claim not found.")
+
+    user_id = get_optional_authenticated_user_id(request)
+    enforce_identity_rate_limit(
+        user_id or get_client_ip(request),
+        "claims_translate_ai",
+        TRANSLATE_AI_RATE_LIMIT_MAX_REQUESTS,
+        AI_RATE_LIMIT_WINDOW_SECONDS,
+    )
+
+    result = translate_claim_text(
+        str(claim.get("title") or ""),
+        str(claim.get("description") or ""),
+        target_language,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=503, detail=str(result.get("error") or "Translation failed."))
+
+    if cache_available:
+        try:
+            supabase.table("claim_translations").insert(
+                {
+                    "claim_id": normalized_claim_id,
+                    "language_code": target_language,
+                    "translated_title": result["title"],
+                    "translated_description": result["description"],
+                }
+            ).execute()
+        except Exception as error:
+            # Unique-violation race (another request cached first) or pending
+            # migration — the translation is still returned, just not cached.
+            print("[claims/translate] cache write skipped:", str(error), flush=True)
+
+    return {
+        "ok": True,
+        "cached": False,
+        "target_language": target_language,
+        "translated_title": result["title"],
+        "translated_description": result["description"],
+    }
 
 
 # SINGLE WRITE PATH (step 3) — server-side report + evidence writes. These were

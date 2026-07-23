@@ -17,6 +17,13 @@ vi.mock("@/lib/auth/verified-session", () => ({
   getVerifiedSession: mocks.getVerifiedSession,
   refreshVerifiedSession: mocks.refreshVerifiedSession,
 }));
+// render-client validates public env vars at import time, which aren't set in
+// the test environment; the translate action under test doesn't need it here.
+vi.mock("@/lib/api/render-client", () => ({
+  RenderApiError: class RenderApiError extends Error {},
+  requestPublicRenderJson: vi.fn(),
+  requestRenderJson: vi.fn(),
+}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/storage/user-images", () => ({
   removeUserImage: vi.fn(),

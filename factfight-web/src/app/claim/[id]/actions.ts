@@ -5,9 +5,15 @@ import { redirect } from "next/navigation";
 
 import { deleteOwnClaim, voteOnClaim } from "@/lib/api/claim-mutations";
 import {
+  RenderApiError,
+  requestPublicRenderJson,
+  requestRenderJson,
+} from "@/lib/api/render-client";
+import {
   getVerifiedSession,
   refreshVerifiedSession,
 } from "@/lib/auth/verified-session";
+import { translationLanguages } from "@/lib/utils/claim-language";
 import { createClient } from "@/lib/supabase/server";
 import { removeUserImage, uploadUserImage, validateOptionalUserImage } from "@/lib/storage/user-images";
 import {
@@ -93,6 +99,65 @@ export async function voteClaimAction(
   refreshClaimPages(parsed.data.claimId, parsed.data.pathIdentifier);
 
   return { message: "Your vote was recorded.", success: true };
+}
+
+export interface TranslateClaimResult {
+  readonly ok: boolean;
+  readonly message?: string;
+  readonly translatedTitle?: string;
+  readonly translatedDescription?: string;
+}
+
+// CLAIM TRANSLATION — proxies POST /api/claims/{id}/translate on the Render
+// backend, which owns the OpenAI call, the per-claim+language cache, and the
+// per-user rate limit. Works logged out (the backend then limits by IP); the
+// session token is attached when present so the per-user cap applies.
+export async function translateClaimAction(
+  claimId: string,
+  targetLanguage: string,
+): Promise<TranslateClaimResult> {
+  const normalizedClaimId = typeof claimId === "string" ? claimId.trim() : "";
+  const language = typeof targetLanguage === "string" ? targetLanguage.trim().toLowerCase() : "";
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalizedClaimId) ||
+    !(translationLanguages as readonly string[]).includes(language)
+  ) {
+    return { ok: false, message: "Translation is unavailable for this claim." };
+  }
+
+  const session = await getVerifiedSession();
+  const body = JSON.stringify({ target_language: language });
+
+  try {
+    const payload = session.ok
+      ? await requestRenderJson(`/api/claims/${normalizedClaimId}/translate`, session.accessToken, {
+          method: "POST",
+          body,
+        })
+      : await requestPublicRenderJson(`/api/claims/${normalizedClaimId}/translate`, {
+          method: "POST",
+          body,
+        });
+    const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const translatedTitle = typeof record.translated_title === "string" ? record.translated_title : "";
+    const translatedDescription =
+      typeof record.translated_description === "string" ? record.translated_description : "";
+
+    if (!translatedTitle) {
+      return { ok: false, message: "Translation is unavailable right now. Please try again." };
+    }
+
+    return { ok: true, translatedTitle, translatedDescription };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof RenderApiError && error.status === 429
+          ? "Too many translations right now. Please try again later."
+          : "Translation is unavailable right now. Please try again.",
+    };
+  }
 }
 
 export async function addEvidenceAction(

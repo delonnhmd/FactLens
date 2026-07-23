@@ -13,11 +13,14 @@ import { EvidenceList } from "@/components/evidence/evidence-list";
 import { AuthenticatedAppShell } from "@/components/navigation/authenticated-app-shell";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
 import { PublicSiteHeader } from "@/components/navigation/public-site-header";
+import { TranslatableClaimText } from "@/components/claims/translatable-claim-text";
 import { Avatar } from "@/components/ui/avatar";
 import { VoteActionPanel } from "@/components/voting/vote-action-panel";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getClaimPageData } from "@/lib/api/claims";
 import { getViewerProfileSummary } from "@/lib/api/discovery";
+import { getViewerVoteForClaim } from "@/lib/api/viewer-votes";
+import { isVotingOpen } from "@/lib/utils/claim-voting";
 import { createClient } from "@/lib/supabase/server";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import type { ClaimStatus, PublicClaim } from "@/lib/types/claim";
@@ -41,32 +44,6 @@ function truncateDescription(value: string): string {
 
 function isFinalStatus(status: ClaimStatus | null): boolean {
   return status === "FINALIZED_TRUE" || status === "FINALIZED_FAKE" || status === "COMMUNITY_TRUE" || status === "COMMUNITY_FAKE" || status === "INSUFFICIENT_DATA";
-}
-
-function isVotingOpen(claim: PublicClaim): boolean {
-  const closedStatuses = new Set<ClaimStatus>([
-    "FINALIZED_TRUE",
-    "FINALIZED_FAKE",
-    "INSUFFICIENT_DATA",
-    "LOCKED",
-    "VOTING_CLOSED",
-    "COMMUNITY_TRUE",
-    "COMMUNITY_FAKE",
-    "NEEDS_MORE_EVIDENCE",
-  ]);
-
-  if (claim.status && closedStatuses.has(claim.status)) {
-    return false;
-  }
-
-  if (claim.voteAcceptUntil) {
-    const deadline = new Date(claim.voteAcceptUntil).getTime();
-    if (!Number.isNaN(deadline) && deadline <= Date.now()) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 function formatPublishedScore(value: number): string {
@@ -148,6 +125,7 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
   const { data: viewerData } = await supabase.auth.getClaims();
   const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
   const viewerProfile = viewerId ? await getViewerProfileSummary(viewerId) : null;
+  const viewerVote = await getViewerVoteForClaim(viewerId, claim.id);
   const createdAt = claim.createdAt ? new Date(claim.createdAt).getTime() : Number.NaN;
   const canDelete =
     viewerId === claim.authorId &&
@@ -200,8 +178,12 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
               <ClaimStatusBadge status={claim.status} />
             </div>
 
-            <h1 className="mt-6 text-3xl leading-[1.18] font-medium tracking-[-0.03em] text-[var(--ff-navy)] sm:text-4xl">{claim.title}</h1>
-            {claim.description ? <p className="mt-5 whitespace-pre-line text-lg leading-8 text-[var(--ff-text-secondary)]">{claim.description}</p> : null}
+            <TranslatableClaimText
+              claimId={claim.id}
+              description={claim.description}
+              title={claim.title}
+              variant="detail"
+            />
 
             <div className="mt-7"><ClaimMedia claim={claim} priority /></div>
 
@@ -251,7 +233,7 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
               </p>
             ) : null}
 
-            <VoteActionPanel claimId={claim.id} pathIdentifier={id} votingOpen={isVotingOpen(claim)} />
+            <VoteActionPanel claimId={claim.id} pathIdentifier={id} viewerVote={viewerVote} votingOpen={isVotingOpen(claim)} />
             <ClaimTools canDelete={canDelete} claimId={claim.id} pathIdentifier={id} />
           </div>
       </article>

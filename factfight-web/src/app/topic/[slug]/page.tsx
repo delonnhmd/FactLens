@@ -11,6 +11,7 @@ import { AppStoreLink } from "@/components/ui/app-store-link";
 import { VoteBreakdown } from "@/components/voting/vote-breakdown";
 import { getPublicTopicPageData } from "@/lib/api/topics";
 import { getViewerProfileSummary } from "@/lib/api/discovery";
+import { getViewerVotesByClaimId } from "@/lib/api/viewer-votes";
 import { SITE_NAME } from "@/lib/constants/public-site";
 import { createClient } from "@/lib/supabase/server";
 import { publicEnvironment } from "@/lib/validation/env";
@@ -74,6 +75,9 @@ export default async function TopicPage({ params }: TopicPageProps) {
   const { data: viewerData } = await supabase.auth.getClaims();
   const viewerId = typeof viewerData?.claims?.sub === "string" ? viewerData.claims.sub : null;
   const viewerProfile = viewerId ? await getViewerProfileSummary(viewerId) : null;
+  const viewerVotes = viewerId
+    ? await getViewerVotesByClaimId(viewerId, claims.map((claim) => claim.id))
+    : {};
 
   const pageContent = (
     <>
@@ -102,7 +106,7 @@ export default async function TopicPage({ params }: TopicPageProps) {
             <p className="mt-2 text-sm text-[var(--ff-text-muted)]">Only claims visible to anonymous readers are included.</p>
           </div>
           <div className="grid items-start gap-5 lg:grid-cols-2">
-            {claims.map((claim) => <ClaimCard claim={claim} key={claim.id} />)}
+            {claims.map((claim) => <ClaimCard claim={claim} key={claim.id} viewerVote={viewerVotes[claim.id] ?? null} />)}
           </div>
         </section>
 

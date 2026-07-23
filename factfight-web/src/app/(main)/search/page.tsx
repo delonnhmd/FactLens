@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { searchPublicClaims } from "@/lib/api/claims";
 import { searchProfiles, searchTopics } from "@/lib/api/discovery";
+import { getViewerVotesByClaimId } from "@/lib/api/viewer-votes";
 import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { claimCategories } from "@/lib/validation/claim-actions";
 
@@ -62,6 +63,7 @@ export default async function SearchPage({
     searchProfiles(query),
     searchTopics(query),
   ]);
+  const viewerVotes = await getViewerVotesByClaimId(session.userId, claims.map((claim) => claim.id));
   const hasFilters = Boolean(query || category || status);
 
   return (
@@ -139,7 +141,7 @@ export default async function SearchPage({
           <span className="text-sm text-[var(--ff-text-muted)]">{claims.length} found</span>
         </div>
         {claims.length ? (
-          <div className="space-y-5">{claims.map((claim) => <ClaimCard claim={claim} key={claim.id} />)}</div>
+          <div className="space-y-5">{claims.map((claim) => <ClaimCard claim={claim} key={claim.id} viewerVote={viewerVotes[claim.id] ?? null} />)}</div>
         ) : (
           <EmptyState title="No claims found" description="Try a broader phrase or remove a filter." />
         )}
