@@ -52,7 +52,11 @@ MIN_DECISIVE_VOTES = 10
 NOT_SURE_GATE = 0.40
 
 # A verdict side needs at least one evidence item at or above this
-# source_quality_score to count as credibly supported.
+# source_quality_score to count as credibly supported. CONDITIONAL (057): this
+# gate only applies when sided evidence exists on the claim at all — with zero
+# SUPPORTS_TRUE/SUPPORTS_FAKE items the vote math alone decides (E stays at
+# its 0.5 neutral default). With sided evidence present, weak/uncredible
+# evidence still blocks the verdict regardless of vote split (anti-brigading).
 CREDIBLE_SOURCE_SCORE = 40
 
 # Unvoted evidence still counts at this fraction of its quality weight once
@@ -203,6 +207,7 @@ def compute_verdict(claim_id: str, supabase: Any) -> dict:
     ev_fake = 0.0
     has_credible_true = False
     has_credible_fake = False
+    sided_evidence_count = 0
 
     for row in evidence_rows:
         side = str(row.get("evidence_type") or "")
@@ -211,6 +216,7 @@ def compute_verdict(claim_id: str, supabase: Any) -> dict:
         if side not in (EVIDENCE_SIDE_TRUE, EVIDENCE_SIDE_FAKE):
             continue
 
+        sided_evidence_count += 1
         source_score = float(row.get("source_quality_score") or 0)
         item_helpfulness = helpfulness_by_id.get(str(row.get("id")), 1.0)
         side_points = source_score * item_helpfulness
@@ -234,33 +240,46 @@ def compute_verdict(claim_id: str, supabase: Any) -> dict:
         "evidence_ratio_true": round(evidence_ratio_true, 4),
     }
 
+    # CONDITIONAL GATE (057): with zero sided evidence there is nothing to
+    # gate on — vote math decides. With sided evidence present, the winning
+    # side still needs one credible (>= CREDIBLE_SOURCE_SCORE) item.
+    true_gate_ok = sided_evidence_count == 0 or has_credible_true
+    fake_gate_ok = sided_evidence_count == 0 or has_credible_fake
+    margin_reason = (
+        "Finalized on vote margin — no evidence submitted."
+        if sided_evidence_count == 0
+        else "Finalized on vote margin + credible evidence."
+    )
+
     if (
         combined_score >= COMBINED_TRUE_THRESHOLD
         and decisive_ratio >= TRUE_VOTE_RATIO_FLOOR
-        and has_credible_true
+        and true_gate_ok
     ):
         return {
             **computed,
             "verdict": "TRUE",
-            "reason": "Community majority and credible supporting evidence both point to true.",
+            "reason": margin_reason,
         }
 
     if (
         combined_score <= COMBINED_FAKE_THRESHOLD
         and decisive_ratio <= FAKE_VOTE_RATIO_CEILING
-        and has_credible_fake
+        and fake_gate_ok
     ):
         return {
             **computed,
             "verdict": "FAKE",
-            "reason": "Community majority and credible evidence both point to fake.",
+            "reason": margin_reason,
         }
 
-    # DISPUTED: say which condition failed, most specific first.
-    if combined_score >= COMBINED_TRUE_THRESHOLD and decisive_ratio >= TRUE_VOTE_RATIO_FLOOR:
-        reason = "Majority leaned TRUE but no credible supporting evidence."
-    elif combined_score <= COMBINED_FAKE_THRESHOLD and decisive_ratio <= FAKE_VOTE_RATIO_CEILING:
-        reason = "Majority leaned FAKE but no credible supporting evidence."
+    # DISPUTED: say which condition failed, most specific first. The gate
+    # branch is only reachable when sided evidence exists and the majority's
+    # side has no credible item (the zero-evidence case finalizes above).
+    if (combined_score >= COMBINED_TRUE_THRESHOLD and decisive_ratio >= TRUE_VOTE_RATIO_FLOOR) or (
+        combined_score <= COMBINED_FAKE_THRESHOLD and decisive_ratio <= FAKE_VOTE_RATIO_CEILING
+    ):
+        reason = "Blocked by evidence gate — majority lacks credible support."
     elif combined_score >= COMBINED_TRUE_THRESHOLD:
         reason = (
             f"Evidence leaned TRUE but the vote margin was below the "
