@@ -2,7 +2,7 @@
 
 Date: 2026-07-26
 
-Status: implementation complete; release verification pending commit and deployment.
+Status: implementation complete and released.
 
 ## Scope
 
@@ -70,3 +70,11 @@ CI=1 npx eas update --channel production --environment production --message "Loc
 ```
 
 The web app deploys through the existing Vercel Git integration after the push. No DNS or production backend action is required.
+
+Release evidence:
+
+- Git commit: `382697082b43e359508c38610ca4fd861b9fa32f`
+- `origin/main` matches that commit.
+- EAS production update group: `c4ab6538-4c4b-42fa-a0d7-201eaebb28cd` (Android and iOS, runtime `1.0.0`).
+- Vercel production deployment for project `factfight/fact-lens`: Ready; `https://fact-lens-26jg5tfop-factfight.vercel.app`.
+- `https://factfight.com` currently redirects to the canonical `https://www.factfight.com/`, which returned HTTP 200 from Vercel.
