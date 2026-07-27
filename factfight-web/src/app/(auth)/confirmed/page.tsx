@@ -3,7 +3,14 @@ import Link from "next/link";
 
 import { ResendConfirmationForm } from "@/components/auth/resend-confirmation-form";
 
-export default function ConfirmedPage() {
+interface ConfirmedPageProps {
+  readonly searchParams: Promise<{ onboarding?: string }>;
+}
+
+export default async function ConfirmedPage({ searchParams }: ConfirmedPageProps) {
+  const parameters = await searchParams;
+  const loginHref = parameters.onboarding === "1" ? "/login?next=%2Ffeed%3Fonboarding%3D1" : "/login";
+
   return (
     <section
       aria-labelledby="confirmation-title"
@@ -24,7 +31,7 @@ export default function ConfirmedPage() {
       <ResendConfirmationForm />
       <Link
         className="mt-7 inline-flex rounded-[var(--ff-radius-card)] border border-[var(--ff-navy)] bg-[var(--ff-navy)] px-5 py-3 font-medium text-white"
-        href="/login"
+        href={loginHref}
       >
         Back to login
       </Link>

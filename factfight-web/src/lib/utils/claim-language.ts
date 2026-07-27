@@ -3,6 +3,8 @@
 // to be good enough to hide a pointless "translate to the language it's
 // already in" button. (Mirrored on mobile in utils/claimLanguage.ts.)
 
+import { mapLocaleToAppLanguage } from "./detect-user-language";
+
 export const translationLanguages = ["en", "vi", "zh", "es"] as const;
 
 export type TranslationLanguage = (typeof translationLanguages)[number];
@@ -21,10 +23,7 @@ export function getTranslationLanguageLabel(code: TranslationLanguage): string {
 // Map a BCP-47 browser locale (e.g. "vi-VN", "zh-Hans-CN") to a supported
 // target language; English is the default for everything else.
 export function mapLocaleToTranslationLanguage(locale: string | null | undefined): TranslationLanguage {
-  const prefix = (locale ?? "").trim().toLowerCase().split("-")[0];
-  return (translationLanguages as readonly string[]).includes(prefix)
-    ? (prefix as TranslationLanguage)
-    : "en";
+  return mapLocaleToAppLanguage(locale);
 }
 
 // Vietnamese uses Latin letters English/Spanish never use (đ + vowels with

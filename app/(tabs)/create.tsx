@@ -436,7 +436,7 @@ export default function CreateScreen() {
       }
 
       console.log("[moderation] final recheck passed — inserting claim");
-      const createdClaim = await createClaim({
+      const { claim: createdClaim, isFirstClaim } = await createClaim({
         title,
         description,
         sourceUrl: normalizedSourceUrl,
@@ -458,7 +458,7 @@ export default function CreateScreen() {
       setSelectedImage(null);
       setImageError("");
       setErrors({});
-      router.replace(`/claim/${createdClaim.id}`);
+      router.replace(`/claim/${createdClaim.id}${isFirstClaim ? "?firstClaim=1" : ""}`);
     } catch (error) {
       console.log("[create submit] final thrown error:", error);
       setErrors({

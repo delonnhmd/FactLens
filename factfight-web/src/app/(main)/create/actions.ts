@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createClaim } from "@/lib/api/claim-mutations";
 import { getVerifiedSession } from "@/lib/auth/verified-session";
 import { removeUserImage, uploadUserImage, validateOptionalUserImage } from "@/lib/storage/user-images";
+import { createClient } from "@/lib/supabase/server";
 import { createClaimSchema } from "@/lib/validation/claim-actions";
 
 export type CreateClaimActionState = {
@@ -44,6 +45,13 @@ export async function createClaimAction(
     return { message: session.message };
   }
 
+  const supabase = await createClient();
+  const { count: claimCountBefore, error: claimCountError } = await supabase
+    .from("claims")
+    .select("id", { count: "exact", head: true })
+    .eq("author_id", session.userId);
+  const isFirstClaim = !claimCountError && claimCountBefore === 0;
+
   let uploadedImage: Awaited<ReturnType<typeof uploadUserImage>> = null;
   if (image.file) {
     uploadedImage = await uploadUserImage("claim-images", session.userId, crypto.randomUUID(), image.file);
@@ -65,5 +73,5 @@ export async function createClaimAction(
   revalidatePath("/");
   revalidatePath("/feed");
   revalidatePath("/sitemap.xml");
-  redirect(`/claim/${result.data.id}`);
+  redirect(`/claim/${result.data.id}${isFirstClaim ? "?firstClaim=1" : ""}`);
 }

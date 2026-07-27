@@ -10,6 +10,7 @@ import { ClaimTools } from "@/components/claims/claim-tools";
 import { SourceQualityBadge } from "@/components/claims/source-quality-badge";
 import { AddEvidenceForm } from "@/components/evidence/add-evidence-form";
 import { EvidenceList } from "@/components/evidence/evidence-list";
+import { FirstClaimCelebration } from "@/components/claims/first-claim-celebration";
 import { AuthenticatedAppShell } from "@/components/navigation/authenticated-app-shell";
 import { PublicSiteFooter } from "@/components/navigation/public-site-footer";
 import { PublicSiteHeader } from "@/components/navigation/public-site-header";
@@ -35,6 +36,7 @@ export const revalidate = 60;
 
 interface ClaimPageProps {
   readonly params: Promise<{ id: string }>;
+  readonly searchParams?: Promise<{ firstClaim?: string }>;
 }
 
 function truncateDescription(value: string): string {
@@ -112,8 +114,9 @@ export async function generateMetadata({ params }: ClaimPageProps): Promise<Meta
   };
 }
 
-export default async function PublicClaimPage({ params }: ClaimPageProps) {
+export default async function PublicClaimPage({ params, searchParams }: ClaimPageProps) {
   const { id } = await params;
+  const parameters = searchParams ? await searchParams : {};
   const data = await getClaimPageData(id);
 
   if (!data) {
@@ -161,6 +164,15 @@ export default async function PublicClaimPage({ params }: ClaimPageProps) {
   const articleContent = (
     <>
       <script dangerouslySetInnerHTML={{ __html: serializedClaimReview }} type="application/ld+json" />
+      {viewerId && parameters.firstClaim === "1" ? (
+        <FirstClaimCelebration
+          claimId={claim.id}
+          claimTitle={claim.title}
+          shareUrl={canonical}
+          userId={viewerId}
+          visible
+        />
+      ) : null}
       <article className="overflow-hidden rounded-[var(--ff-radius-card)] border border-[var(--ff-border)] bg-white">
           <div className="p-5 sm:p-8">
             <header className="flex items-center gap-3">

@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Loading } from "../components/Loading";
+import { FirstClaimOnboardingGate } from "../components/onboarding/FirstClaimOnboardingGate";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ClaimsProvider } from "../context/ClaimsContext";
 import { DisplaySettingsProvider } from "../context/DisplaySettingsContext";
@@ -78,7 +79,10 @@ function RootStack() {
       {loading || shouldRouteToLogin || shouldRouteToHome ? (
         <Loading />
       ) : (
-        <Stack screenOptions={{ headerShown: false }} />
+        <>
+          <Stack screenOptions={{ headerShown: false }} />
+          <FirstClaimOnboardingGate />
+        </>
       )}
     </View>
   );

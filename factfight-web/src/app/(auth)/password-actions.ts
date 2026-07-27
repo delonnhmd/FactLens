@@ -51,7 +51,7 @@ export async function resendConfirmationAction(
     type: "signup",
     email: parsed.data.email,
     options: {
-      emailRedirectTo: `${publicEnvironment.siteUrl}/auth/callback`,
+      emailRedirectTo: `${publicEnvironment.siteUrl}/auth/callback?onboarding=1`,
     },
   });
 

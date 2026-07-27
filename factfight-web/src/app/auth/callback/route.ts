@@ -49,5 +49,8 @@ export async function GET(request: NextRequest) {
   }
 
   const destination = getSafeInternalDestination(request.nextUrl.searchParams.get("next"));
-  return NextResponse.redirect(new URL(destination, publicEnvironment.siteUrl));
+  const onboardingDestination = request.nextUrl.searchParams.get("onboarding") === "1" && destination === "/feed"
+    ? "/feed?onboarding=1"
+    : destination;
+  return NextResponse.redirect(new URL(onboardingDestination, publicEnvironment.siteUrl));
 }

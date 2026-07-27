@@ -40,6 +40,7 @@ import {
   unsaveClaim as unsaveRemoteClaim,
   // Author self-delete (3-hour window)
   deleteOwnClaim as deleteOwnClaimRequest,
+  getClaimCountByAuthor,
   CLAIMS_LOAD_ERROR_MESSAGE,
   DEFAULT_CLAIMS_PAGE_SIZE,
 } from "../services/claimService";
@@ -119,7 +120,7 @@ interface ClaimsContextValue {
   clearAiPrecheckNotice: () => void;
   runAiPrecheckForClaimId: (claimId: string) => Promise<Claim | undefined>;
   retryAiPrecheckWithEvidenceForClaimId: (claimId: string) => Promise<Claim | undefined>;
-  createClaim: (input: CreateClaimInput) => Promise<Claim>;
+  createClaim: (input: CreateClaimInput) => Promise<{ claim: Claim; isFirstClaim: boolean }>;
   voteOnClaim: (claimId: string, vote: VoteOption) => Promise<string | void>;
   // PHASE 3 STEP 20E
   getUserVoteForClaim: (claimId: string) => VoteOption | null;
@@ -1038,6 +1039,12 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       throw new Error(authorProfile.suspension_reason || "This account is suspended from posting.");
     }
 
+    // Count before the insert so the congratulations moment is reserved for
+    // the user's first claim only. If the count cannot be read, fail closed
+    // for the celebration rather than guessing.
+    const claimCountBefore = await getClaimCountByAuthor(currentUser.id);
+    const isFirstClaim = claimCountBefore === 0;
+
     // PHASE 4 STEP 13
     // PHASE 4 STEP 13B
     let result = await createRemoteClaim({
@@ -1124,7 +1131,7 @@ export function ClaimsProvider({ children }: { children: ReactNode }) {
       });
     }
 
-    return createdClaim;
+    return { claim: createdClaim, isFirstClaim };
   }, [currentUser, ensureProfile, isVerified, profile, refreshClaimAfterAiPrecheck, runAiPrecheckAndRefreshClaim]);
 
   // PHASE 3 STEP 20E

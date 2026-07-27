@@ -152,7 +152,7 @@ export async function signupAction(
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      emailRedirectTo: `${publicEnvironment.siteUrl}/auth/callback`,
+      emailRedirectTo: `${publicEnvironment.siteUrl}/auth/callback?onboarding=1`,
       data: {
         username: parsed.data.username,
         displayName: parsed.data.displayName,
@@ -173,7 +173,7 @@ export async function signupAction(
   }
 
   if (!data.session?.access_token) {
-    redirect("/confirmed");
+    redirect("/confirmed?onboarding=1");
   }
 
   const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
@@ -197,7 +197,7 @@ export async function signupAction(
     return { message: termsResult.message };
   }
 
-  redirect("/feed");
+  redirect("/feed?onboarding=1");
 }
 
 export async function logoutAction() {

@@ -1249,6 +1249,26 @@ export async function fetchClaimsByAuthorPage(
   }
 }
 
+/** Return the author's visible claim count without loading claim content. */
+export async function getClaimCountByAuthor(authorId: string): Promise<number | null> {
+  try {
+    const { count, error } = await supabase
+      .from("claims")
+      .select("id", { count: "exact", head: true })
+      .eq("author_id", authorId);
+
+    if (error) {
+      console.log("[claims] could not count author claims", error.message);
+      return null;
+    }
+
+    return count ?? 0;
+  } catch (error) {
+    console.log("[claims] could not count author claims", error);
+    return null;
+  }
+}
+
 // SAVE/UNSAVE CLAIMS. Same direct supabase-js pattern as the claim reads
 // above; saved_claims RLS scopes every query to the logged-in user.
 interface SavedClaimIdsResult {

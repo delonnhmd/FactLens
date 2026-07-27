@@ -4,6 +4,7 @@
 // PHASE 5 STEP 4
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { APP_CONFIG } from "../constants/appConfig";
 import { AUTH_CALLBACK_URL } from "../constants/launchConfig";
@@ -11,6 +12,7 @@ import { supabase, supabaseConfigError } from "../lib/supabase";
 import { checkUsernameAvailability, ensureProfileForUser, getProfile, USERNAME_TAKEN_MESSAGE } from "../services/profileService";
 import type { Profile } from "../services/profileService";
 import { getUsernameValidationError, normalizeUsername } from "../utils/username";
+import { getOnboardingPendingKey } from "../utils/onboardingStorage";
 
 interface AuthActionResult {
   error?: string;
@@ -387,6 +389,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const nextUser = data.session?.user ?? data.user ?? null;
     setSession(data.session);
     setCurrentUser(nextUser);
+
+    // A signup is the only place that creates this pending marker. Existing
+    // users signing in later will therefore not see onboarding again.
+    if (data.user) {
+      void AsyncStorage.setItem(getOnboardingPendingKey(data.user.id), "1");
+    }
 
     if (data.user && data.session) {
       const profileResult = await loadProfile(data.user);

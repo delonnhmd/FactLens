@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ClaimCard } from "@/components/claims/claim-card";
+import { FirstClaimOnboarding } from "@/components/onboarding/first-claim-onboarding";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBlockedUserIds } from "@/lib/api/blocks";
 import { getFeedClaims } from "@/lib/api/claims";
@@ -27,6 +28,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const blockedAuthorIds = await getBlockedUserIds(session.accessToken);
 
   const parameters = await searchParams;
+  const showOnboarding = parameters.onboarding === "1";
   const requestedPage = parseFeedPage(parameters.page);
   const feed = await getFeedClaims(requestedPage, blockedAuthorIds);
   const viewerVotes = await getViewerVotesByClaimId(
@@ -36,6 +38,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 
   return (
     <div className="mx-auto w-full max-w-[680px]">
+      <FirstClaimOnboarding userId={session.userId} visible={showOnboarding} />
       <header className="mb-5 sm:mb-7">
         <p className="text-sm font-medium text-[var(--ff-ai)]">Community verification</p>
         <h1 className="mt-1 text-3xl font-medium tracking-[-0.03em] text-[var(--ff-navy)] sm:text-4xl">Feed</h1>

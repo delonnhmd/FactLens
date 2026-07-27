@@ -31,6 +31,7 @@ import { VerdictBanner } from "../../../components/VerdictBanner";
 import { VoteBreakdownBars } from "../../../components/VoteBreakdownBars";
 import { MentionText } from "../../../components/MentionText";
 import { MentionTextInput } from "../../../components/MentionTextInput";
+import { FirstClaimCongratulationsModal } from "../../../components/onboarding/FirstClaimCongratulationsModal";
 // Shared media block (image / YouTube thumb / link) — identical logic to the feed card.
 import { ClaimMedia } from "../../../components/ClaimMedia";
 import { resolveClaimMedia } from "../../../utils/claimMedia";
@@ -312,7 +313,7 @@ function getSourceMessageStyle(color: SourceMessageColor, styles: ReturnType<typ
 }
 
 export default function ClaimDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, firstClaim } = useLocalSearchParams<{ id?: string | string[]; firstClaim?: string }>();
   const router = useRouter();
   const navigation = useNavigation();
   const appTheme = useAppTheme();
@@ -388,6 +389,13 @@ export default function ClaimDetailScreen() {
 
   const claimId = Array.isArray(id) ? id[0] : id;
   const claim = claimId ? getClaimById(claimId) : undefined;
+  const [showFirstClaimCongrats, setShowFirstClaimCongrats] = useState(firstClaim === "1");
+  const closeFirstClaimCongrats = useCallback(() => {
+    setShowFirstClaimCongrats(false);
+    if (claimId) {
+      router.replace(`/claim/${claimId}`);
+    }
+  }, [claimId, router]);
   const [authorAvatarLoadFailed, setAuthorAvatarLoadFailed] = useState(false);
   // CLAIM TRANSLATION (NEW): same hook the feed card uses, so the detail page
   // shows the identical translate → disclaimer → see-original flow. Called
@@ -2049,6 +2057,16 @@ export default function ClaimDetailScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {claim ? (
+        <FirstClaimCongratulationsModal
+          claimId={claim.id}
+          claimTitle={claim.title}
+          onClose={closeFirstClaimCongrats}
+          shareUrl={claim.shareUrl}
+          userId={currentUser?.id ?? null}
+          visible={showFirstClaimCongrats}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

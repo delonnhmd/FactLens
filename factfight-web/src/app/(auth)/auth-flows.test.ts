@@ -66,14 +66,14 @@ describe("authentication server actions", () => {
     auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
 
     await expect(signupAction({ message: "" }, signupForm())).rejects.toThrow(
-      "NEXT_REDIRECT:/confirmed",
+      "NEXT_REDIRECT:/confirmed?onboarding=1",
     );
 
     expect(auth.signUp).toHaveBeenCalledWith({
       email: "unique@example.test",
       password: "correct-horse",
       options: {
-        emailRedirectTo: "https://factfight.com/auth/callback",
+        emailRedirectTo: "https://factfight.com/auth/callback?onboarding=1",
         data: { username: "unique_user", displayName: "Unique User" },
       },
     });
@@ -125,7 +125,7 @@ describe("authentication server actions", () => {
     expect(auth.resend).toHaveBeenCalledWith({
       type: "signup",
       email: "unknown@example.test",
-      options: { emailRedirectTo: "https://factfight.com/auth/callback" },
+      options: { emailRedirectTo: "https://factfight.com/auth/callback?onboarding=1" },
     });
     expect(result).toEqual({
       message:
