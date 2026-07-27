@@ -82,20 +82,13 @@ describe("Supabase proxy cookie refresh", () => {
     expect(setCookie).not.toContain("sb-project-auth-token");
   });
 
-  it("recovers a stale access token on a public claim route without redirecting", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({ access_token: "new-access", refresh_token: "new-refresh" }),
-      ),
-    );
-    const getClaims = vi
-      .fn()
-      .mockResolvedValueOnce({ data: null, error: new Error("stale") })
-      .mockResolvedValueOnce({
-        data: { claims: { sub: "00000000-0000-4000-8000-000000000001" } },
-        error: null,
-      });
+  it("does not refresh a stale session on a public claim route", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const getClaims = vi.fn().mockResolvedValue({
+      data: null,
+      error: new Error("stale"),
+    });
     mockClient({ getClaims, refreshToken: "token-b" });
 
     const response = await updateSession(
@@ -105,7 +98,9 @@ describe("Supabase proxy cookie refresh", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
     const setCookie = response.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("sb-project-auth-token=rotated");
+    expect(setCookie).not.toContain("sb-project-auth-token");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getClaims).toHaveBeenCalledTimes(1);
   });
 
   it("does not attempt any refresh when there is no session to recover (anonymous visitor)", async () => {
@@ -135,8 +130,8 @@ describe("Supabase proxy cookie refresh", () => {
     const getClaims = vi.fn().mockResolvedValue({ data: null, error: new Error("stale") });
     mockClient({ getClaims, refreshToken: "shared-token" });
 
-    const first = updateSession(new NextRequest("https://www.factfight.com/claim/a"));
-    const second = updateSession(new NextRequest("https://www.factfight.com/claim/b"));
+    const first = updateSession(new NextRequest("https://www.factfight.com/feed/a"));
+    const second = updateSession(new NextRequest("https://www.factfight.com/feed/b"));
 
     // Let both calls reach the in-flight refresh before it resolves.
     await Promise.resolve();
@@ -159,10 +154,10 @@ describe("Supabase proxy cookie refresh", () => {
     });
 
     const response = await updateSession(
-      new NextRequest("https://www.factfight.com/claim/00000000-0000-4000-8000-000000000010"),
+      new NextRequest("https://www.factfight.com/feed"),
     );
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(307);
     const setCookie = response.headers.get("set-cookie") ?? "";
     expect(setCookie).not.toContain("sb-project-auth-token");
   });

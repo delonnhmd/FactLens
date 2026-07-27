@@ -1,8 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { publicEnvironment } from "@/lib/validation/env";
 import { refreshViaSingleFlight } from "@/lib/supabase/refresh-single-flight";
+import { publicEnvironment } from "@/lib/validation/env";
 
 type CookieToSet = {
   name: string;
@@ -41,6 +41,9 @@ function applyResponseState(
   cookiesToSet: readonly CookieToSet[],
   headersToSet: Readonly<Record<string, string>>,
 ): NextResponse {
+  // Create the one response that is returned to the browser, then apply all
+  // buffered auth state to it. Never replace this response after setting the
+  // refreshed cookies, or the browser will miss the rotated cookie chunks.
   const response = NextResponse.next({ request });
 
   cookiesToSet.forEach(({ name, value, options }) => {
@@ -76,6 +79,9 @@ export async function updateSession(request: NextRequest) {
           targetCookies.push(...cookiesToSet);
           Object.assign(targetHeaders, headers);
 
+          // Keep the forwarded request in sync as well as the final response.
+          // Server Components and downstream handlers then see the same
+          // rotated session during this request.
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
@@ -88,22 +94,12 @@ export async function updateSession(request: NextRequest) {
   const initialClaimsValid = !error && Boolean(data?.claims?.sub);
   let refreshClaimsValid = false;
 
-  // See getVerifiedSession() for why a bare getClaims() failure isn't treated
-  // as "logged out" outright: it can reflect a token that only looks stale
-  // (a prior refresh rotated it at GoTrue but a Server Component couldn't
-  // persist the cookie), not an actually-dead session. Retry with an
-  // explicit refresh — middleware can always persist the cookie via setAll
-  // above — before deciding to redirect to /login.
-  // This runs for every route, including public claim/profile pages: those
-  // pages read getClaims() directly to decide what to render (e.g. whether
-  // to show vote buttons or a login prompt) and have no retry of their own,
-  // so skipping recovery here previously made a merely-stale access token
-  // render as "logged out" on any public page. Refreshing is safe here
-  // because refreshViaSingleFlight coalesces concurrent refreshes of the same
-  // token into one network call — that's what actually caused the original
-  // "logged out after voting" bug (two requests racing to rotate the same
-  // refresh token), not the act of refreshing on a public route per se.
-  if (!initialClaimsValid) {
+  // A stale protected-route token can be recovered without treating one
+  // failed getClaims() call as logout. Public claim/profile pages intentionally
+  // do not refresh here: they can render public data without authentication,
+  // and must not compete with a vote action or protected navigation for the
+  // rotating refresh token.
+  if (protectedRoute && !initialClaimsValid) {
     const { data: sessionData } = await supabase.auth.getSession();
     const currentRefreshToken = sessionData.session?.refresh_token;
 
@@ -125,11 +121,8 @@ export async function updateSession(request: NextRequest) {
       }
 
       if (!refreshClaimsValid) {
-        // A failed grant, a losing single-flight race, or a setSession error
-        // can emit or imply cookie-removal instructions. Do not send those to
-        // the browser: none of those outcomes are proof the user's session is
-        // invalid, and automatic clearing is the logout symptom this proxy
-        // must prevent.
+        // A failed refresh can emit cookie-removal instructions. They are not
+        // proof that a session is invalid, so never send them to the browser.
         refreshCookies = [];
         refreshHeaders = {};
       }
