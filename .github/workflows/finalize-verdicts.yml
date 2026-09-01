@@ -22,9 +22,45 @@ on:
 jobs:
   sweep:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Run finalize sweep
+        env:
+          FINALIZE_SWEEP_SECRET: ${{ secrets.FINALIZE_SWEEP_SECRET }}
         run: |
-          curl -fsS --max-time 120 -X POST \
-            "https://factlens-e8uf.onrender.com/internal/finalize-sweep" \
-            -H "x-finalize-secret: ${{ secrets.FINALIZE_SWEEP_SECRET }}"
+          set -u
+
+          endpoint="https://factlens-e8uf.onrender.com/internal/finalize-sweep"
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+
+          echo "Endpoint: $endpoint"
+          if [ -z "$FINALIZE_SWEEP_SECRET" ]; then
+            echo "::warning title=Missing FINALIZE_SWEEP_SECRET::The repository secret is empty or unavailable to this workflow."
+          fi
+
+          curl_exit=0
+          metrics="$(curl -sS --max-time 120 \
+            -o "$response_file" \
+            -w "%{http_code} %{time_total}" \
+            -X POST "$endpoint" \
+            -H "x-finalize-secret: $FINALIZE_SWEEP_SECRET")" || curl_exit=$?
+
+          read -r http_status request_duration <<< "$metrics"
+          http_status="${http_status:-000}"
+          request_duration="${request_duration:-unknown}"
+          response_body="$(head -c 4000 "$response_file" | tr '\r\n' '  ')"
+
+          echo "HTTP status: $http_status"
+          echo "Request duration: ${request_duration}s"
+          echo "Response body: ${response_body:-<empty>}"
+
+          if [ "$curl_exit" -ne 0 ]; then
+            echo "::error title=Finalize sweep transport failure::curl exited with code $curl_exit (HTTP $http_status)."
+            exit 1
+          fi
+
+          if [ "$http_status" -lt 200 ] || [ "$http_status" -ge 300 ]; then
+            echo "::error title=Finalize sweep HTTP $http_status::The production endpoint returned a non-2xx response. See the safe response body above."
+            exit 1
+          fi
